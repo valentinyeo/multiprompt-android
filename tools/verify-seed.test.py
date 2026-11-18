@@ -154,15 +154,13 @@ class VerifySeedTest(unittest.TestCase):
         (self.home / 'long-chat-bin/claude').symlink_to(sys.executable)
         self.source.unlink()
         self.transcript.unlink()
-        script = (SCRIPTS / 'seed.sh').read_text().replace('/home/verifyssh', str(self.home))
-        guard = next(line for line in script.splitlines() if line.startswith('[['))
-        script = script.replace(guard, '[[ "$GITHUB_ACTIONS" == true && "$HOME" == ' + shlex.quote(str(self.home)) + ' ]]')
         env = dict(os.environ, HOME=str(self.home), GITHUB_ACTIONS='true', PATH=str(binary) + os.pathsep + os.environ['PATH'])
         env.pop('TMUX', None)
         with patch.dict(os.environ, env, clear=True):
             try:
                 subprocess.run(['tmux', 'new-session', '-d', '-s', 'verify-session', 'sleep 300'], check=True)
-                subprocess.run(['bash', '-euc', script], check=True, capture_output=True, text=True, timeout=45)
+                seeded = subprocess.run([str(SCRIPTS / 'seed.sh'), 'verify-session'], check=True, capture_output=True, text=True, timeout=45)
+                self.assertEqual('verify-session', json.loads(seeded.stdout)['session'])
                 command = [sys.executable, '-I', str(ROOT / 'tools/verify-seed.py')]
                 recorded = subprocess.check_output(command + ['record'], text=True)
                 self.evidence.write_text(recorded)

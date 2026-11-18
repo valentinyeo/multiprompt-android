@@ -1,0 +1,690 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+SCRIPTS = Path(__file__).resolve().parent
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
+from journey_action import Unreachable, plan
+
+ADB = os.environ.get("ADB", "adb")
+REMOTE_DUMP = "/sdcard/verify-ui.xml"
+DEFAULT_PACKAGE = "dev.multiprompt.companion.debug"
+ACTIVITY = "dev.multiprompt.companion.MainActivity"
+KEYS = {"back": "KEYCODE_BACK", "home": "KEYCODE_HOME", "enter": "KEYCODE_ENTER", "delete": "KEYCODE_DEL", "wakeup": "KEYCODE_WAKEUP"}
+SELECTOR_MODES = ["text", "desc", "contains", "absent", "lacks", "text-containing", "version", "field", "focused-field", "editor", "editor-value", "field-value", "checked", "unchecked", "key-row", "scroll-back", "terminal"]
+EVIDENCE_HINT = "Set EVIDENCE to the run's evidence directory, for example: export EVIDENCE=$PWD/verification-evidence"
+RUNNER_HINT = "Run it on a GitHub runner through verify.yml or pstack-verifier.yml. This server never boots the emulator."
+
+
+class MpaError(Exception):
+    def __init__(self, code, message, next_step=None):
+        super().__init__(message)
+        self.code = code
+        self.message = message
+        self.next_step = next_step
+
+
+def package():
+    return os.environ.get("VERIFY_PACKAGE") or DEFAULT_PACKAGE
+
+
+def run(command, timeout=120, check=True, capture=True, **kwargs):
+    try:
+        result = subprocess.run(command, timeout=timeout, capture_output=capture, text=True, **kwargs)
+    except FileNotFoundError as error:
+        raise MpaError("TOOL_MISSING", f"{command[0]} is not installed: {error}", RUNNER_HINT)
+    except subprocess.TimeoutExpired as error:
+        raise MpaError("TOOL_TIMEOUT", f"{command[0]} did not finish within {timeout}s", "Retry once, then read the retained logcat and driver transcript.") from error
+    if check and result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()[-600:]
+        raise MpaError("TOOL_FAILED", f"{' '.join(command)} exited {result.returncode}: {detail}", "Run `mpa doctor` to check the device and app state.")
+    return result
+
+
+def adb(*args, **kwargs):
+    return run([ADB, *map(str, args)], **kwargs)
+
+
+def artifacts_dir(required=True):
+    value = os.environ.get("EVIDENCE")
+    if value:
+        directory = Path(value)
+        directory.mkdir(parents=True, exist_ok=True)
+        return directory
+    if required:
+        raise MpaError("EVIDENCE_MISSING", "EVIDENCE is not set", EVIDENCE_HINT)
+    return Path(tempfile.mkdtemp(prefix="mpa-"))
+
+
+def load_tree(path):
+    try:
+        return ET.parse(str(path)).getroot()
+    except (OSError, ET.ParseError) as error:
+        raise MpaError("UI_XML_UNREADABLE", f"Cannot read a UI dump from {path}: {error}", "Run `mpa read --out screen.xml` to capture a fresh dump.")
+
+
+def dump_ui(destination=None):
+    target = Path(destination) if destination else artifacts_dir(False) / "current.xml"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    detail = "no attempt ran"
+    for _ in range(3):
+        adb("shell", "rm", "-f", REMOTE_DUMP, check=False, timeout=30)
+        result = adb("shell", "uiautomator", "dump", REMOTE_DUMP, check=False, timeout=60)
+        if result.returncode != 0 or "null root node" in (result.stdout or "") + (result.stderr or ""):
+            detail = ((result.stdout or "") + (result.stderr or "")).strip()[-400:]
+            continue
+        pulled = adb("pull", REMOTE_DUMP, str(target), check=False, timeout=60)
+        if pulled.returncode != 0:
+            detail = (pulled.stderr or pulled.stdout or "").strip()[-400:]
+            continue
+        return target
+    raise MpaError("UI_DUMP_FAILED", f"uiautomator produced no usable dump: {detail}", "Retry `mpa read`; if it keeps failing run `mpa doctor` and read `logcat.txt`.")
+
+
+def node_payload(node):
+    return {
+        "text": node.get("text") or "",
+        "description": node.get("content-desc") or "",
+        "bounds": node.get("bounds") or "",
+        "class": node.get("class") or "",
+        "package": node.get("package") or "",
+        "clickable": node.get("clickable") == "true",
+        "enabled": node.get("enabled") != "false",
+        "checked": node.get("checked") == "true",
+        "focused": node.get("focused") == "true",
+        "scrollable": node.get("scrollable") == "true",
+    }
+
+
+def point(bounds_text):
+    numbers = list(map(int, re.findall(r"\d+", bounds_text or "")))
+    if len(numbers) != 4 or numbers[2] <= numbers[0] or numbers[3] <= numbers[1]:
+        raise MpaError("SELECTOR_EMPTY_BOUNDS", "Empty selector bounds", "Run `mpa read` and check the node's bounds in the dump.")
+    return [(numbers[0] + numbers[2]) // 2, (numbers[1] + numbers[3]) // 2]
+
+
+def resolve(root, mode, value, extra=()):
+    if mode == "snapshot":
+        texts = [node.get("text") for node in root.iter("node") if node.get("text")]
+        descriptions = [node.get("content-desc") for node in root.iter("node") if node.get("content-desc")]
+        return {"mode": mode, "value": value, "stdout": json.dumps({"texts": texts, "descriptions": descriptions}, indent=2), "snapshot": {"texts": texts, "descriptions": descriptions}}
+    if mode.startswith("reach-"):
+        direction = extra[0] if extra else "forward"
+        axis = extra[1] if len(extra) > 1 else None
+        try:
+            planned = plan(root, mode.removeprefix("reach-"), value, direction, axis)
+        except Unreachable as error:
+            raise MpaError("JOURNEY_ACTION_UNREACHABLE", f"JOURNEY_ACTION_UNREACHABLE: {value or mode.removeprefix('reach-')!r}: {error}", "Scroll the control into view or use an enabled label that is inside the active window.")
+        return {"mode": mode, "value": value, "stdout": planned, "plan": planned}
+    if mode == "terminal":
+        anchors = []
+        for description in ("Show keyboard", "Esc key"):
+            nodes = [node for node in root.iter("node") if node.get("content-desc") == description]
+            if len(nodes) != 1:
+                raise MpaError("TERMINAL_ANCHOR_MISSING", f"Missing or ambiguous terminal control: {description}", "Open the terminal fallback before asking for its typing area.")
+            numbers = list(map(int, re.findall(r"\d+", nodes[0].get("bounds", ""))))
+            if len(numbers) != 4:
+                raise MpaError("TERMINAL_ANCHOR_MISSING", f"Missing or ambiguous terminal control: {description}", "Open the terminal fallback before asking for its typing area.")
+            anchors.append(numbers)
+        toolbar, keys = anchors
+        if keys[1] <= toolbar[3]:
+            raise MpaError("TERMINAL_NOT_READY", "Terminal typing area is not visible", "Wait for the terminal key row, then retry.")
+        x, y = (keys[0] + toolbar[2]) // 2, (toolbar[3] + keys[1]) // 2
+        return {"mode": mode, "value": value, "stdout": f"{x} {y}", "point": [x, y]}
+    parents = {child: parent for parent in root.iter() for child in parent}
+    application = package()
+    matches = []
+    for node in root.iter("node"):
+        if mode == "scroll-back" and node.get("scrollable") == "true" and node.get("package") == application and node.get("class") != "android.widget.HorizontalScrollView":
+            matches.append(node)
+        elif mode in ("text", "absent", "version") and value == node.get("text"):
+            matches.append(node)
+        elif mode in ("contains", "lacks", "text-containing") and value in (node.get("text") or ""):
+            matches.append(node)
+        elif mode in ("desc", "checked", "unchecked", "key-row") and value == node.get("content-desc"):
+            matches.append(node)
+        elif mode in ("editor", "editor-value") and node.get("class") == "android.widget.EditText" and node.get("package") == application:
+            matches.append(node)
+        elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
+            matches.append(node)
+        elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
+            if value == "" and mode == "focused-field":
+                if node.get("focused") == "true" and node.get("package") == application:
+                    matches.append(node)
+            elif any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
+                matches.append(node)
+    if mode in ("absent", "lacks"):
+        if not any(node.get("package") == application for node in root.iter("node")):
+            raise MpaError("APP_UI_MISSING", "App UI is missing", "Run `mpa launch` and `mpa doctor` before asserting absence.")
+        if matches:
+            raise MpaError("UNEXPECTED_TEXT", f"Unexpected text: {value}", "Read the screen with `mpa read` and fix the state before asserting absence.")
+        return {"mode": mode, "value": value, "matches": 0, "stdout": f"Absent text: {value}", "message": f"Absent text: {value}"}
+    if not matches:
+        raise MpaError("SELECTOR_MISSING", f"Missing {mode}: {value}", f"Run `mpa read` to list the current texts and descriptions; `{value}` is not on screen.")
+    if mode == "contains":
+        return {"mode": mode, "value": value, "matches": len(matches), "stdout": f"Found {len(matches)} matching text nodes", "message": f"Found {len(matches)} matching text nodes"}
+    if len(matches) != 1:
+        raise MpaError("SELECTOR_AMBIGUOUS", f"Ambiguous {mode}: {value} ({len(matches)})", "Disambiguate with a unique description or a `contains` query, then retry.")
+    node = matches[0]
+    if mode == "key-row":
+        while node.get("scrollable") != "true" and node in parents:
+            node = parents[node]
+        if node.get("scrollable") != "true":
+            raise MpaError("KEY_ROW_NOT_SCROLLABLE", "Terminal key row is not scrollable", "Open the terminal fallback and wait for its key row.")
+    if mode == "focused-field" and node.get("focused") != "true":
+        raise MpaError("FIELD_NOT_FOCUSED", f"Field is not focused: {value}", "Tap the field first, then re-run the query without typing.")
+    if mode in ("field-value", "editor-value"):
+        expected = extra[0] if extra else ""
+        if (mode == "editor-value" or not expected or node.get("password") != "true") and node.get("text") != expected:
+            raise MpaError("FIELD_VALUE_MISMATCH", f"Field {value} has {node.get('text')!r}, expected {expected!r}", "Clear the field and retype the value; never retype into an uncleared field.")
+        return {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": "FIELD_VALUE_VERIFIED", "message": "FIELD_VALUE_VERIFIED"}
+    if mode == "version":
+        if node.get("content-desc") != f"Version {value}, open release notes":
+            raise MpaError("VERSION_LABEL_MISMATCH", "Version label description does not match", "Check the installed versionName with `mpa doctor` and the expected version.")
+        return {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": value, "message": value}
+    if mode in ("checked", "unchecked"):
+        expected = "true" if mode == "checked" else "false"
+        if node.get("checkable") != "true" or node.get("checked") != expected:
+            raise MpaError("CHECK_STATE_MISMATCH", f"Expected {mode}: {value}", "Read the screen with `mpa read` and fix the switch state.")
+        return {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": f"{mode}: {value}", "message": f"{mode}: {value}"}
+    if node.get("enabled") == "false":
+        raise MpaError("SELECTOR_DISABLED", "Selector is disabled", f"`{value}` is disabled on this screen; wait for it to become enabled.")
+    if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "scroll-back", "key-row"):
+        ancestor = node
+        while ancestor.get("clickable") != "true" and ancestor in parents:
+            ancestor = parents[ancestor]
+        if ancestor.get("clickable") == "true":
+            if ancestor.get("enabled") == "false":
+                raise MpaError("SELECTOR_ANCESTOR_DISABLED", "Selector ancestor is disabled", f"The clickable parent of `{value}` is disabled; wait for it.")
+            node = ancestor
+    numbers = list(map(int, re.findall(r"\d+", node.get("bounds", ""))))
+    if len(numbers) != 4 or numbers[2] <= numbers[0] or numbers[3] <= numbers[1]:
+        raise MpaError("SELECTOR_EMPTY_BOUNDS", "Empty selector bounds", f"`{value}` has no usable bounds; run `mpa read` and look at that node.")
+    if mode == "key-row":
+        inset = (numbers[2] - numbers[0]) // 5
+        y = (numbers[1] + numbers[3]) // 2
+        stdout = f"{numbers[0] + inset} {y} {numbers[2] - inset} {y}"
+    elif mode == "scroll-back":
+        x = (numbers[0] + numbers[2]) // 2
+        inset = (numbers[3] - numbers[1]) // 5
+        stdout = f"{x} {numbers[1] + inset} {x} {numbers[3] - inset}"
+    else:
+        stdout = f"{(numbers[0] + numbers[2]) // 2} {(numbers[1] + numbers[3]) // 2}"
+    payload = {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": stdout, "message": stdout}
+    if mode in ("text", "desc", "field"):
+        payload["point"] = point(node.get("bounds"))
+    return payload
+
+
+def session_names():
+    evidence = os.environ.get("EVIDENCE")
+    if not evidence:
+        return []
+    path = Path(evidence) / "seed-counts.json"
+    if not path.is_file():
+        return []
+    try:
+        return json.loads(path.read_text()).get("session_names") or []
+    except (OSError, ValueError):
+        return []
+
+
+def session_name(value):
+    name = value.removeprefix("Robot ")
+    names = session_names()
+    if name in names:
+        return name
+    if name == "verify-session" and "live-verify-session" in names:
+        return "live-verify-session"
+    return None
+
+
+def screen_texts(root):
+    return [node.get("text") or "" for node in root.iter("node")]
+
+
+def tap(mode, value, xml_path=None, reveal=False, dry_run=False, attempts=24):
+    for attempt in range(1, attempts + 1):
+        current = Path(xml_path) if xml_path else dump_ui()
+        root = load_tree(current)
+        session = session_name(value) if mode in ("text", "desc") else None
+        target_mode, target_value = mode, value
+        if session and any("Inbox" in text for text in screen_texts(root)):
+            target_mode, target_value = "desc", f"Robot {session}"
+        direction = "forward" if attempt <= attempts // 2 else "backward"
+        planned = resolve(root, f"reach-{target_mode}", target_value, (direction,))
+        action, *coordinates = planned["plan"].split()
+        if action == "tap":
+            if reveal:
+                return {"ok": True, "command": "tap", "action": "reveal", "mode": target_mode, "value": target_value, "attempts": attempt, "xml": str(current), "dry_run": dry_run}
+            if dry_run:
+                return {"ok": True, "command": "tap", "action": "tap", "mode": target_mode, "value": target_value, "point": list(map(int, coordinates)), "attempts": attempt, "xml": str(current), "dry_run": True}
+            adb("shell", "input", "tap", coordinates[0], coordinates[1])
+            return {"ok": True, "command": "tap", "action": "tap", "mode": target_mode, "value": target_value, "point": list(map(int, coordinates)), "attempts": attempt, "xml": str(current), "dry_run": False}
+        if action == "swipe":
+            if dry_run:
+                return {"ok": True, "command": "tap", "action": "swipe", "mode": target_mode, "value": target_value, "from": list(map(int, coordinates[:2])), "to": list(map(int, coordinates[2:])), "attempts": attempt, "xml": str(current), "dry_run": True}
+            adb("shell", "input", "swipe", *coordinates, "500")
+    raise MpaError("JOURNEY_ACTION_UNREACHABLE", f"JOURNEY_ACTION_UNREACHABLE: {value!r}: not reachable after {attempts} scrolls in the active container", "Run `mpa read` to see the active screen, then tap a label that is inside the window or its scroll container.")
+
+
+def next_index(directory):
+    highest = 0
+    for path in directory.iterdir():
+        match = re.match(r"(\d\d)-", path.name)
+        if match:
+            highest = max(highest, int(match.group(1)))
+    return highest + 1
+
+
+def write_tree(directory, name):
+    index = next_index(directory)
+    tree = dump_ui(directory / "current.xml")
+    xml = directory / f"{index:02d}-{name}.xml"
+    png = directory / f"{index:02d}-{name}.png"
+    shutil.copyfile(tree, xml)
+    with png.open("wb") as handle:
+        run([ADB, "exec-out", "screencap", "-p"], capture=False, stdout=handle, timeout=60)
+    image = png.read_bytes()
+    if len(image) < 100 or image[:8] != b"\x89PNG\r\n\x1a\n":
+        raise MpaError("SCREENSHOT_INVALID", f"screencap wrote {len(image)} bytes that are not a PNG", "Run `mpa doctor`; a dark or locked screen still produces a PNG, so this means the device is gone.")
+    return index, xml, png
+
+
+def wait_for(root_loader, check, timeout, description):
+    deadline = time.monotonic() + timeout
+    while True:
+        payload = check(root_loader())
+        if payload:
+            return payload
+        if time.monotonic() >= deadline:
+            raise MpaError("WAIT_TIMEOUT", f"Timed out waiting for {description}", "Run `mpa screenshot NAME` to keep the current screen, then `mpa read` to see what the phone shows.")
+        time.sleep(1)
+
+
+def doctor(expected_version, evidence):
+    if not expected_version:
+        raise MpaError("EXPECTED_VERSION_MISSING", "EXPECTED_VERSION is not set", "Read the built APK's versionName and export EXPECTED_VERSION before running the check.")
+    directory = Path(evidence) if evidence else artifacts_dir()
+    boot = adb("shell", "getprop", "sys.boot_completed").stdout.strip()
+    if boot != "1":
+        raise MpaError("DEVICE_NOT_BOOTED", f"sys.boot_completed is {boot!r}, not 1", "Wait for the emulator to finish booting, then run `mpa doctor` again.")
+    package_txt = directory / "package.txt"
+    package_txt.write_text(adb("shell", "dumpsys", "package", package()).stdout)
+    versions = re.findall(r"^\s*versionName=(\S+)$", package_txt.read_text(), re.MULTILINE)
+    if expected_version not in versions:
+        raise MpaError("VERSION_MISMATCH", f"Installed {versions or ['nothing']} does not include {expected_version}", "Install the APK built for this run, or update EXPECTED_VERSION to the installed build.")
+    activity_txt = directory / "activity.txt"
+    activity_txt.write_text(adb("shell", "dumpsys", "activity", "activities").stdout)
+    if not re.search(rf"(mResumedActivity|topResumedActivity).*{re.escape(package())}/.*MainActivity", activity_txt.read_text()):
+        raise MpaError("ACTIVITY_NOT_RESUMED", f"{package()}/{ACTIVITY} is not the resumed activity", "Run `mpa launch` and close any browser or system dialog on top of the app.")
+    xml = directory / "doctor.xml"
+    adb("shell", "uiautomator", "dump", REMOTE_DUMP, timeout=60)
+    adb("pull", REMOTE_DUMP, str(xml), timeout=60)
+    root = load_tree(xml)
+    if not any(node.get("package") == package() for node in root.iter("node")):
+        raise MpaError("APP_UI_MISSING", f"The UI dump has no node from {package()}", "Run `mpa launch` to bring the app to the front, then retry.")
+    return {"ok": True, "command": "doctor", "package": package(), "version": expected_version, "resumed": True, "evidence": {"package": str(package_txt), "activity": str(activity_txt), "xml": str(xml)}, "message": f"DOCTOR READY: {package()} {expected_version}"}
+
+
+def launch(wait_text, force_stop, dry_run):
+    if force_stop:
+        if dry_run:
+            return {"ok": True, "command": "launch", "dry_run": True, "commands": [[ADB, "shell", "am", "force-stop", package()], [ADB, "shell", "am", "start", "-W", "-n", f"{package()}/{ACTIVITY}"]]}
+        adb("shell", "am", "force-stop", package())
+    command = [ADB, "shell", "am", "start", "-W", "-n", f"{package()}/{ACTIVITY}"]
+    if dry_run:
+        return {"ok": True, "command": "launch", "dry_run": True, "commands": [command]}
+    adb(*command[1:], timeout=120)
+    if wait_text:
+        wait_for(dump_ui, lambda path: any(wait_text in text for text in screen_texts(load_tree(path))), 30, f"text containing {wait_text!r}")
+    return {"ok": True, "command": "launch", "started": f"{package()}/{ACTIVITY}", "waited_for": wait_text, "dry_run": False}
+
+
+def seed(session, dry_run):
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        raise MpaError("SEED_NOT_ON_RUNNER", "seed only runs on a GitHub runner", RUNNER_HINT)
+    if os.geteuid() == 0:
+        raise MpaError("SEED_AS_ROOT", "seed must run as the fixture user, not root", "Run it as verifyssh: sudo -u verifyssh env HOME=/home/verifyssh GITHUB_ACTIONS=true python3 /home/verifyssh/mpa seed")
+    home = Path(os.environ.get("HOME", ""))
+    console = home / "console.py"
+    if not console.is_file():
+        raise MpaError("SEED_FIXTURE_MISSING", f"{console} is missing", "Run `.claude/skills/verify-multiprompt-android/scripts/fixture.sh` first.")
+    tmux = ["tmux"]
+    names = [f"pin-{index:02d}" if index < 12 else f"row-{index - 12:02d}" for index in range(40)]
+    commands = [[*tmux, "has-session", "-t", f"={session}"]]
+    for name in names:
+        commands.append([*tmux, "new-session", "-d", "-s", name, "-x", "100", "-y", "32", f"env GITHUB_ACTIONS=true HOME={home} python3 -u {console} {home}/pins-{name}-receipts.txt"])
+        commands.append([*tmux, "set-window-option", "-t", f"={name}:", "automatic-rename", "off"])
+        commands.append([*tmux, "rename-window", "-t", f"={name}:", name])
+    commands.append([*tmux, "new-session", "-d", "-s", "cl-long-chat", "-x", "100", "-y", "32", f"{home}/long-chat-bin/claude -u {home}/long-chat-fixture.py {home}/long-chat-source.json"])
+    commands.append([*tmux, "set-window-option", "-t", "cl-long-chat", "automatic-rename", "off"])
+    commands.append([*tmux, "rename-window", "-t", "cl-long-chat", "cl-long-chat"])
+    if dry_run:
+        return {"ok": True, "command": "seed", "dry_run": True, "session": session, "rows": len(names), "long_chat": "cl-long-chat", "commands": commands}
+    if subprocess.run([*tmux, "has-session", "-t", f"={session}"], capture_output=True).returncode != 0:
+        raise MpaError("SEED_SESSION_MISSING", f"tmux session {session!r} does not exist", "Run fixture.sh again; it starts the fixture session before seeding.")
+    for command in commands[1:-3]:
+        run(command)
+    listing = run([*tmux, "list-sessions", "-F", "#{session_name}"]).stdout.split()
+    seeded = sorted(name for name in listing if re.fullmatch(r"(pin|row)-\d\d", name))
+    (home / "pins-names.txt").write_text("\n".join(seeded) + "\n")
+    if len(seeded) != 40:
+        raise MpaError("SEED_INBOX_TOO_SMALL", f"Only {len(seeded)} pin/row sessions exist", "Kill the stale tmux server and run fixture.sh again.")
+    for command in commands[-3:]:
+        run(command)
+    source = home / "long-chat-source.json"
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        if source.is_file() and source.stat().st_size:
+            return {"ok": True, "command": "seed", "dry_run": False, "session": session, "rows": len(seeded), "long_chat": "cl-long-chat", "source": str(source)}
+        time.sleep(0.1)
+    raise MpaError("SEED_LONG_CHAT_TIMEOUT", "Long chat seed did not become ready", "Read the cl-long-chat pane with `tmux capture-pane -pt cl-long-chat` and check the long-chat fixture.")
+
+
+def screenshot(name):
+    directory = artifacts_dir()
+    index, xml, png = write_tree(directory, name)
+    return {"ok": True, "command": "screenshot", "name": name, "step": index, "xml": str(xml), "png": str(png), "next_step": index + 1}
+
+
+def proof(name, note, proof_file, required, forbidden, xml_path, dry_run):
+    directory = artifacts_dir()
+    current = Path(xml_path) if xml_path else dump_ui()
+    root = load_tree(current)
+    texts = screen_texts(root)
+    checks = []
+    for value in required:
+        checks.append({"kind": "present", "value": value, "passed": any(value in text for text in texts)})
+    for value in forbidden:
+        checks.append({"kind": "absent", "value": value, "passed": not any(value in text for text in texts)})
+    passed = all(check["passed"] for check in checks)
+    record = {"name": name, "xml": current.name, "passed": passed, "checks": checks}
+    if dry_run:
+        return {"ok": passed, "command": "proof", "dry_run": True, "record": record}
+    output = directory / f"{name}.json"
+    output.write_text(json.dumps(record, separators=(",", ":")) + "\n")
+    if note:
+        proof_path = Path(proof_file) if proof_file else directory / f"{name}-proof.txt"
+        proof_path.parent.mkdir(parents=True, exist_ok=True)
+        proof_path.write_text(note + "\n" + json.dumps(record, separators=(",", ":")) + "\n")
+    if not passed:
+        failed = ", ".join(check["value"] for check in checks if not check["passed"])
+        raise MpaError("PROOF_FAILED", f"Screen does not prove {name}: {failed}", "Run `mpa screenshot NAME` and `mpa read` to inspect the screen, then fix the state before retrying.")
+    return {"ok": True, "command": "proof", "dry_run": False, "record": record, "json": str(output), "message": note or "PROOF_OK"}
+
+
+def devices_attached():
+    if not shutil.which(ADB):
+        return False
+    try:
+        return subprocess.run([ADB, "get-state"], capture_output=True, text=True, timeout=10).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def evidence_copies(fixture, directory, feature):
+    copies = [(fixture / "sshd.log", directory / "sshd.log")]
+    home = Path("/home/verifyssh")
+    for name in ("receipts.txt", "codex-receipts.txt", "claude-receipts.txt", "reader-requests.jsonl"):
+        copies.append((home / name, directory / name))
+    if feature == "ai-usage.md":
+        copies.append((home / "ai-usage-receipts.txt", directory / "ai-usage-receipts.txt"))
+        copies.append((home / ".local/state/token-ladder/status.json", directory / "ai-usage-host.json"))
+    if feature == "claude-remote-control.md":
+        copies.append((home / "remote-control-receipts.jsonl", directory / "remote-control-receipts.jsonl"))
+        copies.append((home / "remote-control-work/desktop-counter.txt", directory / "remote-control-desktop.txt"))
+        copies.append((home / "remote-control-startup.txt", directory / "remote-control-startup.txt"))
+    return [{"command": ["sudo", "cat", str(remote), str(local)], "output": local} for remote, local in copies]
+
+
+def host_debug_command(directory):
+    script = (
+        "import json\n"
+        "from pathlib import Path\n"
+        "home = Path('/home/verifyssh')\n"
+        "root = home / '.local/state/multiprompt/agent-host'\n"
+        "files = [path for path in root.glob('*') if path.is_file() and path.suffix in ('.json', '.jsonl', '.log')]\n"
+        "files += list(home.glob('ai-switch-*.txt')) + list(home.glob('ai-switch-*.jsonl'))\n"
+        "print(json.dumps({str(path.relative_to(home)): path.read_text()[-64000:] for path in files}, indent=2))\n"
+    )
+    return {"command": ["sudo", "-u", "verifyssh", "python3", "-c", script], "output": directory / "ai-switch-host-debug.json"}
+
+
+def recorded_pids(fixture, directory):
+    operations = []
+    stopped = []
+    for provider in ("tmux", "sshd"):
+        pid_file = fixture / f"{provider}.pid"
+        if not pid_file.is_file():
+            continue
+        raw = pid_file.read_text().strip()
+        if re.fullmatch(r"\d+", raw):
+            operations.append({"command": ["sudo", "kill", raw]})
+            stopped.append({"process": provider, "pid": int(raw)})
+        else:
+            operations.append({"command": ["false", f"invalid {provider} pid {raw!r}"]})
+    approval = Path("/home/verifyssh/device-approval.pid")
+    if approval.is_file():
+        result = subprocess.run(["sudo", "cat", str(approval)], capture_output=True, text=True)
+        raw = result.stdout.strip()
+        if re.fullmatch(r"\d+", raw) and int(raw) > 1:
+            operations.append({"command": ["sudo", "kill", raw]})
+            stopped.append({"process": "device-approval", "pid": int(raw)})
+        else:
+            operations.append({"command": ["false", f"invalid device-approval pid {raw!r}"]})
+        operations.append({"command": ["sudo", "cat", "/home/verifyssh/device-approval-receipts.jsonl"], "output": directory / "device-approval-receipts.txt"})
+    return operations, stopped
+
+
+def cleanup(fixture, dry_run):
+    directory = artifacts_dir()
+    feature = os.environ.get("VERIFY_FEATURE") or ""
+    operations = []
+    stopped = []
+    if devices_attached():
+        for remote in ("/sdcard/Download/verify-key.pem", "/sdcard/verify-ui.xml", "/sdcard/verify-doctor.xml"):
+            operations.append({"command": [ADB, "shell", "rm", "-f", remote]})
+    fixture_path = Path(fixture) if fixture else None
+    if fixture_path and fixture_path.is_dir():
+        operations.extend(evidence_copies(fixture_path, directory, feature))
+        if feature in ("ai-switch.md", "reader-version.md"):
+            operations.append(host_debug_command(directory))
+        pid_operations, stopped = recorded_pids(fixture_path, directory)
+        operations.extend(pid_operations)
+        for stale in ("pending-device", "pending-device.pub", "denied-device", "denied-device.pub", "device-known-hosts", "user-key", "user-key.pub", "host-key", "host-key.pub", "rotated-host-key", "rotated-host-key.pub"):
+            operations.append({"command": ["rm", "-f", str(fixture_path / stale)]})
+    log_path = directory / "cleanup.txt"
+    status = 0
+    message = f"CLEANUP COMPLETE: evidence retained; status={status}"
+    if dry_run:
+        return {"ok": True, "command": "cleanup", "dry_run": True, "stopped": stopped, "operations": [" ".join(operation["command"]) for operation in operations], "log": str(log_path), "message": message}
+    with log_path.open("a") as log:
+        log.write(json.dumps({"fixture": str(fixture_path) if fixture_path else None, "stopped": stopped}) + "\n")
+        for entry in stopped:
+            log.write(f"STOPPED {entry['process']} pid={entry['pid']}\n")
+        for operation in operations:
+            command = operation["command"]
+            log.write(f"RUN {' '.join(command)}\n")
+            result = subprocess.run(command, capture_output=True, text=True, timeout=120)
+            if operation.get("output") is not None:
+                if result.returncode == 0:
+                    Path(operation["output"]).write_text(result.stdout)
+                continue
+            if result.returncode != 0 and command[0] != ADB and command[0] != "rm":
+                status = 1
+                log.write(f"FAILED {' '.join(command)}: {(result.stderr or '').strip()}\n")
+    message = f"CLEANUP COMPLETE: evidence retained; status={status}"
+    return {"ok": status == 0, "command": "cleanup", "dry_run": False, "stopped": stopped, "log": str(log_path), "message": message}
+
+
+def read_screen(args):
+    if args.wait_text or args.wait_absent:
+        value = args.wait_text or args.wait_absent
+        def current():
+            return Path(args.xml) if args.xml else dump_ui()
+
+        def check(path):
+            found = any(value in text for text in screen_texts(load_tree(path)))
+            return path if (found if args.wait_text else not found) else None
+
+        path = wait_for(current, check, args.timeout, f"{'text' if args.wait_text else 'absence of'} {value!r}")
+        root = load_tree(path)
+    else:
+        path = Path(args.xml) if args.xml else dump_ui()
+        root = load_tree(path)
+        if args.select:
+            payload = resolve(root, args.select, args.value, tuple(args.extra))
+            payload.update({"ok": True, "command": "read", "xml": str(path)})
+            return payload
+    tree = [node_payload(node) for node in root.iter("node")]
+    payload = {"ok": True, "command": "read", "xml": str(path), "package_present": any(node["package"] == package() for node in tree), "texts": [node["text"] for node in tree if node["text"]], "descriptions": [node["description"] for node in tree if node["description"]], "nodes": tree}
+    if args.out:
+        Path(args.out).write_text(json.dumps(payload, separators=(",", ":")) + "\n")
+        payload["out"] = args.out
+    return payload
+
+
+def key(name, dry_run):
+    event = KEYS.get(name.lower(), name if name.upper().startswith("KEYCODE_") else None)
+    if not event:
+        raise MpaError("KEY_UNKNOWN", f"Unknown key {name!r}", f"Use one of {', '.join(sorted(KEYS))} or a full KEYCODE_* name.")
+    if dry_run:
+        return {"ok": True, "command": "key", "dry_run": True, "key": event, "commands": [[ADB, "shell", "input", "keyevent", event]]}
+    adb("shell", "input", "keyevent", event)
+    return {"ok": True, "command": "key", "dry_run": False, "key": event}
+
+
+def legacy(argv):
+    if len(argv) < 3:
+        raise MpaError("LEGACY_USAGE", "usage: ui.py XML MODE VALUE [EXTRA...]", "Use `mpa read --xml XML --select MODE --value VALUE` instead.")
+    result = resolve(load_tree(Path(argv[0])), argv[1], argv[2], tuple(argv[3:]))
+    print(result["stdout"])
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(
+        prog="mpa",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Drive the multiprompt Android phone test fixture and collect proof.",
+        epilog="""Examples:
+  mpa doctor --expected-version "$EXPECTED_VERSION"
+  mpa seed
+  mpa tap text verify-session
+  mpa read --wait-text 'Message verify-session'
+  mpa read --select desc --value 'Session actions'
+  mpa screenshot reader-sync
+  mpa proof --name reader-sync --require-text 'Sign in to sync'
+  mpa cleanup --fixture "$FIXTURE"
+
+Every command prints one JSON object. Destructive commands accept --dry-run.
+Commands that need a device run only on a GitHub runner, never on the local server.""",
+    )
+    commands = parser.add_subparsers(dest="command", metavar="<command>", required=True)
+
+    doctor_parser = commands.add_parser("doctor", formatter_class=argparse.RawDescriptionHelpFormatter, help="Read-only check that this device is worth driving.", description="Check boot, installed version, resumed activity and a parsed UI dump. Read-only: it never launches, grants or seeds.", epilog="Examples:\n  mpa doctor --expected-version 0.1.2-verify.42-debug")
+    doctor_parser.add_argument("--expected-version", default=os.environ.get("EXPECTED_VERSION"), help="Required installed versionName (default: $EXPECTED_VERSION).")
+    doctor_parser.add_argument("--evidence", help="Directory for package.txt, activity.txt and doctor.xml (default: $EVIDENCE).")
+
+    launch_parser = commands.add_parser("launch", formatter_class=argparse.RawDescriptionHelpFormatter, help="Start the app and optionally wait for a screen.", description="Start MainActivity. With --force-stop it stops the app first, which loses unsent drafts.", epilog="Examples:\n  mpa launch\n  mpa launch --force-stop --wait-text Inbox --dry-run")
+    launch_parser.add_argument("--wait-text", help="Wait until this text appears before returning.")
+    launch_parser.add_argument("--force-stop", action="store_true", help="Stop the app before starting it. Loses unsent drafts.")
+    launch_parser.add_argument("--dry-run", action="store_true", help="Print the adb commands without running them.")
+
+    seed_parser = commands.add_parser("seed", formatter_class=argparse.RawDescriptionHelpFormatter, help="Create the shared inbox sessions and the long chat on the runner fixture.", description="Start 40 pin/row inbox sessions and the cl-long-chat fixture as the verifyssh fixture user. GitHub runner only.", epilog="Examples:\n  mpa seed --session verify-session")
+    seed_parser.add_argument("--session", default="verify-session", help="Existing fixture session that must be present (default: verify-session).")
+    seed_parser.add_argument("--dry-run", action="store_true", help="Print the tmux commands without creating sessions.")
+
+    tap_parser = commands.add_parser("tap", formatter_class=argparse.RawDescriptionHelpFormatter, help="Tap a reachable label, resolving scroll and overlap first.", description="Resolve an enabled label in the active window with journey_action, scroll its container until the whole control is visible, then tap its center. Session names typed on the Inbox resolve to their robot row.", epilog="Examples:\n  mpa tap text verify-session\n  mpa tap desc 'Session actions'\n  mpa tap text More --dry-run --xml screen.xml")
+    tap_parser.add_argument("mode", choices=["text", "desc", "field", "text-containing"], help="How to find the control.")
+    tap_parser.add_argument("value", help="Label, description or field placeholder to tap.")
+    tap_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone (for replay and tests).")
+    tap_parser.add_argument("--reveal", action="store_true", help="Scroll the control into view and stop without tapping.")
+    tap_parser.add_argument("--dry-run", action="store_true", help="Resolve and print the planned tap or swipe without touching the phone.")
+
+    read_parser = commands.add_parser("read", formatter_class=argparse.RawDescriptionHelpFormatter, help="Print the UI tree as JSON, or query one selector.", description="Print every node's text, description, bounds and state as JSON. With --select it answers one selector and returns its node and tap point. --wait-text and --wait-absent poll until the screen matches.", epilog="Examples:\n  mpa read\n  mpa read --select desc --value 'Session actions'\n  mpa read --wait-text 'Message verify-session'\n  mpa read --wait-absent 'Sign in to sync' --timeout 60")
+    read_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone.")
+    read_parser.add_argument("--select", choices=SELECTOR_MODES, help="Answer one selector instead of printing the whole tree.")
+    read_parser.add_argument("--value", default="", help="Selector value for --select.")
+    read_parser.add_argument("--extra", nargs="*", default=[], help="Selector extras, for example the expected field value or scroll direction.")
+    read_parser.add_argument("--wait-text", help="Poll until some text contains this value.")
+    read_parser.add_argument("--wait-absent", help="Poll until no text contains this value.")
+    read_parser.add_argument("--timeout", type=float, default=30, help="Seconds to keep polling (default: 30).")
+    read_parser.add_argument("--out", help="Also write the JSON tree to this path.")
+
+    screenshot_parser = commands.add_parser("screenshot", formatter_class=argparse.RawDescriptionHelpFormatter, help="Keep a numbered PNG/XML pair in the evidence directory.", description="Dump the UI and screencap the phone into EVIDENCE, numbered after the files already there.", epilog="Examples:\n  mpa screenshot reader-sync")
+    screenshot_parser.add_argument("name", help="Artifact name, for example reader-sync.")
+
+    proof_parser = commands.add_parser("proof", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the current screen and record the result as evidence.", description="Assert required and forbidden text on the current screen, write NAME.json, and add the note and result to NAME-proof.txt. Failing assertions exit non-zero.", epilog="Examples:\n  mpa proof --name reader-sync --require-text 'Sign in to sync' --forbid-text 'Sync: signed in' --note SIGNED_OUT_SYNC_MENU_OK\n  mpa proof --name closed --require-text 'Message verify-session' --forbid-text 'Sign in to sync'")
+    proof_parser.add_argument("--name", required=True, help="Evidence name; the result is written to NAME.json.")
+    proof_parser.add_argument("--note", help="Line to keep at the top of the proof file.")
+    proof_parser.add_argument("--proof-file", help="Proof file to write with --note (default: NAME-proof.txt in EVIDENCE).")
+    proof_parser.add_argument("--require-text", action="append", default=[], help="Text that must appear. Repeatable.")
+    proof_parser.add_argument("--forbid-text", action="append", default=[], help="Text that must not appear. Repeatable.")
+    proof_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone.")
+    proof_parser.add_argument("--dry-run", action="store_true", help="Check without writing evidence files.")
+
+    cleanup_parser = commands.add_parser("cleanup", formatter_class=argparse.RawDescriptionHelpFormatter, help="Stop the fixture processes and keep the evidence.", description="Copy fixture logs into EVIDENCE, stop only the tmux and sshd PIDs recorded by fixture setup, and remove generated keys. Never kills by process name and never deletes evidence.", epilog="Examples:\n  mpa cleanup --fixture \"$FIXTURE\"")
+    cleanup_parser.add_argument("--fixture", default=os.environ.get("FIXTURE"), help="Fixture directory holding the recorded PIDs and logs (default: $FIXTURE).")
+    cleanup_parser.add_argument("--dry-run", action="store_true", help="Print the planned stops, copies and removals without touching anything.")
+
+    key_parser = commands.add_parser("key", formatter_class=argparse.RawDescriptionHelpFormatter, help="Press one device key.", description="Send a keyevent, for example back or home.", epilog="Examples:\n  mpa key back\n  mpa key home --dry-run")
+    key_parser.add_argument("name", help="Key name: " + ", ".join(sorted(KEYS)) + ", or a KEYCODE_* name.")
+    key_parser.add_argument("--dry-run", action="store_true", help="Print the keyevent without pressing it.")
+
+    legacy_parser = commands.add_parser("legacy", formatter_class=argparse.RawDescriptionHelpFormatter, help="Run the pre-CLI ui.py argument form.", description="Compatibility entry point for journeys that still call ui.py XML MODE VALUE. New journeys use read and tap.", epilog="Examples:\n  mpa legacy screen.xml desc 'Session actions'")
+    legacy_parser.add_argument("arguments", nargs=argparse.REMAINDER, help="XML path, mode, value and extras.")
+
+    return parser
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "doctor":
+            payload = doctor(args.expected_version, args.evidence)
+        elif args.command == "launch":
+            payload = launch(args.wait_text, args.force_stop, args.dry_run)
+        elif args.command == "seed":
+            payload = seed(args.session, args.dry_run)
+        elif args.command == "tap":
+            payload = tap(args.mode, args.value, args.xml, args.reveal, args.dry_run)
+        elif args.command == "read":
+            payload = read_screen(args)
+        elif args.command == "screenshot":
+            payload = screenshot(args.name)
+        elif args.command == "proof":
+            payload = proof(args.name, args.note, args.proof_file, args.require_text, args.forbid_text, args.xml, args.dry_run)
+        elif args.command == "cleanup":
+            payload = cleanup(args.fixture, args.dry_run)
+        elif args.command == "key":
+            payload = key(args.name, args.dry_run)
+        elif args.command == "legacy":
+            legacy(args.arguments)
+            return 0
+        else:
+            parser.error(f"unknown command {args.command}")
+    except MpaError as error:
+        if args.command == "legacy":
+            print(error.message, file=sys.stderr)
+            return 1
+        print(json.dumps({"ok": False, "command": args.command, "error": error.code, "message": error.message, "next": error.next_step}, indent=2))
+        return 1
+    print(json.dumps(payload, indent=2))
+    return 0 if payload.get("ok", True) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
