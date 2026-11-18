@@ -1716,7 +1716,10 @@ def resolve_response_path(q, source=None, as_owner=False):
                 query = dict(q, sid=native, follow=False,
                              cached_sid=native if q.get("cached_sid") == sid else q.get("cached_sid", ""))
                 wire = owner_response(query, owner, source)
-                wire = wire.replace(f"@mp\t{rid}\thistory\tok\t{native}\t", f"@mp\t{rid}\thistory\tok\t{sid}\t", 1)
+                operation = "search" if "search" in q else "history"
+                prefix = f"@mp\t{rid}\t{operation}\tok\t{native}\t"
+                if wire.startswith(prefix):
+                    wire = f"@mp\t{rid}\t{operation}\tok\t{sid}\t" + wire[len(prefix):]
                 return agent, sid, None, wire
             wire = missing_response(q, "permission denied") if denied else empty_history_response(q, sid, tmux)
             return agent, sid, None, wire

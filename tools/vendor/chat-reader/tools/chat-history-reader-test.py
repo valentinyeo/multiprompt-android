@@ -8203,6 +8203,15 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.assertEqual(delegated.call_args.args[0]['cached_sid'], self.native_sid)
         self.assertFalse(delegated.call_args.args[0]['follow'])
 
+    def test_soft_2681_delegated_native_search_keeps_the_stable_wire_id(self):
+        expected = '@mp\t7\tsearch\tok\t' + self.native_sid + '\t0\t0\t0\t0\tclaude\tlive-clear\n@@MP_END@@\n'
+        with patch.object(reader, 'conversation_path', side_effect=PermissionError()), \
+                patch.object(reader, 'conversation_owner', return_value=('secondary', Path('/home/secondary'))), \
+                patch.object(reader, 'owner_response', return_value=expected):
+            wire = reader.response(dict(self.query, search='owner reply'), reader.READER_SOURCE)
+        self.assertIn('\tsearch\tok\t' + self.host_sid + '\t', wire)
+        self.assertNotIn(self.native_sid, wire)
+
     def test_an_owner_read_never_switches_session(self):
         wire = reader.response(dict(self.query), reader.READER_SOURCE, as_owner=True)
         self.assertIn('PINEAPPLE', wire)
