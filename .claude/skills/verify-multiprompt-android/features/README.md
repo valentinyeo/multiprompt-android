@@ -94,6 +94,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `legacy.igsh-413`. Runner: `verify.yml` (debug). Priority evidence: `reader-sync.json` (200 characters), `sync-menu-proof.txt` (80 characters).
 - [Bot look choices](bot-look.md): Choose all faces and colours, scroll, dismiss and retain the local appearance after restart. SOFT-2653.
   - Outcomes: `bot.look`. Runner: `verify.yml` (debug). Priority evidence: `bot-look-top.json` (1000 characters), `bot-look-bottom.json` (1500 characters), `bot-look-retained-face.json` (1500 characters), `bot-look-retained-auto.json` (1500 characters), `bot-look-proof.txt` (200 characters).
+- [Chat version label](reader-version.md): Open a chat, check the version label beside Session actions, tap it, and open App updates.
+  - Outcomes: `legacy.igsh-426`. Runner: `verify.yml` (debug). Priority evidence: `reader-version.json` (400 characters), `reader-updates.json` (400 characters).
 - [Reader rename and display controls](reader-controls.md): Rename and display, plus 40 reader More, key-validation, pinned-page, attachment and Computer controls with screenshots and independent SSH receipts. SOFT-2669.
   - Outcomes: `reader.controls`. Runner: `verify.yml` (debug). Priority evidence: `reader-controls-renamed.json` (1500 characters), `reader-controls-details-on.json` (1500 characters), `reader-controls-details-off.json` (1500 characters), `reader-controls-sunlight-on.json` (1500 characters), `reader-controls-sunlight-off.json` (1500 characters), `reader-controls-host.txt` (1000 characters), `reader-menu-proof.txt` (100 characters), `reader-menu-end-host.txt` (300 characters).
 - [Reply to a message](message-reply.md): Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.
@@ -118,7 +120,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 | `legacy.igsh-434` | IGSH-434 | IGSH-434 |
 | `legacy.igsh-423` | IGSH-423 | IGSH-423 |
 | `legacy.igsh-415` | IGSH-415 | IGSH-415 |
-| `legacy.igsh-426` | IGSH-426 | IGSH-426 |
 | `legacy.igsh-424` | IGSH-424 | IGSH-424 |
 | `legacy.igsh-425` | IGSH-425 | IGSH-425 |
 | `app-name.journey` | app-name.md | SOFT-2531 |

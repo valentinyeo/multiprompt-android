@@ -1570,6 +1570,9 @@ tap_text verify-session
 if [[ "$feature" == host-restart.md ]]; then
     source "$scripts/host-restart-drive.sh"
 fi
+if [[ "$feature" == reader-version.md ]]; then
+    source "$scripts/reader-version-drive.sh"
+fi
 if [[ "$feature" == claude-remote-control.md ]]; then
     source "$scripts/remote-control-drive.sh"
 fi

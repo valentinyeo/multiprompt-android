@@ -141,6 +141,7 @@ on:
           - clear-ranking.md
           - signed-out-sync.md
           - bot-look.md
+          - reader-version.md
           - reader-controls.md
           - message-reply.md
           - settings-controls.md
