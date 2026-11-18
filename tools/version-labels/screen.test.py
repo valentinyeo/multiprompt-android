@@ -22,6 +22,24 @@ class VersionScreenTest(unittest.TestCase):
         result = screen.check(ui("App updates", f"Installed: {VERSION} (12)"), VERSION, ["App updates"])
         self.assertEqual(1, result["labels"])
 
+    def test_menu_row_keeps_the_version_on_a_child(self):
+        root = ET.fromstring(f"""
+            <hierarchy>
+              <node content-desc="Version {VERSION}, open release notes" text="">
+                <node text="{VERSION}"/>
+              </node>
+            </hierarchy>
+        """)
+        result = screen.check(root, VERSION, [])
+        self.assertEqual(1, result["labels"])
+
+    def test_wrong_version_text_fails(self):
+        root = ET.fromstring(
+            f'<hierarchy><node content-desc="Version {VERSION}, open release notes" text="9.9.9"/></hierarchy>'
+        )
+        with self.assertRaisesRegex(SystemExit, "version label text does not match"):
+            screen.check(root, VERSION, [])
+
     def test_two_labels_fail(self):
         root = ui()
         root.append(ET.fromstring(

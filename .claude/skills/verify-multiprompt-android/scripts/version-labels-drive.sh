@@ -9,6 +9,8 @@ version_screen() {
     cat "$EVIDENCE/$name.json"
 }
 
+tap_desc 'Session list actions'
+wait_for_text "$EXPECTED_VERSION"
 version_screen inbox-version
 tap_desc "Version $EXPECTED_VERSION, open release notes"
 wait_for_text 'App updates'

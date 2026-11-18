@@ -4,12 +4,22 @@ import sys
 import xml.etree.ElementTree as ET
 
 
+def label_texts(node):
+    texts = [node.get("text") or ""]
+    texts.extend((child.get("text") or "") for child in node.iter("node") if child is not node)
+    return [text for text in texts if text]
+
+
 def check(root, version, required):
     description = f"Version {version}, open release notes"
-    labels = [
-        node for node in root.iter("node")
-        if node.get("content-desc") == description and node.get("text") == version
-    ]
+    labels = []
+    for node in root.iter("node"):
+        if node.get("content-desc") != description:
+            continue
+        visible = label_texts(node)
+        if visible and version not in visible:
+            raise SystemExit("version label text does not match")
+        labels.append(node)
     if len(labels) != 1:
         raise SystemExit(f"expected one version label, found {len(labels)}")
     shown = [node.get("text") or "" for node in root.iter("node")]

@@ -4,7 +4,7 @@ Dispatch `verify.yml` with `feature=version-labels.md`. Debug entry already chec
 
 ## Journey
 
-1. On Inbox, require one version label. Tap it. Require **App updates** and `Installed: <version>`.
+1. On Inbox, open **Session list actions**. Require one version label there. Tap it. Require **App updates** and `Installed: <version>`.
 2. Back to Inbox. **Session list actions → Settings** requires the label on **Session list settings**.
 3. Open `verify-session`. Require the label on the reader.
 4. **Session actions → Open live terminal**. Require the label on the shell and `SSH · tmux attached`.
