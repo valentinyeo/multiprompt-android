@@ -275,7 +275,9 @@ fi
 if [[ "${BREAK_IT_MODE:-}" == true ]]; then
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/breakit-reader.py
     sudo install -m 644 tools/android-break-it/fixture.py /home/verifyssh/breakit-fixture.py
-    sudo -u verifyssh tmux new-session -d -s verify-breakit-probe -x 100 -y 32 'sleep infinity'
+    sudo -u verifyssh tmux new-session -d -s live-pi_verify-breakit-probe -x 100 -y 32 'sleep infinity'
+    sudo -u verifyssh tmux set-window-option -t live-pi_verify-breakit-probe automatic-rename off
+    sudo -u verifyssh tmux rename-window -t live-pi_verify-breakit-probe verify-breakit-probe
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 /home/verifyssh/breakit-fixture.py seed
     sudo -u verifyssh tmux new-session -d -s verify-breakit-other -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/breakit-other-receipts.txt'
     sudo -u verifyssh tmux set-window-option -t verify-breakit-other automatic-rename off

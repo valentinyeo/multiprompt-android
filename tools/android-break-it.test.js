@@ -100,6 +100,10 @@ test('the shared session-ready event runs all stress before drivers that never f
   assert.match(run.stdout, /ACTION Back\nWAIT Inbox\nTAP All/);
   const driver = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/drive.sh'), 'utf8');
   assert.match(driver, /shot sessions\nbreak_it_ready\n/);
+  assert.match(run.stdout, /TAP live-pi_verify-breakit-probe/);
+  const seed = fs.readFileSync(path.join(__dirname, '../.claude/skills/verify-multiprompt-android/scripts/fixture.sh'), 'utf8');
+  assert.match(seed, /new-session -d -s live-pi_verify-breakit-probe[^\n]*'sleep infinity'/);
+  assert.match(seed, /rename-window -t live-pi_verify-breakit-probe verify-breakit-probe/);
   assert.doesNotMatch(driver.slice(driver.indexOf('fill() {'), driver.indexOf('\nsource ', driver.indexOf('fill() {'))), /break_it_/);
 });
 

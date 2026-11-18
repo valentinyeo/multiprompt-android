@@ -7,7 +7,7 @@ import time
 
 HOME = Path('/home/verifyssh')
 SID = 'b2679000-0000-4000-8000-000000002679'
-CHAT = 'verify-breakit-probe'
+CHAT = 'live-pi_verify-breakit-probe'
 
 
 def emit(event):
