@@ -100,6 +100,31 @@ test('a well formed model answer parses, caps its lists and ignores extra keys',
   assert.equal(fenced.verdict, 'PASS');
 });
 
+test('picker outcome typos get one correction and genuine unmapped behavior still blocks', async () => {
+  const pick = changed_outcomes => JSON.stringify({ features: ['host-restart.md'], changed_outcomes, change_kind: 'bug', reason: 'Follow the live native Claude transcript after restart.' });
+  const answers = [pick(['host-restart.md']), pick(['reader.host-restart'])];
+  const failures = [];
+  let asked = 0;
+  const parsed = await verifier.askParsed({
+    ask: async error => { if (error) failures.push(error.message); return answers[asked++]; },
+    parse: verifier.parsePick,
+  });
+  assert.equal(asked, 2);
+  assert.deepEqual(parsed.changedOutcomes, ['reader.host-restart']);
+  assert.match(failures[0], /host-restart\.md/);
+  assert.match(failures[0], /Follow the live native Claude transcript/);
+  asked = 0;
+  await assert.rejects(verifier.askParsed({
+    ask: async () => { asked += 1; return pick(['unmapped']); }, parse: verifier.parsePick,
+  }), /FEATURE_UNMAPPED.*unmapped.*Follow the live native Claude transcript/);
+  assert.equal(asked, 1);
+  asked = 0;
+  await assert.rejects(verifier.askParsed({
+    ask: async () => { asked += 1; return pick(['invented.outcome']); }, parse: verifier.parsePick,
+  }), /FEATURE_UNMAPPED.*invented\.outcome/);
+  assert.equal(asked, 2);
+});
+
 test('the picker can classify a bug fix, and only fix or bug words count', () => {
   const picked = verifier.parsePick(JSON.stringify({ features: ['hosts.md'], changed_outcomes: [], change_kind: 'bug', reason: 'Send drops the draft.' }));
   assert.equal(picked.changeKind, 'bug');
@@ -1105,4 +1130,20 @@ test('tooling and product changes both run the independent judge', () => {
   const final = jobBlock(workflow, 'pstack-verifier');
   assert.doesNotMatch(final, /if:.*no_product_change/);
   assert.match(final, /name: Judge the change against the journey evidence\n {8}id: judge\n {8}if: needs\.pick\.outputs\.reused != 'true'\n {8}env:/);
+});
+
+test('judge family differs from every author family', () => {
+  assert.deepEqual(verifier.authorFamilies('x\nAuthor model: openai/gpt-6.1-sol\n'), ['openai']);
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: openai/gpt-6.1-sol')).family, 'deepseek');
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: deepseek/deepseek-v4.1-flash')).family, 'anthropic');
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: opencode-go/deepseek-v4.1-flash')).family, 'anthropic');
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: anthropic/claude-opus-5-5')).family, 'deepseek');
+  assert.throws(() => verifier.chooseJudge(verifier.authorFamilies('Author model: deepseek/deepseek-v4.1-flash\nAuthor model: anthropic/claude-opus-5-5')), /NO_INDEPENDENT_JUDGE/);
+  assert.throws(() => verifier.authorFamilies('no author line'), /AUTHOR_MODEL_MISSING/);
+  assert.throws(() => verifier.authorFamilies('Author model: mystery/thing'), /AUTHOR_MODEL_UNKNOWN/);
+});
+
+test('verdict comment names the judge that ran', () => {
+  const body = verifier.buildComment({ sha: 'a'.repeat(40), verdict: 'PASS', summary: 'Ok.', journeys: [], evidence: [], notCovered: [], notes: [], runUrl: 'https://example.test/run', judgeLabel: 'Claude (haiku)' });
+  assert.match(body, /Verified by Claude \(haiku\), a model family no author used/);
 });

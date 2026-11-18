@@ -36,6 +36,38 @@ ui = load('queue_ui', SCRIPTS / 'queued.py')
 
 
 class FixtureJourneyTest(unittest.TestCase):
+    def test_host_restart_seeds_the_runtime_from_the_apk_source(self):
+        source = (SCRIPTS / 'host-restart-setup.sh').read_text()
+        setup = source[source.index('reader_source='):source.index('\nsudo -u verifyssh mkdir')]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            reader = Path('app/src/main/assets/chat_history_reader.py')
+            for folder, text in ((root, 'head reader'), (root / 'app-source', 'parent reader')):
+                path = folder / reader
+                path.parent.mkdir(parents=True)
+                path.write_text(text)
+            repo = root / 'app-source'
+            for args in (['init', '-q'], ['add', '.'], ['-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']):
+                subprocess.run(['git', '-C', str(repo), *args], check=True, capture_output=True)
+            pinned = subprocess.check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip()
+            seeded = root / 'seeded-reader.py'
+            for phase in ('normal', 'break-it'):
+                evidence = root / 'evidence' / phase
+                evidence.mkdir(parents=True)
+                for ref, expected in (('', 'head reader'), (pinned, 'parent reader'), ('b' * 40, None)):
+                    with self.subTest(phase=phase, app_ref=ref):
+                        seeded.unlink(missing_ok=True)
+                        result = subprocess.run(['bash', '-euc', 'sudo() { cp "${@: -2:1}" "$SEEDED_READER"; }\n' + setup],
+                            cwd=root, env=dict(os.environ, APP_REF=ref, EVIDENCE=str(evidence), SEEDED_READER=str(seeded)),
+                            capture_output=True, text=True)
+                        if expected is None:
+                            self.assertNotEqual(0, result.returncode)
+                            self.assertFalse(seeded.exists())
+                        else:
+                            self.assertEqual(0, result.returncode, result.stderr)
+                            self.assertEqual(expected, seeded.read_text())
+                            self.assertIn(str(reader), (evidence / 'host-restart-seed-reader.sha256').read_text())
+
     def test_remote_control_fixture_requires_enable_before_phone_and_desktop_turns(self):
         fixture = load('remote_control_fixture', SCRIPTS / 'remote-control-fixture.py')
         control = dict(type='control_request', request_id='host-phone-2541', request=dict(subtype='remote_control', enabled=True))

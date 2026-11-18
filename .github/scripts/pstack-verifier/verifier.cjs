@@ -28,6 +28,52 @@ const SIDES = ['parent', 'head'];
 const RESULT_FILE = 'side-result.json';
 const SOURCE_FILE = 'app-source-sha.txt';
 const REQUEST_TIMEOUT_MS = 240_000;
+const JUDGES = [
+  { family: 'deepseek', label: `DeepSeek (${MODEL})` },
+  { family: 'anthropic', label: 'Claude (haiku)' },
+];
+const FAMILY_PATTERNS = [
+  ['deepseek', /deepseek/i],
+  ['anthropic', /anthropic|claude|opus|sonnet|haiku|fable/i],
+  ['openai', /openai|gpt|codex/i],
+  ['google', /google|gemini/i],
+  ['moonshot', /moonshot|kimi/i],
+  ['minimax', /minimax/i],
+];
+
+function authorFamilies(body) {
+  const authors = String(body ?? '').split(/\r?\n/).map(line => line.match(/^\s*Author model:\s*(\S.*)$/i)).filter(Boolean).map(match => match[1].trim());
+  if (!authors.length) throw new Error('AUTHOR_MODEL_MISSING: add one "Author model: <family>/<model>" line per author to the PR body.');
+  return [...new Set(authors.map(author => {
+    const hit = FAMILY_PATTERNS.find(([, pattern]) => pattern.test(author));
+    if (!hit) throw new Error(`AUTHOR_MODEL_UNKNOWN: cannot tell the model family of "${author.slice(0, 80)}"; use a known family such as openai/, anthropic/ or deepseek/.`);
+    return hit[0];
+  }))];
+}
+
+function chooseJudge(families) {
+  const judge = JUDGES.find(candidate => !families.includes(candidate.family));
+  if (!judge) throw new Error(`NO_INDEPENDENT_JUDGE: the authors used ${families.join(', ')}, and every available judge family is among them.`);
+  return judge;
+}
+
+function callClaude({ system, user, cwd }, env = process.env, run = execFileSync) {
+  if (!env.CLAUDE_CODE_OAUTH_TOKEN?.trim()) throw new Error('CLAUDE_CODE_OAUTH_TOKEN is missing');
+  try {
+    return run('claude', [
+      '-p', '--model', 'haiku', '--system-prompt', system, '--output-format', 'text',
+      '--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
+      '--setting-sources', '', '--disable-slash-commands', '--no-session-persistence',
+      '--permission-mode', 'dontAsk', '--max-turns', '1',
+    ], {
+      input: user, cwd, encoding: 'utf8', timeout: REQUEST_TIMEOUT_MS, maxBuffer: 2 * 1024 * 1024,
+      env: { PATH: env.PATH, HOME: env.HOME, CLAUDE_CODE_OAUTH_TOKEN: env.CLAUDE_CODE_OAUTH_TOKEN, DISABLE_AUTOUPDATER: '1' },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+  } catch (error) {
+    throw new Error(`Claude CLI did not complete (status ${error.status ?? error.code ?? 'unknown'})`);
+  }
+}
 const RETRY_DELAY_MS = 5_000;
 
 const ALLOWLIST = coverageGate.prJourneys;
@@ -156,7 +202,7 @@ async function askParsed({ ask, parse }) {
     return parse(await ask());
   } catch (error) {
     if (error?.fatal) throw error;
-    return parse(await ask());
+    return parse(await ask(error));
   }
 }
 
@@ -164,6 +210,13 @@ function parsePick(content) {
   const parsed = parseJson(content);
   if (!parsed || !Array.isArray(parsed.features)) throw new Error('the picker answer is not the expected JSON');
   if (!Array.isArray(parsed.changed_outcomes) || !['product', 'tooling', 'bug'].includes(parsed.change_kind)) throw new Error('FEATURE_UNMAPPED: picker must report changed_outcomes and change_kind.');
+  try {
+    coverageGate.planChange('', parsed.changed_outcomes);
+  } catch (error) {
+    error.message += ` Picker reason: ${oneLine(parsed.reason, 600)}`;
+    error.fatal = parsed.changed_outcomes.includes('unmapped');
+    throw error;
+  }
   const plan = { changedOutcomes: parsed.changed_outcomes, changeKind: parsed.change_kind };
   const { features, dropped } = validateFeatures(parsed.features);
   const reason = oneLine(parsed.reason, 300);
@@ -264,9 +317,9 @@ function parentResult({ conclusion, result, sourceSha, mergeBase }) {
   return 'no result';
 }
 
-function buildComment({ sha, verdict, summary, journeys, evidence, notCovered, notes, runUrl }) {
+function buildComment({ sha, verdict, summary, journeys, evidence, notCovered, notes, runUrl, judgeLabel = JUDGES[0].label }) {
   const lines = [`pstack-verifier: ${verdict} @ ${sha}`, ''];
-  lines.push(`Verified by DeepSeek (${MODEL}), a different model family from the author, on a GitHub-hosted runner. It read the diff and text evidence only, never screenshots.`, '');
+  lines.push(`Verified by ${judgeLabel}, a model family no author used, on a GitHub-hosted runner. It read the diff and text evidence only, never screenshots.`, '');
   lines.push(escapeText(summary), '');
   lines.push('Journeys driven (parent is the app before this change, head is after):');
   if (journeys.length) {
@@ -517,7 +570,13 @@ async function pick(env) {
   const recipes = coverageGate.changedRecipes(diff, files);
   const deterministic = includeRequiredJourneys({ features: [], dropped: [] }, coverageGate.planChange(diff, []), diff, changed, recipes);
   const user = `Directly edited recipes (must run): ${JSON.stringify(recipes)}\nRequired candidates (rank repro first, then relevant guards within the cap): ${JSON.stringify([...deterministic.features, ...deterministic.deferred])}\n\nJourney catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
-  const picked = await askParsed({ ask: () => callDeepSeek({ key, system: PICK_INSTRUCTIONS, user }), parse: parsePick });
+  const picked = await askParsed({
+    ask: error => {
+      if (error) console.error(`pstack-verifier pick: invalid answer: ${error.message}`);
+      return callDeepSeek({ key, system: PICK_INSTRUCTIONS, user: error ? `${user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. If the behavior has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.` : user });
+    },
+    parse: parsePick,
+  });
   const plan = coverageGate.planChange(diff, picked.changedOutcomes);
   if (plan.product && picked.changeKind === 'tooling') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
   const selected = includeRequiredJourneys(picked, plan, diff, changed, recipes);
@@ -588,7 +647,7 @@ function judgeContext({ pr, diff, plan, deferred = [], toolingProof, features, s
 
 async function judge(env) {
   if (env.PICK_RESULT !== 'success') throw new Error(`the journey picker ended as ${env.PICK_RESULT || 'unknown'}, so there is no verdict`);
-  const key = requireKey(env);
+  requireKey(env);
   const repo = requireRepo(env);
   const number = requireNumber(env);
   const sha = String(env.HEAD_SHA ?? '');
@@ -611,6 +670,10 @@ async function judge(env) {
     console.log(`pstack-verifier: head moved from ${sha} to ${pr.head.sha}, a newer run verifies it`);
     return;
   }
+  const judgeModel = chooseJudge(authorFamilies(pr.body));
+  const askJudge = judgeModel.family === 'deepseek'
+    ? content => callDeepSeek({ key: requireKey(env), system: JUDGE_INSTRUCTIONS, user: content })
+    : async content => callClaude({ system: JUDGE_INSTRUCTIONS, user: content }, env);
   const diff = fetchDiff(repo, number);
   const jobs = runJobs(repo, runId);
   const conclusions = jobConclusions(jobs, features);
@@ -646,7 +709,7 @@ async function judge(env) {
     const plan = coverageGate.planChange(diff, reported);
     const selected = includeRequiredJourneys({ features }, plan, diff);
     content = judgeContext({ pr, diff, plan: scopePlan(plan, selected.deferred), deferred: selected.deferred, toolingProof, features, smoke, pickReason: env.PICK_REASON, parents, parentConclusions, conclusions, directories, parentDirectories, stressProof });
-    model = await askParsed({ ask: () => callDeepSeek({ key, system: JUDGE_INSTRUCTIONS, user: content }), parse: parseVerdict });
+    model = await askParsed({ ask: () => askJudge(content), parse: parseVerdict });
     const finalPlan = coverageGate.planChange(diff, [...plan.outcomes, ...model.changedOutcomes]);
     const finalSelected = includeRequiredJourneys({ features }, finalPlan, diff);
     deferred = finalSelected.deferred;
@@ -675,6 +738,7 @@ async function judge(env) {
     notCovered: model.notCovered,
     notes: ruled.notes,
     runUrl,
+    judgeLabel: judgeModel.label,
   });
   if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${body}\n`);
   if (env.VERIFIER_DRY) {
@@ -693,7 +757,7 @@ module.exports = {
   JUDGE_INSTRUCTIONS, judgeContext, ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, MAX_JOURNEYS, SMOKE_JOURNEY, PRODUCT_ASSERTION,
   SIDES, RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
   saysBug, loadTicketTitles, isBugFix, noProductChange,
-  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys, scopePlan, journeyRunners,
+  artifactName, authorFamilies, chooseJudge, callClaude, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys, scopePlan, journeyRunners,
 };
 
 if (require.main === module) {

@@ -26,6 +26,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 |---|---|
 | Every PR builds, unit-tests and lints without unrelated phone jobs | `test.yml` runs build and `tools/check.sh source/unit/m3/lint`; `tools/ci/pr-workflows.test.mjs` checks workflow ownership |
 | Every PR gets one independent verdict, including tooling-only changes. At most three touched journeys run, with edited repro recipes first; remaining guards are named as deferred to nightly `android-full` | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js`; tooling retains hosted parent/head rule proof |
+| The judge is a model family no PR author used. Each PR body names every author with `Author model: <family>/<model>`; a missing, unknown or all-families-used author list fails | `authorFamilies` and `chooseJudge` in `verifier.cjs`, `tools/pstack-verifier.test.js` |
 | Reuse base proof only for the same source SHA, journey and unchanged driver inputs | `parent-cache.cjs`, retained base artifacts and `tools/parent-cache.test.js` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
 | An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |
@@ -42,6 +43,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | No scratch output (logs, OCR dumps, screenshots) at the repo root | `tools/root-files.mjs` allowlist in `tools/check.sh` |
 | Merged branches do not linger on GitHub | repo setting: delete branch on merge |
 | Every PR title starts with its ticket, like `IGSH-1684: what changed`; add that ticket's exact Hypertask title to `tools/release-notes/ticket-titles.json`. Update notes show one `IGSH-N exact title` line per ticket, never filler | `tools/release-notes/notes.mjs` in `test.yml` and `release.yml` |
+| Feature work stays frozen until phone testing meets the checklist. A PR whose title ticket is not in `tools/freeze/allowed-tickets.json` fails while `"frozen"` is true; only chat repair, faster checks and test setup work get added to that list | `tools/freeze/check.mjs` in the required `test` job of `test.yml` |
 | The Android feature map gets weekly source and registered-journey coverage; drift opens one correction PR, never auto-merges | `maintain-verification.yml`, `control_map.py check/locations` and the registry-driven hosted journey matrix |
 | No keys in Git; whole history rescanned weekly | `secret-scan` in `gitleaks.yml`, required on `main` |
 

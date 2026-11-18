@@ -177,6 +177,47 @@ def missing_response(q, reason):
 def visible_prompt(text):
     return _TRACKED_ID.sub("", text) if isinstance(text, str) else text
 
+def command_reply(command, arguments):
+    lines = arguments.splitlines()
+    quote = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if line.startswith(">"):
+            quote.append(line)
+            index += 1
+            continue
+        if quote and not line.strip():
+            nxt = index + 1
+            while nxt < len(lines) and not lines[nxt].strip():
+                nxt += 1
+            if nxt < len(lines) and lines[nxt].startswith(">"):
+                quote.append(line)
+                index += 1
+                continue
+        break
+    if not quote:
+        return (command + " " + arguments).strip()
+    while index < len(lines) and not lines[index].strip():
+        index += 1
+    own = "\n".join(lines[index:]).strip()
+    if not own:
+        return (command + " " + arguments).strip()
+    body = command + (" " if "\n" not in own else "\n") + own
+    return "\n".join(quote).rstrip() + "\n\n" + body
+
+def quote_skill_key(text):
+    skills = []
+    rest = []
+    for word in text.split():
+        if len(word) > 1 and word.startswith("/") and all(c.isalnum() or c in ":_-" for c in word[1:]):
+            skills.append(word)
+        else:
+            rest.append(word)
+    if not skills or not any(word == ">" or word.startswith(">") for word in rest):
+        return None
+    return " ".join(skills + rest)
+
 def clean_command_markup(text):
     if re.search(r"</?pasted_content\b", text, re.I):
         text = re.sub(r"^[ \t]*</?pasted_content\b[^>]*>[ \t]*\r?\n?", "", text, flags=re.I | re.M)
@@ -189,7 +230,9 @@ def clean_command_markup(text):
             if command and not command.startswith("/"):
                 command = "/" + command
             arguments = args.group(1).strip() if args else ""
-            return (command + " " + arguments).strip()
+            if not command:
+                return arguments
+            return command_reply(command, arguments)
     if "<local-command-" in text:
         text = _LOCAL_COMMAND.sub("", text)
     return text
@@ -1602,20 +1645,46 @@ def pin_hosted_claude(q, agent, as_owner=False):
     return q
 
 
+def hosted_claude_transcript_sid(sid, config):
+    native = config.get("native_session") if isinstance(config, dict) else None
+    if isinstance(native, str) and SESSION_ID.fullmatch(native):
+        return native
+    try:
+        with host_paths("claude", sid)["log"].open("rb") as source:
+            end = source.seek(0, os.SEEK_END)
+            pending = b""
+            while end:
+                count = min(end, 65536)
+                end -= count
+                source.seek(end)
+                lines = (source.read(count) + pending).split(b"\n")
+                pending = lines.pop(0) if end else b""
+                for raw in reversed(lines):
+                    event = load_line(raw)
+                    detail = event.get("detail") if isinstance(event, dict) and event.get("event") == "init" else None
+                    native = detail.get("session") if isinstance(detail, dict) else None
+                    if isinstance(native, str) and SESSION_ID.fullmatch(native):
+                        return native
+    except OSError:
+        pass
+    return sid
+
+
 def resolve_response_path(q, source=None, as_owner=False):
     rid = q["id"]
     agent = q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q["codex"] else "claude"
     sid, tmux, cwd = q["sid"], q["tmux"], q["cwd"]
-    hosted = host_config(agent, sid) if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None
-    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
-        cwd = q["cwd"] = hosted["cwd"]
     if (not isinstance(rid, int) or rid < 0 or
             sid and not SESSION_ID.fullmatch(sid) or
-            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux or
-            cwd and not Path(cwd).is_absolute()):
+            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux):
         raise ValueError("invalid identity")
     if not sid and tmux and not as_owner:
         sid = q["sid"] = host_sid_for_tmux(agent, tmux) or ""
+    hosted = host_config(agent, sid) if sid else None
+    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
+        cwd = q["cwd"] = hosted["cwd"]
+    if cwd and not Path(cwd).is_absolute():
+        raise ValueError("invalid identity")
     if hosted and host_session_state(agent, sid).get("display_history"):
         history = host_paths(agent, sid)["history"]
         if history.is_file():
@@ -1631,6 +1700,29 @@ def resolve_response_path(q, source=None, as_owner=False):
     pin_hosted_claude(q, agent, as_owner)
     sid = q["sid"]
     follow = bool(tmux and (q.get("follow") or agent == "codex"))
+    if agent == "claude" and sid and not as_owner and host_dispatch_switch(agent, sid):
+        native = hosted_claude_transcript_sid(sid, hosted)
+        if native != sid:
+            owner = conversation_owner(cwd)
+            denied = False
+            for home in ([None, owner[1]] if owner and owner[1] != HOME else [None]):
+                try:
+                    path = conversation_path(agent, native, cwd, home)
+                except PermissionError:
+                    path, denied = None, True
+                if path is not None:
+                    return agent, sid, path, None
+            if denied and owner and source is not None:
+                query = dict(q, sid=native, follow=False,
+                             cached_sid=native if q.get("cached_sid") == sid else q.get("cached_sid", ""))
+                wire = owner_response(query, owner, source)
+                operation = "search" if "search" in q else "history"
+                prefix = f"@mp\t{rid}\t{operation}\tok\t{native}\t"
+                if wire.startswith(prefix):
+                    wire = f"@mp\t{rid}\t{operation}\tok\t{sid}\t" + wire[len(prefix):]
+                return agent, sid, None, wire
+            wire = missing_response(q, "permission denied") if denied else empty_history_response(q, sid, tmux)
+            return agent, sid, None, wire
     denied = False
     delegated = None
     try:
@@ -1644,15 +1736,6 @@ def resolve_response_path(q, source=None, as_owner=False):
         except PermissionError:
             hosted = None
         return (agent, sid, hosted, None) if hosted is not None else (agent, sid, None, empty_history_response(q, sid, tmux, agent))
-    if agent == "claude" and path is not None and sid and not as_owner and host_dispatch_switch(agent, sid):
-        native = host_session_state(agent, sid).get("native_session")
-        if isinstance(native, str) and SESSION_ID.fullmatch(native) and native != sid:
-            try:
-                cleared = conversation_path(agent, native, cwd)
-            except PermissionError:
-                cleared = None
-            if cleared is not None:
-                path = cleared
     owner = conversation_owner(cwd) if agent == "claude" else None
     if follow and owner and owner[1] != HOME and source is not None and not as_owner:
         delegated = owner_response(dict(q, sid=""), owner, source)
@@ -3098,7 +3181,7 @@ def host_reply(query):
         return dict(status="refused", reason="unsupported_provider")
     if query.get("op") == "set_model" and provider not in HOST_MODEL_CHOICES and provider != "pi":
         return dict(status="refused", reason="unsupported_provider")
-    if query.get("op") == "login" and provider != "pi":
+    if query.get("op") in ("login", "login_answer") and provider != "pi":
         return dict(status="refused", reason="unsupported_provider")
     if query.get("op") == "set_permission_mode" and provider not in ("claude", "codex"):
         return dict(status="refused", reason="unsupported_provider")
@@ -3142,7 +3225,7 @@ def host_reply(query):
         finally:
             host_release(lock)
     request = {key: query[key] for key in ("op", "request_id", "decision", "answers", "dismissed",
-                                           "action", "feedback", "input", "mode", "model", "effort", "provider_id") if key in query}
+                                           "action", "feedback", "input", "mode", "model", "effort", "provider_id", "data") if key in query}
     reply = host_request(provider, sid, request)
     return reply if isinstance(reply, dict) else dict(status="error", reason="invalid_reply")
 
@@ -4689,6 +4772,10 @@ def host_handle_request(provider, sid, tmux, session, request):
         if provider != "pi":
             return host_refuse("unsupported_provider")
         return host_pi_login(provider, sid, tmux, session, request)
+    if operation == "login_answer":
+        if provider != "pi":
+            return host_refuse("unsupported_provider")
+        return host_pi_login_answer_op(provider, sid, tmux, session, request)
     if operation in ("set_model", "set_effort"):
         if operation == "set_effort" and provider != "claude" or provider not in HOST_MODEL_CHOICES:
             return host_refuse("unsupported_provider")
@@ -4876,6 +4963,9 @@ def host_claude_event(provider, sid, tmux, session, event):
                              dict(requested=settings["model"], actual=actual or "unknown"))
             if isinstance(event.get("session_id"), str):
                 session["state"]["native_session"] = event["session_id"]
+                config = host_config(provider, sid)
+                if config is not None:
+                    host_write(host_paths(provider, sid)["config"], dict(config, native_session=event["session_id"]))
             host_state_write(provider, sid, session["state"])
             host_log(provider, sid, "init", dict(session=event.get("session_id")))
             host_event(provider, sid, tmux, session, "host.status", dict(state="ready"))
@@ -5355,6 +5445,23 @@ def host_pi_login(provider, sid, tmux, session, request):
         session.pop("pi_login", None)
         return dict(status="error", reason="stdin_write_failed")
     return dict(status="ok")
+
+
+def host_pi_login_answer_op(provider, sid, tmux, session, request):
+    if "command" in request or "text" in request:
+        return host_refuse("invalid_answer")
+    data = request.get("data")
+    if not isinstance(data, str) or not data.strip() or "\x00" in data:
+        return host_refuse("invalid_answer")
+    dialog = session.get("pi_login_dialog")
+    if not isinstance(dialog, dict) or not isinstance(dialog.get("id"), str):
+        reason = "already_answered" if session.get("pi_login_answered") else "no_dialog"
+        return dict(status="final", reason=reason)
+    sent = host_pi_login_answer(provider, sid, tmux, session, dialog, data)
+    if sent.get("status") != "ok":
+        return sent
+    session["pi_login_answered"] = True
+    return dict(status="final")
 
 
 def host_pi_login_answer(provider, sid, tmux, session, dialog, text):
@@ -7468,6 +7575,9 @@ def settle_response(q, source=None, as_owner=False):
                     text = " ".join(message["text"].split())
                     open_targets = [i for i, target in enumerate(targets) if rows[i]["line"] == 0]
                     hits = [i for i in open_targets if text == targets[i] or text == chained[i]]
+                    shown = quote_skill_key(text)
+                    if shown and not hits:
+                        hits = [i for i in open_targets if shown == quote_skill_key(targets[i])]
                     if not hits:
                         padded = f" {text} "
                         hits = [i for i in open_targets if len(targets[i]) >= SETTLE_SUFFIX_MIN and f" {targets[i]} " in padded]
@@ -7949,7 +8059,7 @@ def serve_request(line, source, subscriptions, lock):
                 subscriptions.pop(rid, None)
             serve_print(dict(id=rid, message_protocol=1, result=dict(events=[], next_after=query.get("after", 0))))
             return
-        if query.get("op") in ("approval_reply", "question_reply", "plan_reply", "set_permission_mode", "set_model", "set_effort", "interrupt", "fresh_start", "switch_ai"):
+        if query.get("op") in ("approval_reply", "question_reply", "plan_reply", "set_permission_mode", "set_model", "set_effort", "interrupt", "fresh_start", "switch_ai", "login", "login_answer"):
             serve_print(dict(id=rid, message_protocol=1, result=host_reply(query)))
             return
         if query.get("op") in ("message_submit", "message_retry", "message_dismiss", "message_dispatch", "message_status", "message_snapshot", "message_events", "message_reset"):
@@ -8057,7 +8167,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 126
+RUNTIME_GENERATION = 131
 
 if __name__ == '__main__':
     import base64 as _base64
