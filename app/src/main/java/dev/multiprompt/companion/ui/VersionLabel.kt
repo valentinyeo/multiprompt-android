@@ -38,7 +38,7 @@ internal fun VersionLabel(
         style = if (reader) Kit.Label else androidx.compose.material3.LocalTextStyle.current,
         fontSize = if (reader) Kit.Label.fontSize else 10.sp,
         fontFamily = if (reader) Kit.Label.fontFamily else if (LocalMaterial3.current) FontFamily.Monospace else null,
-        color = if (reader) Kit.TextMuted else if (LocalMaterial3.current) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (reader) Kit.Text else if (LocalMaterial3.current) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         softWrap = false,
         overflow = TextOverflow.Ellipsis,
