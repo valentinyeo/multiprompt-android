@@ -90,6 +90,12 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node tools/release-notes/notes.mjs --pr-title "$PR_TITLE"
 
+      - name: Feature freeze blocks tickets that are not on the allowlist
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: node tools/freeze/check.mjs
+
       - name: Source files, comments and tool checks
         env:
           GRADLE: gradle
