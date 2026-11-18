@@ -2,9 +2,11 @@ import base64
 from contextlib import closing
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
@@ -71,6 +73,34 @@ class CancelFixtureTest(unittest.TestCase):
         root.remove(root[0])
         with self.assertRaises(AssertionError):
             proof.ui(root, state)
+
+    def test_recording_survives_the_371_second_stressed_journey_and_expiry_still_fails(self):
+        driver = (SCRIPTS / 'drive.sh').read_text()
+        block = driver.split('if [[ "$feature" == chat-cancel.md ]]; then', 1)[1].split('\nfi', 1)[0]
+        start_at = block.index("        adb shell 'echo $$")
+        start = textwrap.dedent(block[start_at:block.index('\n    fi', start_at)])
+        end_at = block.index('        remote_recording=')
+        end = textwrap.dedent(block[end_at:block.index('\n    fi', end_at)])
+        with tempfile.TemporaryDirectory() as temporary:
+            script = r'''
+set -euo pipefail
+adb() {
+    case "$*" in
+        *'exec screenrecord --time-limit '*) printf '%s' "$*" > "$EVIDENCE/recording-command" ;;
+        'shell cat /sdcard/cancel-record.pid') printf '1234\n' ;;
+        'shell kill -2 1234')
+            limit=$(sed -n 's/.*--time-limit \([0-9]*\).*/\1/p' "$EVIDENCE/recording-command")
+            (( limit == 0 || limit > 371 )) ;;
+        'pull /sdcard/cancel-proof.mp4 '*) printf 'retained video' > "$3" ;;
+        *) return 1 ;;
+    esac
+}
+'''
+            for command, passed in ((start, True), (start.replace('--time-limit 0 ', '--time-limit 180 '), False)):
+                run = subprocess.run(['bash', '-c', script + command + '\nwait "$recording_client"\n' + end],
+                                     env=dict(os.environ, EVIDENCE=temporary), capture_output=True, text=True)
+                self.assertEqual(passed, run.returncode == 0, run.stderr)
+            self.assertGreater((Path(temporary) / 'cancel-proof.mp4').stat().st_size, 0)
 
     def test_last_day_merges_did_not_change_cancel_contract(self):
         revisions = ('eb266155', '5f96fe62', '96faea90', '33eb2ff6', 'd03c35ab', 'dd344ad0', '962eecad')

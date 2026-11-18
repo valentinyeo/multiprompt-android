@@ -1,5 +1,6 @@
 {
   "IGSH-2681": "Android reader misses replies after the chat server restarts",
+  "IGSH-2679": "Break-it stress check skips journeys that never type a message",
   "IGSH-2708": "Android CI matches pstack: forced journeys, signed runs, sync proof",
   "IGSH-2665": "A weekly run keeps the Android feature map true",
   "IGSH-2536": "Android uses only the design kit for buttons and menus",
