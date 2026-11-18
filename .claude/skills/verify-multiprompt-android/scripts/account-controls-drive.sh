@@ -97,12 +97,12 @@ if [[ "$feature" == workspace-controls.md ]]; then
     account_control_state workspace-arrange-scrolled '{"text":["Arrange splits","Workshop"],"absent":["Review"]}'
     tap_text Archive Workshop
     tap_node text Restore reveal Workshop
-    wait_for_text 'Archived workspaces'
-    account_control_state workspace-archived '{"text":["Archived workspaces","Workshop","Restore"]}'
+    wait_for_text 'ARCHIVED WORKSPACES'
+    account_control_state workspace-archived '{"text":["ARCHIVED WORKSPACES","Workshop","Restore"]}'
     tap_text Restore Workshop
-    wait_for_absence 'Archived workspaces'
+    wait_for_absence 'ARCHIVED WORKSPACES'
     tap_node text Archive reveal Workshop
-    account_control_state workspace-restored '{"text":["Arrange splits","Workshop"],"absent":["Restore","Archived workspaces"]}'
+    account_control_state workspace-restored '{"text":["Arrange splits","Workshop"],"absent":["Restore","ARCHIVED WORKSPACES"]}'
     adb shell input keyevent KEYCODE_BACK
     account_control_state workspace-arrange-dismiss '{"text":["Inbox"],"absent":["Arrange splits"]}'
     adb shell wm size reset

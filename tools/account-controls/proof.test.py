@@ -27,6 +27,15 @@ fixture_module = load('account_fixture', SCRIPTS / 'device-approval.py')
 
 
 class AccountControlsTest(unittest.TestCase):
+    def test_hosted_workshop_replay_requires_the_displayed_uppercase_headings(self):
+        xml = HERE / 'fixtures/3676f1f3-workshop.xml'
+        png = HERE / 'fixtures/3676f1f3-workshop.png'
+        expected = dict(text=['Inbox', 'ORIGINAL', 'OTHER'],
+                        desc=['Robot verify-session', 'Robot pin-00'], selected=['Workshop'])
+        proof.ui.check(xml, png, expected)
+        with self.assertRaises(AssertionError):
+            proof.ui.check(xml, png, dict(text=['Original', 'Other']))
+
     def test_row_label_selects_the_right_archive_and_arrows(self):
         xml = '<hierarchy><node bounds="[0,0][1080,1920]">'
         for index, name in enumerate(['Workshop', 'Studio']):
