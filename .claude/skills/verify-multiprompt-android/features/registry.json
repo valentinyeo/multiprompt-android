@@ -56,17 +56,26 @@
     },
     "chat-cancel.md": {
       "name": "Cancel waiting messages",
-      "description": "exact cancellation, surviving order, host receipt and delivered actions, with a recording.",
+      "description": "canonical queued/cancelled states, untouched terminal draft, surviving receipt order and delivered actions, with a recording.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/cancel-console.py",
+          ".claude/skills/verify-multiprompt-android/scripts/cancel-proof.py"
+        ]
       },
       "outcomes": [
         "chat-cancel.journey"
-      ]
+      ],
+      "evidence": {
+        "cancel-waiting.json": 3000,
+        "cancel-cancelled.json": 3000,
+        "cancel-delivered.json": 5000
+      }
     },
     "chat-choices.md": {
       "name": "Chat choices",

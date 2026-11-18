@@ -14,8 +14,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
   - Outcomes: `bot-photo-refresh.journey`. Runner: `android-full.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
-- [Cancel waiting messages](chat-cancel.md): exact cancellation, surviving order, host receipt and delivered actions, with a recording.
-  - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug).
+- [Cancel waiting messages](chat-cancel.md): canonical queued/cancelled states, untouched terminal draft, surviving receipt order and delivered actions, with a recording.
+  - Outcomes: `chat-cancel.journey`. Runner: `verify.yml` (debug). Priority evidence: `cancel-waiting.json` (3000 characters), `cancel-cancelled.json` (3000 characters), `cancel-delivered.json` (5000 characters).
 - [Chat choices](chat-choices.md): latest-reply option taps and live question number keys, with independent SSH/tmux receipts.
   - Outcomes: `chat-choices.journey`. Runner: `verify.yml` (debug).
 - [Codex transcript parity](chat-codex.md): Dispatch `feature=chat-codex.md`. The real Android APK connects through SSH to independent Hax, native Codex, and Claude fixture sessions. Hax and Codex write the same JSONL schemas consumed by desktop. Their terminal output deliberately excludes every transcript reply, ruling out terminal-scrape success.
