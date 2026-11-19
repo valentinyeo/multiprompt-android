@@ -1,5 +1,6 @@
+import importlib.machinery
+import importlib.util
 import os
-import runpy
 import subprocess
 import sys
 from unittest.mock import patch
@@ -42,7 +43,11 @@ class TerminalConsoleTest(unittest.TestCase):
                 self.assertEqual(result.stdout.strip(), expected)
 
     def test_shell_input_proof_rejects_echoes_stale_history_and_running_sleep(self):
-        script = Path(__file__).resolve().parents[1] / '.claude/skills/verify-multiprompt-android/scripts/terminal-proof.py'
+        root = Path(__file__).resolve().parents[1]
+        cli = root / '.claude/skills/verify-multiprompt-android/scripts/mpa'
+        spec = importlib.util.spec_from_loader('mpa_cli', importlib.machinery.SourceFileLoader('mpa_cli', str(cli)))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
         cases = [
             ('typed', 'VERIFY_SHELL> echo TYPED_$((40+2))\nTYPED_42\nVERIFY_SHELL> ', 1, True),
             ('typed', 'VERIFY_SHELL> echo TYPED_42\nVERIFY_SHELL> ', 1, False),
@@ -58,13 +63,14 @@ class TerminalConsoleTest(unittest.TestCase):
         ]
         for step, pane, process_code, accepted in cases:
             with self.subTest(step=step, pane=pane, process_code=process_code), tempfile.TemporaryDirectory() as directory:
-                with patch.dict(os.environ, GITHUB_ACTIONS='true'), patch.object(sys, 'argv', [str(script), step, directory]), patch('subprocess.check_output', return_value=pane), patch('subprocess.run', return_value=subprocess.CompletedProcess([], process_code, '123\n' if process_code == 0 else '', '')), patch('time.monotonic', side_effect=[0, 6]):
+                with patch.dict(os.environ, GITHUB_ACTIONS='true'), patch('subprocess.check_output', return_value=pane), patch('subprocess.run', return_value=subprocess.CompletedProcess([], process_code, '123\n' if process_code == 0 else '', '')), patch('time.monotonic', side_effect=[0, 6]):
                     if accepted:
-                        runpy.run_path(str(script), run_name='__main__')
-                        self.assertIn(f'SHELL_INPUT_{step.upper()}_OK', (Path(directory) / 'shell-input-result.txt').read_text())
+                        payload = module.terminal(step, directory, 'verify-session', False)
+                        self.assertEqual('SHELL_INPUT_' + step.upper() + '_OK', payload['message'])
+                        self.assertIn('SHELL_INPUT_' + step.upper() + '_OK', (Path(directory) / 'shell-input-result.txt').read_text())
                     else:
-                        with self.assertRaises(SystemExit):
-                            runpy.run_path(str(script), run_name='__main__')
+                        with self.assertRaises(module.MpaError):
+                            module.terminal(step, directory, 'verify-session', False)
                         self.assertFalse((Path(directory) / 'shell-input-result.txt').exists())
 
     def test_numeric_field_readback_rejects_old_digits(self):

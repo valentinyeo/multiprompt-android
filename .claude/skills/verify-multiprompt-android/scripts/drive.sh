@@ -527,11 +527,36 @@ break_it_ready
 if [[ "$feature" == session-favorite-dot.md ]]; then
     [[ "$package" == dev.multiprompt.companion.debug ]]
     wait_for_text verify-keep
+    dot_check() {
+        local mode=$1 path=$2
+        case "$mode" in
+            starred)
+                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside verify-session
+                python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value 'Session favorite dot' --inside verify-keep
+                ;;
+            search)
+                python3 "$scripts/mpa" read --xml "$path" --select absent --value verify-keep >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select text --value '1 result across all splits' >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside verify-session
+                ;;
+            plain)
+                python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value 'Session favorite dot' >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select visible --value verify-session >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select visible --value verify-keep
+                ;;
+            favorites)
+                python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value 'Session favorite dot' >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select absent --value verify-keep >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select visible --value verify-session
+                ;;
+        esac
+    }
     wait_dot() {
         local mode=$1 attempt
         for attempt in {1..30}; do
             dump_ui
-            if python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/current.xml"; then return 0; fi
+            if dot_check "$mode" "$EVIDENCE/current.xml" >/dev/null; then return 0; fi
             sleep 1
         done
         printf 'Timed out waiting for favorite dot mode %s\n' "$mode" >&2
@@ -541,7 +566,7 @@ if [[ "$feature" == session-favorite-dot.md ]]; then
         local mode=$1 name=$2
         wait_dot "$mode"
         shot "$name"
-        python3 "$scripts/favorite-dot.py" "$mode" "$EVIDENCE/$(printf '%02d' "$step")-$name.xml" | tee "$EVIDENCE/$name.json"
+        dot_check "$mode" "$EVIDENCE/$(printf '%02d' "$step")-$name.xml" | tee "$EVIDENCE/$name.json"
     }
     open_session_menu() {
         local label=$1 row_x row_y
@@ -1014,7 +1039,7 @@ fi
 
 if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text 'Inbox preview stays.'
-    python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"
+    python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value Draft
     shot inbox-before-draft
     tap_text verify-session
     wait_for_text 'Message verify-session'
@@ -1029,7 +1054,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text Draft
     wait_for_text 'Inbox preview stays.'
     shot inbox-draft
-    python3 "$scripts/draft-label.py" present "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft.xml"
+    python3 "$scripts/mpa" proof --name inbox-draft --xml "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft.xml" --order Draft --order 'Inbox preview stays.'
     tap_text verify-session
     wait_for_text 'unsent draft text'
     sent=0
@@ -1049,11 +1074,11 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text 'Inbox preview stays.'
     for attempt in {1..30}; do
         dump_ui
-        if python3 "$scripts/draft-label.py" absent "$EVIDENCE/current.xml"; then break; fi
+        if python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value Draft >/dev/null; then break; fi
         sleep 1
     done
     shot inbox-draft-cleared
-    python3 "$scripts/draft-label.py" absent "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft-cleared.xml"
+    python3 "$scripts/mpa" read --xml "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft-cleared.xml" --select absent --value Draft
     sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
     grep -Fx 'VERIFY_RECEIVED:unsent draft text' "$EVIDENCE/receipts.txt"
@@ -1076,14 +1101,14 @@ if [[ "$feature" == copy-chat-id.md ]]; then
         wait_for_text "$label"
         for attempt in {1..15}; do
             dump_ui
-            if python3 "$scripts/copy-chat-id.py" empty "$EVIDENCE/current.xml"; then
+            if python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select editor-value --value composer --extra '' >/dev/null; then
                 break
             fi
             sleep 1
         done
-        python3 "$scripts/copy-chat-id.py" empty "$EVIDENCE/current.xml"
+        python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select editor-value --value composer --extra '' >/dev/null
         if [[ "$chat_id" != "$session" ]]; then
-            python3 "$scripts/copy-chat-id.py" hidden "$EVIDENCE/current.xml" "$chat_id"
+            python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value "$chat_id" >/dev/null
         fi
         tap_desc 'Session actions'
         wait_for_text 'Copy chat ID'
@@ -1100,7 +1125,7 @@ if [[ "$feature" == copy-chat-id.md ]]; then
         pasted=0
         for attempt in {1..8}; do
             dump_ui
-            if python3 "$scripts/copy-chat-id.py" pasted "$EVIDENCE/current.xml" "$chat_id"; then
+            if python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select editor-value --value composer --extra "$chat_id" >/dev/null; then
                 pasted=1
                 break
             fi
@@ -1113,7 +1138,7 @@ if [[ "$feature" == copy-chat-id.md ]]; then
         done
         [[ "$pasted" == 1 ]]
         shot "composer-${shot_name}"
-        python3 "$scripts/copy-chat-id.py" pasted "$EVIDENCE/$(printf '%02d' "$step")-composer-${shot_name}.xml" "$chat_id"
+        python3 "$scripts/mpa" read --xml "$EVIDENCE/$(printf '%02d' "$step")-composer-${shot_name}.xml" --select editor-value --value composer --extra "$chat_id" >/dev/null
         if sudo test -f /home/verifyssh/receipts.txt && sudo grep -F "VERIFY_RECEIVED:${chat_id}" /home/verifyssh/receipts.txt; then
             printf 'Copied chat id reached the host\n' >&2
             exit 1
@@ -1147,7 +1172,7 @@ if [[ "$feature" == session-stop.md ]]; then
         local attempt
         for attempt in {1..30}; do
             dump_ui || true
-            if [[ -f "$EVIDENCE/current.xml" ]] && python3 "$scripts/composer-slot.py" "$1" "$EVIDENCE/current.xml"; then
+            if [[ -f "$EVIDENCE/current.xml" ]] && composer_slot "$1" "$EVIDENCE/current.xml"; then
                 return 0
             fi
             sleep 1
@@ -1155,46 +1180,69 @@ if [[ "$feature" == session-stop.md ]]; then
         printf 'Timed out waiting for composer %s\n' "$1" >&2
         return 1
     }
+    composer_slot() {
+        local mode=$1 path=$2
+        case "$mode" in
+            send)
+                python3 "$scripts/mpa" read --xml "$path" --select visible --value 'Send prompt' >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value Stop
+                ;;
+            send-ready)
+                python3 "$scripts/mpa" read --xml "$path" --select visible --value 'Send prompt' --extra enabled >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value Stop
+                ;;
+            stop)
+                python3 "$scripts/mpa" read --xml "$path" --select visible --value Stop --extra enabled >/dev/null
+                python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value 'Send prompt'
+                ;;
+            quiet)
+                ! grep -Eq '^(VERIFY_INTERRUPTED_528|VERIFY_RECEIVED:|VERIFY_ENTER_)' "$path"
+                ;;
+            interrupted)
+                grep -Fxq VERIFY_INTERRUPTED_528 "$path" && ! grep -Fq 'VERIFY_RECEIVED:' "$path"
+                ;;
+        esac
+    }
     tap_text verify-session
     wait_for_text 'Message verify-session'
     wait_for_text VERIFY_READY_528
     wait_slot send
     shot composer-send-idle
-    python3 "$scripts/composer-slot.py" send "$EVIDENCE/$(printf '%02d' "$step")-composer-send-idle.xml"
+    composer_slot send "$EVIDENCE/$(printf '%02d' "$step")-composer-send-idle.xml"
     copy_receipt "$EVIDENCE/receipts-before.txt"
-    python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-before.txt"
+    composer_slot quiet "$EVIDENCE/receipts-before.txt"
     mark_hook active
     sudo cat /home/verifyssh/.local/state/multiprompt/tab-state.json > "$EVIDENCE/hook-active.json"
     grep -F '"state": "active"' "$EVIDENCE/hook-active.json"
     wait_slot stop
     shot composer-stop
-    python3 "$scripts/composer-slot.py" stop "$EVIDENCE/$(printf '%02d' "$step")-composer-stop.xml"
+    composer_slot stop "$EVIDENCE/$(printf '%02d' "$step")-composer-stop.xml"
     fill 'Message verify-session' KEEP_DRAFT
     wait_for_text KEEP_DRAFT
     wait_slot send-ready
     shot composer-send-draft
-    python3 "$scripts/composer-slot.py" send-ready "$EVIDENCE/$(printf '%02d' "$step")-composer-send-draft.xml"
+    composer_slot send-ready "$EVIDENCE/$(printf '%02d' "$step")-composer-send-draft.xml"
     copy_receipt "$EVIDENCE/receipts-draft.txt"
-    python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-draft.txt"
+    composer_slot quiet "$EVIDENCE/receipts-draft.txt"
     fill KEEP_DRAFT ''
     wait_for_text 'Message verify-session'
     wait_slot stop
     shot composer-stop-again
-    python3 "$scripts/composer-slot.py" stop "$EVIDENCE/$(printf '%02d' "$step")-composer-stop-again.xml"
+    composer_slot stop "$EVIDENCE/$(printf '%02d' "$step")-composer-stop-again.xml"
     copy_receipt "$EVIDENCE/receipts-before-stop.txt"
-    python3 "$scripts/composer-slot.py" quiet "$EVIDENCE/receipts-before-stop.txt"
+    composer_slot quiet "$EVIDENCE/receipts-before-stop.txt"
     tap_desc Stop
     wait_receipt VERIFY_INTERRUPTED_528
     wait_for_text VERIFY_INTERRUPTED_528
     shot composer-interrupted
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/receipts.txt"
-    python3 "$scripts/composer-slot.py" interrupted "$EVIDENCE/receipts.txt"
+    composer_slot interrupted "$EVIDENCE/receipts.txt"
     mark_hook done
     sudo cat /home/verifyssh/.local/state/multiprompt/tab-state.json > "$EVIDENCE/hook-done.json"
     grep -F '"state": "done"' "$EVIDENCE/hook-done.json"
     wait_slot send
     shot composer-send-after-stop
-    python3 "$scripts/composer-slot.py" send "$EVIDENCE/$(printf '%02d' "$step")-composer-send-after-stop.xml"
+    composer_slot send "$EVIDENCE/$(printf '%02d' "$step")-composer-send-after-stop.xml"
     sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/ssh-auth.txt"
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/tmux-final.txt"
     grep -F VERIFY_INTERRUPTED_528 "$EVIDENCE/tmux-final.txt"
@@ -2579,20 +2627,20 @@ if [[ "$feature" == terminal.md ]]; then
     done
     printf 'SHELL_SCROLL_500_KEYBOARD_ANCHOR_LIVE_OK\n' | tee "$EVIDENCE/shell-scroll-result.txt"
     sudo -u verifyssh tmux respawn-pane -k -t verify-session 'env PS1="VERIFY_SHELL> " HISTFILE=/dev/null bash --noprofile --norc -i'
-    python3 "$scripts/terminal-proof.py" ready "$EVIDENCE"
+    python3 "$scripts/mpa" terminal --step ready --evidence "$EVIDENCE"
     tap_node terminal ''
     adb shell input text 'echo%sTYPED_\$\(\(40+2\)\)'
     adb shell input keyevent 66
-    python3 "$scripts/terminal-proof.py" typed "$EVIDENCE"
+    python3 "$scripts/mpa" terminal --step typed --evidence "$EVIDENCE"
     shot shell-input-typed
     adb shell input text 'sleep%s300'
     adb shell input keyevent 66
     sleep 2
-    python3 "$scripts/terminal-proof.py" sleep "$EVIDENCE"
+    python3 "$scripts/mpa" terminal --step sleep --evidence "$EVIDENCE"
     shot shell-input-sleep
     tap_desc 'Ctrl key'
     adb shell input text c
-    python3 "$scripts/terminal-proof.py" interrupt "$EVIDENCE"
+    python3 "$scripts/mpa" terminal --step interrupt --evidence "$EVIDENCE"
     shot shell-input-interrupt
     dump_ui
     read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" key-row 'Ctrl key')
@@ -2603,7 +2651,7 @@ if [[ "$feature" == terminal.md ]]; then
     tap_desc 'Up key'
     tap_desc 'Up key'
     adb shell input keyevent 66
-    python3 "$scripts/terminal-proof.py" history "$EVIDENCE"
+    python3 "$scripts/mpa" terminal --step history --evidence "$EVIDENCE"
     shot shell-input-history
     dump_ui
     read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" key-row 'Up key')
@@ -2615,10 +2663,25 @@ if [[ "$feature" == terminal.md ]]; then
     adb shell input text 'ls%s/tmp/verify_tabf'
     tap_desc 'Tab key'
     adb shell input keyevent 66
-    python3 "$scripts/terminal-proof.py" tab "$EVIDENCE"
+    python3 "$scripts/mpa" terminal --step tab --evidence "$EVIDENCE"
     shot shell-input-tab
     exit 0
 fi
+send_timing() {
+    local xml=$1 log=$2 sent=$3 marks composer
+    marks=$(sed -nE 's/.*SendTiming.*: ([a-z_]+) \+([0-9]+)ms.*/\1=\2ms/p' "$log")
+    printf 'SEND_TIMING %s\n' "$(printf '%s\n' "$marks" | tr '\n' ' ')"
+    grep -q '^message_added=' <<< "$marks"
+    grep -q '^box_cleared_frame=' <<< "$marks"
+    composer=$(grep '^box_cleared_frame=' <<< "$marks" | cut -d= -f2 | tr -d 'ms')
+    if (( composer >= 100 )); then
+        printf 'box cleared %s ms after tap, limit 100\n' "$composer" >&2
+        return 1
+    fi
+    python3 "$scripts/mpa" proof --name send-tap --xml "$xml" --require-text "$sent" >/dev/null
+    python3 "$scripts/mpa" read --xml "$xml" --select editor-value --value composer | grep -Fv "\"text\": \"$sent\""
+    printf 'SEND_AT_TAP_OK\n'
+}
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
 sudo -u verifyssh python3 -c 'import json,time; json.dump({"verify-session":{"started_at":int(time.time())-120,"est_seconds":240}},open("/home/verifyssh/.local/state/multiprompt/eta-open.json","w"))'
 tap_desc 'Session actions'
@@ -2646,7 +2709,7 @@ timeout 15s adb logcat -s SendTiming:I -e box_cleared_frame -m 1 > "$EVIDENCE/cl
 shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
-python3 "$scripts/send-timing.py" "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
+send_timing "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result

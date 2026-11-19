@@ -77,9 +77,9 @@ class MpaCliTest(unittest.TestCase):
     def test_every_command_has_rich_help_and_a_description(self):
         result = self.run_cli('--help')
         self.assertEqual(0, result.returncode)
-        for command in ('doctor', 'launch', 'seed', 'tap', 'read', 'fill', 'screenshot', 'proof', 'cleanup', 'key'):
+        for command in ('doctor', 'launch', 'seed', 'tap', 'read', 'fill', 'screenshot', 'proof', 'cleanup', 'key', 'swipe', 'terminal'):
             self.assertIn(command, result.stdout)
-        for command in ('doctor', 'launch', 'seed', 'tap', 'read', 'fill', 'screenshot', 'proof', 'cleanup', 'key'):
+        for command in ('doctor', 'launch', 'seed', 'tap', 'read', 'fill', 'screenshot', 'proof', 'cleanup', 'key', 'swipe', 'terminal'):
             with self.subTest(command=command):
                 help_text = self.run_cli(command, '--help')
                 self.assertEqual(0, help_text.returncode, help_text.stderr)
@@ -701,6 +701,132 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertEqual({'command': '/clear', 'command_count': 1, 'delivery_tag': '', 'raw_receipts': 'clear-receipts.txt'}, json.loads((self.evidence / 'clear-host.json').read_text()))
         self.assertEqual(['VERIFY_RECEIVED:/clear'], (self.evidence / 'clear-receipts.txt').read_text().splitlines())
         self.assertEqual('CLAUDE_CLEAR_RANKING_JOURNEY_OK', (self.evidence / 'clear-proof.txt').read_text().splitlines()[0])
+
+
+PACKAGE = 'dev.multiprompt.companion.debug'
+
+
+def hierarchy(body):
+    return f'<hierarchy rotation="0"><node class="android.widget.FrameLayout" package="{PACKAGE}" visible-to-user="true" bounds="[0,0][1080,1920]">{body}</node></hierarchy>'
+
+
+def item(text='', description='', bounds='[0,0][100,100]', **attributes):
+    fields = dict(text=text, **{'content-desc': description}) if description else dict(text=text)
+    fields = {key: value for key, value in fields.items() if value}
+    fields.update({'package': PACKAGE, 'bounds': bounds, **{key.replace('_', '-'): str(value).lower() for key, value in attributes.items()}})
+    return '<node ' + ' '.join(f'{key}="{value}"' for key, value in fields.items()) + ' />'
+
+
+class MovedPhoneScriptTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.evidence = self.root / 'evidence'
+        self.evidence.mkdir()
+        self.env = environment(EVIDENCE=str(self.evidence), GITHUB_ACTIONS='true', ADB=str(self.root / 'no-adb'))
+
+    def write(self, name, body):
+        path = self.root / f'{name}.xml'
+        path.write_text(hierarchy(body))
+        return str(path)
+
+    def run_cli(self, *args, env=None):
+        return subprocess.run([sys.executable, '-B', str(MPA), *args], capture_output=True, text=True, env=env or self.env)
+
+    def payload(self, *args, env=None):
+        result = self.run_cli(*args, env=env)
+        self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+        return json.loads(result.stdout)
+
+    def failure(self, *args, env=None):
+        result = self.run_cli(*args, env=env)
+        self.assertEqual(1, result.returncode, result.stdout + result.stderr)
+        return json.loads(result.stdout)
+
+    def test_visible_requires_the_row_fully_on_screen(self):
+        on_screen = self.write('visible', item(text='Add image', bounds='[40,1140][700,1200]', clickable=True, enabled=True))
+        self.assertEqual('visible', self.payload('read', '--xml', on_screen, '--select', 'visible', '--value', 'Add image', '--extra', 'enabled')['mode'])
+        clipped = self.write('clipped', '<node package="' + PACKAGE + '" scrollable="true" bounds="[0,1000][1080,1200]">' + item(text='Offscreen row', bounds='[40,1240][700,1300]') + '</node>')
+        self.assertEqual('SELECTOR_OFFSCREEN', self.failure('read', '--xml', clipped, '--select', 'visible', '--value', 'Offscreen row')['error'])
+        hidden = self.write('hidden', '<node package="' + PACKAGE + '" visible-to-user="false" bounds="[0,1000][1080,1200]">' + item(text='Add image', bounds='[40,1040][700,1100]') + '</node>')
+        self.assertEqual('SELECTOR_HIDDEN', self.failure('read', '--xml', hidden, '--select', 'visible', '--value', 'Add image')['error'])
+
+    def test_visible_enabled_ignores_a_system_control_with_the_same_description(self):
+        body = '<node package="' + PACKAGE + '" clickable="true" enabled="true" bounds="[980,1700][1060,1780]"><node package="' + PACKAGE + '" content-desc="Stop" bounds="[990,1710][1050,1770]" /></node>'
+        body += '<node package="com.android.systemui" content-desc="Stop" clickable="true" enabled="true" bounds="[0,0][100,100]" />'
+        path = self.write('stop', body)
+        self.assertEqual('visible', self.payload('read', '--xml', path, '--select', 'visible', '--value', 'Stop', '--extra', 'enabled')['mode'])
+        disabled = self.write('stop-disabled', '<node package="' + PACKAGE + '" clickable="true" enabled="false" bounds="[980,1700][1060,1780]"><node package="' + PACKAGE + '" content-desc="Stop" bounds="[990,1710][1050,1770]" /></node>')
+        self.assertEqual('SELECTOR_DISABLED', self.failure('read', '--xml', disabled, '--select', 'visible', '--value', 'Stop', '--extra', 'enabled')['error'])
+
+    def test_visible_before_rejects_a_row_that_never_moved(self):
+        before = self.write('before', item(text='Delete', bounds='[40,1140][700,1200]'))
+        after = self.write('after', item(text='Delete', bounds='[40,1140][700,1200]'))
+        self.assertEqual('SELECTOR_ALREADY_VISIBLE', self.failure('read', '--xml', after, '--select', 'visible', '--value', 'Delete', '--before', before)['error'])
+        earlier = self.write('earlier', item(text='Delete', bounds='[40,1960][700,2020]'))
+        self.assertEqual('visible', self.payload('read', '--xml', after, '--select', 'visible', '--value', 'Delete', '--before', earlier)['mode'])
+
+    def test_current_row_must_contain_the_model_and_be_disabled(self):
+        path = self.write('current', item(text='Current: Fable 5.5 \u00b7 high', bounds='[40,1040][700,1100]', enabled=False))
+        self.assertEqual('current', self.payload('read', '--xml', path, '--select', 'current', '--value', 'Fable', '--extra', 'disabled')['mode'])
+        enabled = self.write('current-enabled', item(text='Current: Fable 5.5 \u00b7 high', bounds='[40,1040][700,1100]', clickable=True, enabled=True))
+        self.assertEqual('CURRENT_ROW_ENABLED', self.failure('read', '--xml', enabled, '--select', 'current', '--value', 'Fable', '--extra', 'disabled')['error'])
+        self.assertEqual('SELECTOR_MISSING', self.failure('read', '--xml', path, '--select', 'current', '--value', 'Opus')['error'])
+
+    def test_draft_row_requires_the_menu_to_be_closed(self):
+        closed = self.write('draft', '<node package="' + PACKAGE + '" class="android.widget.EditText" text="keep this draft" bounds="[0,1750][1080,1820]" />')
+        self.assertEqual('draft', self.payload('read', '--xml', closed, '--select', 'draft', '--value', 'keep this draft')['mode'])
+        opened = self.write('draft-open', item(text='Current: Fable 5.5 \u00b7 high', bounds='[40,340][700,400]') + '<node package="' + PACKAGE + '" class="android.widget.EditText" text="keep this draft" bounds="[0,1750][1080,1820]" />')
+        self.assertEqual('MENU_STILL_OPEN', self.failure('read', '--xml', opened, '--select', 'draft', '--value', 'keep this draft')['error'])
+
+    def test_inside_scopes_a_description_check_to_one_row(self):
+        row = '<node package="' + PACKAGE + '" text="verify-session" clickable="true" bounds="[0,300][1080,500]">' + item(description='Session favorite dot', bounds='[900,340][980,420]') + '</node>'
+        keep = '<node package="' + PACKAGE + '" text="verify-keep" clickable="true" bounds="[0,520][1080,700]" />'
+        path = self.write('dot', row + keep)
+        self.assertEqual('desc', self.payload('read', '--xml', path, '--select', 'desc', '--value', 'Session favorite dot', '--inside', 'verify-session')['mode'])
+        self.assertEqual('desc-absent', self.payload('read', '--xml', path, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-keep')['mode'])
+        self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', path, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-session')['error'])
+        dotted = self.write('dot-plain', row + '<node package="' + PACKAGE + '" text="verify-keep" clickable="true" bounds="[0,520][1080,700]">' + item(description='Session favorite dot', bounds='[900,540][980,620]') + '</node>')
+        self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', dotted, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-keep')['error'])
+
+    def test_swipe_scrolls_the_one_visible_container(self):
+        path = self.write('scroll', '<node package="' + PACKAGE + '" scrollable="true" bounds="[0,1000][1080,1600]">' + item(text='Add image', bounds='[40,1140][700,1200]') + '</node>')
+        payload = self.payload('swipe', '--xml', path, '--dry-run')
+        self.assertEqual([540, 1480], payload['from'])
+        self.assertEqual([540, 1120], payload['to'])
+        self.assertTrue(payload['dry_run'])
+        horizontal = self.payload('swipe', '--xml', path, '--axis', 'horizontal', '--dry-run')
+        self.assertEqual((864, 1300), tuple(horizontal['from']))
+        self.assertEqual((216, 1300), tuple(horizontal['to']))
+
+    def test_swipe_refuses_an_ambiguous_container(self):
+        path = self.write('two', '<node package="' + PACKAGE + '" scrollable="true" bounds="[0,100][1080,500]" /><node package="' + PACKAGE + '" scrollable="true" bounds="[0,600][1080,1000]" />')
+        self.assertEqual('CONTAINER_AMBIGUOUS', self.failure('swipe', '--xml', path, '--dry-run')['error'])
+        named = self.write('named', '<node package="' + PACKAGE + '" scrollable="true" bounds="[0,600][1080,1000]">' + item(text='keep this draft', bounds='[40,640][700,700]') + '</node>')
+        self.assertEqual([0, 600, 1080, 1000], self.payload('swipe', '--xml', named, '--inside', 'keep this draft', '--dry-run')['container'])
+
+    def test_terminal_dry_run_prints_the_pane_command_and_refuses_a_local_run(self):
+        payload = self.payload('terminal', '--step', 'ready', '--dry-run')
+        self.assertEqual(['sudo', '-u', 'verifyssh', 'tmux', 'capture-pane', '-p', '-t', 'verify-session'], payload['commands'][0])
+        local = environment(ADB=str(self.root / 'no-adb'))
+        self.assertEqual('TERMINAL_NOT_ON_RUNNER', self.failure('terminal', '--step', 'ready', env=local)['error'])
+        self.assertEqual('TERMINAL_STEP_UNKNOWN', self.failure('terminal', '--step', 'reboot', '--dry-run')['error'])
+
+    def test_the_copy_chat_id_and_draft_checks_the_journeys_run(self):
+        empty = self.write('composer', '<node package="' + PACKAGE + '" class="android.widget.EditText" text="" bounds="[40,1600][1000,1700]" />')
+        self.payload('read', '--xml', empty, '--select', 'editor-value', '--value', 'composer', '--extra', '')
+        self.assertEqual('FIELD_VALUE_MISMATCH', self.failure('read', '--xml', empty, '--select', 'editor-value', '--value', 'composer', '--extra', 'copy-chat-id-2371')['error'])
+        self.payload('read', '--xml', empty, '--select', 'absent', '--value', 'copy-chat-id-2371')
+        shown = self.write('shown', item(text='copy-chat-id-2371', bounds='[40,200][400,260]'))
+        self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', shown, '--select', 'absent', '--value', 'copy-chat-id-2371')['error'])
+        two = self.write('two-editors', '<node package="' + PACKAGE + '" class="android.widget.EditText" text="" bounds="[40,1600][1000,1700]" /><node package="' + PACKAGE + '" class="android.widget.EditText" text="" bounds="[40,1700][1000,1800]" />')
+        self.assertEqual('SELECTOR_AMBIGUOUS', self.failure('read', '--xml', two, '--select', 'editor-value', '--value', 'composer', '--extra', '')['error'])
+        draft = self.write('draft', '<node package="' + PACKAGE + '" text="verify-session" clickable="true" bounds="[0,300][1080,500]">' + item(text='Draft', bounds='[40,340][200,400]') + item(text='Inbox preview stays.', bounds='[220,340][700,400]') + '</node>')
+        record = self.payload('proof', '--name', 'inbox-draft', '--xml', draft, '--order', 'Draft', '--order', 'Inbox preview stays.', '--dry-run')['record']
+        self.assertTrue(record['passed'])
+        self.payload('read', '--xml', empty, '--select', 'absent', '--value', 'Draft')
+        self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', draft, '--select', 'absent', '--value', 'Draft')['error'])
 
 
 if __name__ == '__main__':

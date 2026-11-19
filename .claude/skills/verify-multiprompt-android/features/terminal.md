@@ -31,7 +31,7 @@ Preconditions: fresh fixture; dispatch `feature=terminal.md`. For the published 
 - Type `sleep%s300`, Enter, wait two seconds, and require a real `sleep 300` process. Tap **Ctrl key**, type `c`, and require `^C`, a fresh prompt and an empty runner-side `pgrep -f "sleep 300"` result within five seconds.
 - Scroll the key row horizontally if needed, tap **Up key** twice and Enter. Require exactly two `TYPED_42` output lines. This also proves Ctrl was consumed rather than remaining active for subsequent typing.
 - Create `/tmp/verify_tabfile_unique.txt` on the runner. Type `ls%s/tmp/verify_tabf`, tap **Tab key** and Enter. Require the exact `/tmp/verify_tabfile_unique.txt` output line, not just the echoed command.
-- Each check fails with a step-specific message. Inspect numbered `shell-input-typed`, `shell-input-sleep`, `shell-input-interrupt`, `shell-input-history` and `shell-input-tab` PNG/XML pairs, independent `shell-input-*.txt` pane/process captures and `shell-input-result.txt`. `terminal-proof.py` polls each resulting state for at most five seconds; the workflow tests its rejection of command echoes, stale history and a surviving sleep before driving the emulator.
+- Each check fails with a step-specific message. Inspect numbered `shell-input-typed`, `shell-input-sleep`, `shell-input-interrupt`, `shell-input-history` and `shell-input-tab` PNG/XML pairs, independent `shell-input-*.txt` pane/process captures and `shell-input-result.txt`. `mpa terminal --step STEP` polls each resulting state for at most five seconds; `tools/mpa-cli.test.py` covers its dry run, its runner guard and its step list.
 
 ## Terminal input on a real shell
 
