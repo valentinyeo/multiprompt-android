@@ -115,6 +115,29 @@ class CrashReportUploadTest {
         }
     }
 
+    @Test fun releaseLayoutCrashKeepsMinifiedFramesAndLayoutMessage() {
+        signIn()
+        val trace = "java.lang.IllegalArgumentException: Can't represent a size of 300000 in Constraints\n" +
+            "at a1.b.c(SourceFile:12)\n" +
+            "at Q0.k0.y(r8-map-id-0a1b2c:40)\n" +
+            "at android.view.View.measure(View.java:30541)\n" +
+            "at private.host.example.load(SourceFile:3)"
+        upload(report.copy(stackTrace = trace, uploadStackTrace = trace))
+        assertEquals("java.lang.IllegalArgumentException: Can't represent a size of 300000 in Constraints", body!!.getString("summary"))
+        assertEquals("java.lang.IllegalArgumentException: Can't represent a size of 300000 in Constraints\n" +
+            "at a1.b.c(SourceFile:12)\n" +
+            "at Q0.k0.y(r8-map-id-0a1b2c:40)\n" +
+            "at android.view.View.measure(View.java:30541)", body!!.getString("stack_trace"))
+    }
+
+    @Test fun messagesOutsideTheLayoutAllowlistStayPrivate() {
+        signIn()
+        val trace = "java.lang.IllegalArgumentException: host.example size of 5\nat a1.b.c(SourceFile:12)"
+        upload(report.copy(stackTrace = trace, uploadStackTrace = trace))
+        assertEquals("java.lang.IllegalArgumentException", body!!.getString("summary"))
+        assertFalse(body!!.toString().contains("host.example"))
+    }
+
     @Test fun unsafeOrEmptyTraceHasNonemptySafeFallbackAndBoundedUtf8Body() {
         signIn()
         for (trace in listOf("", "🔑\"\n".repeat(16000), "private session contents")) {
