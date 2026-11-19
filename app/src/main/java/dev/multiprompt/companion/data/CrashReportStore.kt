@@ -21,6 +21,7 @@ data class CrashReport(
     val androidVersion: String,
     val uploaded: Boolean = false,
     val uploadStackTrace: String = "",
+    val exitDetail: String = "",
 ) {
     fun asText(displayName: String): String = buildString {
         appendLine("$displayName crash report")
