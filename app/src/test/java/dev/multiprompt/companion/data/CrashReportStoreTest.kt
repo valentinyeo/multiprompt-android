@@ -76,6 +76,21 @@ class CrashReportStoreTest {
         }
     }
 
+    @Test fun safeExceptionMessageReachesTheUploadTrace() {
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
+            store.install()
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(),
+                IllegalArgumentException("Can't represent a size of 300000 in Constraints"))
+            val captured = store.load()!!
+            assertTrue(captured.uploadStackTrace.startsWith(
+                "java.lang.IllegalArgumentException: Can't represent a size of 300000 in Constraints\n"))
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+    }
+
     @Test fun captureNeverTreatsPrivateMessagesOrForgedFramesAsUploadMetadata() {
         val original = Thread.getDefaultUncaughtExceptionHandler()
         val secrets = listOf("prod.private.example", "private session contents", "-----BEGIN OPENSSH PRIVATE KEY-----",
