@@ -16,6 +16,7 @@ class CrashTraceTest {
             "at a.b.c(SourceFile:12)",
             "at a.b.c(Native Method)",
             "at a.b.c(SourceFile)",
+            "at a.b.c(private session)",
         )) {
             assertEquals(frame, CrashTrace.safeLine(frame))
         }
@@ -49,7 +50,6 @@ class CrashTraceTest {
             "-----BEGIN OPENSSH PRIVATE KEY-----",
             "session content: launch secret project",
             "andhost.example",
-            "at private.host.example.command(private session)",
             "* referenced classes and methods",
             "reason=ANR (6)",
         )) {
