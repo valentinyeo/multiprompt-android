@@ -114,6 +114,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `chat.shapes`. Runner: `verify.yml` (debug). Priority evidence: `compacted-chat.json` (700 characters), `compacted-chat-proof.txt` (700 characters), `resumed-chat.json` (700 characters), `resumed-chat-proof.txt` (700 characters), `fresh-chat.json` (700 characters), `fresh-chat-proof.txt` (700 characters), `pre-425-reader.txt` (1500 characters), `seed-counts.json` (3000 characters).
 - [Crash report for every app exit](crash-report.md): signs in through the local account fixture, plants uncaught exception, native crash, system kill and ANR exits, relaunches and requires one uploaded crash report per exit with a summary naming it.
   - Outcomes: `crash-report.exits`. Runner: `verify.yml` (debug). Priority evidence: `crash-reports-received.txt` (3200 characters), `crash-exit-summaries.json` (900 characters), `crash-exits.txt` (1600 characters).
+- [Cleared chat](chat-clear.md): A transcribed chat that starts fresh after /clear shows only what came after the clear, keeps a message typed after it, and never shows or sends an unsent or failed message from before it.
+  - Outcomes: `chat-clear.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-clear-before-unsent.xml` (1500 characters), `00-clear-after.xml` (1500 characters), `00-clear-reopened.xml` (1500 characters), `00-clear-state.json` (1500 characters), `clear-store-after.json` (1500 characters), `clear-store-final.json` (1500 characters).
 
 ## Initial coverage gaps
 

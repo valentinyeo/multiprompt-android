@@ -82,7 +82,7 @@ def reply(text):
     redraw()
 
 
-if os.environ.get('VERIFY_FEATURE') == 'chat-queued.md':
+if os.environ.get('VERIFY_FEATURE') in ('chat-queued.md', 'chat-clear.md'):
     spec = importlib.util.spec_from_file_location('queue_reader', HOME / 'queue-reader.py')
     reader = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(reader)
@@ -147,6 +147,20 @@ while True:
                 redraw()
             elif event in ('marker:BEFORE_CONSUMPTION_MARKER', 'marker:UNCERTAIN_MARKER_1', 'marker:UNCERTAIN_MARKER_2'):
                 reply(event.partition(':')[2])
+            elif event == 'fail-messages' and reader is not None:
+                with closing(reader.message_store_db('verify-session')) as db, db:
+                    db.execute("UPDATE shared_messages SET deadline=1 WHERE provider='claude' AND sid=? AND state IN ('queued','sent')", (SID,))
+                reader.message_poll('verify-session', 'claude', SID)
+            elif event == 'clear-transcript':
+                replacement = TRANSCRIPT.with_name(SID + '.replacement')
+                replacement.write_text(''.join(json.dumps(row) + '\n' for row in (
+                    dict(type='user', uuid=str(uuid.uuid4()), message=dict(role='user', content='CLEARED_READY_2474')),
+                    dict(type='assistant', uuid=str(uuid.uuid4()), message=dict(role='assistant', id='msg_cleared', content='Cleared.')))), encoding='utf-8')
+                os.replace(replacement, TRANSCRIPT)
+                native.clear()
+                hint_visible = False
+                lines[:] = ['CLEARED_READY_2474', 'Cleared.']
+                redraw()
             elif event == 'reply' and not native:
                 reply('Both messages received.')
             elif event == 'followup' and not native:

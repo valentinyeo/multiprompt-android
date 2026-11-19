@@ -2085,7 +2085,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"
     exit 0
 fi
-if [[ "$feature" == chat-queued.md ]]; then
+if [[ "$feature" == chat-queued.md || "$feature" == chat-clear.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     wait_for_text VERIFY_READY_1008
 elif [[ "$feature" == chat-resync.md ]]; then
@@ -2320,6 +2320,92 @@ ui = {phase: json.loads(root.joinpath('queue-ui-' + name + '.json').read_text())
 root.joinpath('00-queue-ui.json').write_text(json.dumps(ui) + '\n')
 print('QUEUE_JOURNEY_RESULT', json.dumps(result))
 QUEUE_RESULT
+    exit 0
+fi
+if [[ "$feature" == chat-clear.md ]]; then
+    wait_for_text 'Ready for queued messages.'
+    clear_provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
+    clear_store_state() {
+        sudo -u verifyssh env HOME=/home/verifyssh python3 - "$1" <<'CLEAR_STORE'
+import importlib.util, json, sqlite3, sys
+spec = importlib.util.spec_from_file_location('clear_reader', '/home/verifyssh/queue-reader.py')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+with sqlite3.connect(reader.message_store_path()) as db:
+    rows = db.execute("SELECT text,state FROM shared_messages WHERE provider='claude' AND text IN ('CLEARED_BEFORE_2474','AFTER_CLEAR_2474') ORDER BY position").fetchall()
+print(json.dumps(dict(rows)))
+CLEAR_STORE
+    }
+    clear_screen() {
+        local attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$1"; then return; fi
+            sleep 1
+        done
+        printf 'Timed out waiting for %s\n' "$1" >&2
+        return 1
+    }
+    fill 'Message verify-session' CLEARED_BEFORE_2474
+    tap_desc 'Send prompt'
+    clear_screen CLEARED_BEFORE_2474
+    shot clear-before
+    clear_provider_event fail-messages
+    clear_screen 'Not sent'
+    shot clear-not-sent
+    dump_ui
+    python3 - "$EVIDENCE/current.xml" <<'CLEAR_ACTIONS'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+texts = [node.get('text') for node in root.iter('node')]
+assert texts.count('CLEARED_BEFORE_2474') == 1, texts.count('CLEARED_BEFORE_2474')
+assert 'Send again' in texts and 'Remove' in texts, texts
+CLEAR_ACTIONS
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/00-clear-before-unsent.xml"
+    clear_provider_event clear-transcript
+    clear_screen CLEARED_READY_2474
+    wait_for_absence CLEARED_BEFORE_2474
+    wait_for_absence 'Send again'
+    shot clear-after
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/00-clear-after.xml"
+    clear_store_state after | tee "$EVIDENCE/clear-store-after.json"
+    fill 'Message verify-session' AFTER_CLEAR_2474
+    tap_desc 'Send prompt'
+    clear_screen AFTER_CLEAR_2474
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+    tap_text verify-session
+    clear_screen CLEARED_READY_2474
+    clear_screen AFTER_CLEAR_2474
+    wait_for_absence CLEARED_BEFORE_2474
+    shot clear-reopened
+    dump_ui
+    python3 - "$EVIDENCE/current.xml" <<'CLEAR_REOPENED'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+texts = [node.get('text') for node in root.iter('node')]
+assert texts.count('AFTER_CLEAR_2474') == 1, texts.count('AFTER_CLEAR_2474')
+assert 'CLEARED_BEFORE_2474' not in texts, 'the cleared message came back after reopening'
+assert 'Send again' not in texts and 'Remove' not in texts, texts
+CLEAR_REOPENED
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/00-clear-reopened.xml"
+    clear_store_state final | tee "$EVIDENCE/clear-store-final.json"
+    python3 - "$EVIDENCE" <<'CLEAR_RESULT'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+after = json.loads(root.joinpath('clear-store-after.json').read_text())
+final = json.loads(root.joinpath('clear-store-final.json').read_text())
+assert after['CLEARED_BEFORE_2474'] in ('cancelled', 'failed'), after
+assert final['CLEARED_BEFORE_2474'] in ('cancelled', 'failed'), final
+assert final['AFTER_CLEAR_2474'] in ('queued', 'sent'), final
+result = dict(before='CLEARED_BEFORE_2474', after='AFTER_CLEAR_2474', store_after=after, store_final=final)
+root.joinpath('00-clear-state.json').write_text(json.dumps(result, indent=2) + '\n')
+root.joinpath('clear-result.json').write_text(json.dumps(result, indent=2) + '\n')
+print('CLEAR_JOURNEY_RESULT', json.dumps(result))
+CLEAR_RESULT
     exit 0
 fi
 if [[ "$feature" == native-skills.md ]]; then
