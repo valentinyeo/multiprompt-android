@@ -26,7 +26,6 @@ class ExitReasonsTest {
             ExitReasons.ANR to "ANR",
             ExitReasons.LOW_MEMORY to "Low memory kill",
             ExitReasons.CRASH_NATIVE to "Native crash",
-            ExitReasons.CRASH_NATIVE_UNKNOWN to "Native crash",
             ExitReasons.CRASH to "Java crash",
             ExitReasons.SIGNALED to "Signaled exit",
             ExitReasons.EXCESSIVE_RESOURCE_USAGE to "Excessive resource usage",
@@ -34,9 +33,9 @@ class ExitReasonsTest {
         for ((reason, label) in expected) {
             assertEquals(label, ExitReasons.report(record(reason = reason, description = null), appVersion, androidVersion)?.summary)
         }
-        assertNull(ExitReasons.report(record(reason = 1), appVersion, androidVersion))
-        assertNull(ExitReasons.report(record(reason = 2), appVersion, androidVersion))
-        assertNull(ExitReasons.report(record(reason = 0), appVersion, androidVersion))
+        for (skipped in listOf(0, 1, 7, 8, 10, 11, 12, 13, 14, 15, 16)) {
+            assertNull("reason $skipped", ExitReasons.report(record(reason = skipped), appVersion, androidVersion))
+        }
     }
 
     @Test fun summaryKeepsASafeExitDescriptionNextToTheReason() {
@@ -96,7 +95,7 @@ class ExitReasonsTest {
     }
 
     @Test fun skippedReasonsStillAdvanceTheHighWaterMark() {
-        val filtered = record(timestampMillis = 5_000L, reason = 1)
+        val filtered = record(timestampMillis = 5_000L, reason = 10)
         val (reports, highWater) = ExitReasons.reports(listOf(filtered), 1_000L, appVersion, androidVersion)
         assertTrue(reports.isEmpty())
         assertEquals(5_000L, highWater)

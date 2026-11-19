@@ -18,13 +18,12 @@ fun interface ExitReasonSource {
 }
 
 object ExitReasons {
+    const val SIGNALED = 2
     const val LOW_MEMORY = 3
     const val CRASH = 4
     const val CRASH_NATIVE = 5
     const val ANR = 6
-    const val SIGNALED = 7
     const val EXCESSIVE_RESOURCE_USAGE = 9
-    const val CRASH_NATIVE_UNKNOWN = 11
 
     private const val MAX_REPORTS = 10
     private const val MAX_METADATA_CHARS = 200
@@ -32,7 +31,7 @@ object ExitReasons {
     fun label(reason: Int): String? = when (reason) {
         LOW_MEMORY -> "Low memory kill"
         CRASH -> "Java crash"
-        CRASH_NATIVE, CRASH_NATIVE_UNKNOWN -> "Native crash"
+        CRASH_NATIVE -> "Native crash"
         ANR -> "ANR"
         SIGNALED -> "Signaled exit"
         EXCESSIVE_RESOURCE_USAGE -> "Excessive resource usage"

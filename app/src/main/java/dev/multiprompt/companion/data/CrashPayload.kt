@@ -15,7 +15,7 @@ object CrashPayload {
 
     fun stackTrace(report: CrashReport): String {
         val lines = CrashTrace.safeLines(source(report)) +
-            report.exitDetail.lineSequence().map(String::trim).filter(String::isNotEmpty)
+            report.exitDetail.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }
         return lines.joinToString("\n").take(MAX_TRACE_CHARS).ifEmpty { FALLBACK_TRACE }
     }
 
