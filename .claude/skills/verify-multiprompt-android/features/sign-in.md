@@ -13,11 +13,11 @@ The native Sign in page follows the selected theme, including dark status icons 
 - `account-servers`: account-backed hosts after OTP and host-sync capability (not automated).
 - `account-device-approval`: **Approve this device? → Approve / No** with independently checked SSH key changes has a [local account-fixture journey](device-approval.md). Production email OTP and delivery remain unautomated.
 - `account-crash-upload`: pending reports upload on startup/sign-in; requires a queued crash and service receipt (not automated).
-- `account-sync-entry`: Sign in to sync from the session overflow menu (not automated).
+- `account-sync-entry`: Sign in to sync from the reader **Session actions → More** menu (not automated).
 
 ## How to get to it (user POV)
 
-A fresh install opens Sign in. After entering the debug-only offline mode, **Session list actions → Sign in to sync** opens the same account flow. A signed-in user's menu instead offers sign out.
+A fresh install opens Sign in. After entering the debug-only offline mode, **Session actions → More → Sign in to sync** in an open reader opens the same account flow. A signed-in user's menu instead offers sign out.
 
 ## Driving it with adb and UI Automator
 

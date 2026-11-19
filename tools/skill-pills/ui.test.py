@@ -41,6 +41,14 @@ class SkillPillsUiTest(unittest.TestCase):
         self.pill()
         self.assertTrue(self.check()['composer_pill'])
 
+    def test_dark_dictation_button_is_not_mistaken_for_a_pill_outline(self):
+        self.node(bounds='[330,200][390,280]', **{'class': 'android.widget.Button', 'content-desc': 'Start dictation'})
+        ImageDraw.Draw(self.image).ellipse((332, 202, 388, 278), fill=(46, 46, 46))
+        with self.assertRaisesRegex(AssertionError, 'outline'):
+            self.check()
+        self.pill()
+        self.assertTrue(self.check()['composer_pill'])
+
     def test_removal_requires_exact_remaining_text_and_no_outline(self):
         self.editor.set('text', 'Keep this')
         self.assertFalse(self.check('removed', 'Keep this')['composer_pill'])
