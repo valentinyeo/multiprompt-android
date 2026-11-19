@@ -708,7 +708,8 @@
         "claude.remote-control"
       ],
       "evidence": {
-        "remote-control-state.json": 2000,
+        "remote-control-open.json": 400,
+        "remote-control-connected.json": 900,
         "remote-control-host.json": 3500,
         "remote-control-before.txt": 200
       }
@@ -1334,11 +1335,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "+ tap_desc 'Send prompt'"
+          "quote": "mpa fill 'Message verify-session' PHONE_REMOTE_CONTROL_2541"
         },
         "result": {
-          "file": "remote-control-state.json",
-          "quote": "REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1"
+          "file": "remote-control-connected.json",
+          "quote": "\"value\":\"REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1\""
         },
         "sideEffect": {
           "file": "remote-control-host.json",
@@ -1357,11 +1358,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap_text 'AI usage'"
+          "quote": "mpa tap text 'AI usage'"
         },
         "result": {
           "file": "ai-usage-open.json",
-          "quote": "\"week\": \"37.5%\""
+          "quote": "\"values\":[\"Claude\",\"37.5%\",\"BEHIND\",\"WEEK 37.5% | 5H 12.5% | EMPTY IN 42H\""
         },
         "sideEffect": {
           "file": "ai-usage-receipts.txt",
@@ -1420,11 +1421,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap_text /clear"
+          "quote": "mpa fill 'Message verify-session' /cl"
         },
         "result": {
           "file": "clear-query.json",
-          "quote": "\"order\": [\n    \"/clear\",\n    \"/client\",\n    \"/aaa-paper\""
+          "quote": "\"values\":[\"/clear\",\"/client\",\"/aaa-paper\"]"
         },
         "sideEffect": {
           "file": "clear-receipts.txt",

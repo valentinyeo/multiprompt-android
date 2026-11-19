@@ -81,7 +81,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Saved snippets](snippets.md): save, restart, replace a draft with a saved snippet, send it, and delete it permanently.
   - Outcomes: `snippets.save-reuse-delete`. Runner: `verify.yml` (debug). Priority evidence: `snippets-state.json` (3000 characters), `snippets-receipts.txt` (1000 characters).
 - [Claude remote control](claude-remote-control.md): Open a hosted Claude chat, enable remote control from the phone, and share phone and desktop turns with independent host receipts. SOFT-2541.
-  - Outcomes: `claude.remote-control`. Runner: `verify.yml` (debug). Priority evidence: `remote-control-state.json` (2000 characters), `remote-control-host.json` (3500 characters), `remote-control-before.txt` (200 characters).
+  - Outcomes: `claude.remote-control`. Runner: `verify.yml` (debug). Priority evidence: `remote-control-open.json` (400 characters), `remote-control-connected.json` (900 characters), `remote-control-host.json` (3500 characters), `remote-control-before.txt` (200 characters).
 - [AI usage](ai-usage.md): Open AI usage, compare Claude and Codex numbers with independent SSH receipts, then close. SOFT-2542.
   - Outcomes: `ai.usage`. Runner: `verify.yml` (debug). Priority evidence: `ai-usage-menu.json` (1500 characters), `ai-usage-open.json` (2000 characters), `ai-usage-closed.json` (1000 characters), `ai-usage-proof.txt` (200 characters), `ai-usage-host.json` (2000 characters), `ai-usage-receipts.txt` (3000 characters).
 - [Skills within messages](skill-pills.md): insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.
