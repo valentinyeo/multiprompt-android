@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily live chat transcript probe
+
+[Timer]
+OnCalendar=*-*-* 07:45:00
+RandomizedDelaySec=10m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
