@@ -1764,6 +1764,20 @@
       "description": "every app exit the platform records (ANR, low memory, native, java, signaled, excessive resource) becomes an uploaded crash report, and release frames plus allowlisted exception messages survive the upload filter.",
       "journey": "crash-report.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "adb shell am start -n dev.multiprompt.companion.debug/dev.multiprompt.companion.DebugCrashActivity --es exit uncaught"
+        },
+        "result": {
+          "file": "crash-exit-summaries.json",
+          "quote": "\"uncaught exception\": \"java.lang.IllegalStateException: IGSH-2840 crash\""
+        },
+        "sideEffect": {
+          "file": "crash-reports-received.txt",
+          "quote": "\"summary\": \"Native crash: crash\""
+        }
+      },
       "match": [],
       "paths": [
         "^app/src/main/java/dev/multiprompt/companion/data/(CrashReportStore|ExitReasons|CrashTrace|CrashPayload|AndroidExitReasonSource)\\.kt$",
