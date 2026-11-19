@@ -9,7 +9,8 @@ gradle_run() {
 source_checks() {
   python3 -B tools/kit-controls/history.test.py
   python3 -B tools/kit-controls/journeys.test.py
-  node --test tools/verdict-reuse.test.js tools/ci/pr-workflows.test.mjs tools/parent-cache.test.js tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/pr-checks.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/freeze/check.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/feature-coverage.test.js tools/android-break-it.test.js
+  node --test tools/verdict-reuse.test.js tools/ci/pr-workflows.test.mjs tools/parent-cache.test.js tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/ci/release-timeouts.test.mjs tools/pr-checks.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/freeze/check.test.mjs tools/baseline-profile.test.mjs tools/pstack-verifier.test.js tools/pstack-verifier-eval.test.js tools/feature-coverage.test.js tools/android-break-it.test.js
+  python3 -B tools/release-recorder.test.py
   python3 -B tools/maintain-verification.test.py
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
   python3 -B tools/control-journeys/ui.test.py
