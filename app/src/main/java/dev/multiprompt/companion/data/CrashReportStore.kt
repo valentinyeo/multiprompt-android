@@ -8,6 +8,9 @@ import org.json.JSONObject
 import java.util.UUID
 import java.util.Collections
 import java.util.IdentityHashMap
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -35,8 +38,13 @@ data class CrashReport(
     }
 }
 
-class CrashReportStore(context: Context) {
+class CrashReportStore(
+    context: Context,
+    private val exitSource: ExitReasonSource = AndroidExitReasonSource(context),
+) {
     private val preferences = context.getSharedPreferences("crash_report", Context.MODE_PRIVATE)
+    private val exitCollected = CountDownLatch(1)
+    private val collecting = AtomicBoolean(false)
 
     fun install() {
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
@@ -68,6 +76,7 @@ class CrashReportStore(context: Context) {
             summary = preferences.getString(KEY_SUMMARY, "Unknown crash").orEmpty(),
             stackTrace = stackTrace,
             uploadStackTrace = preferences.getString(KEY_UPLOAD_STACK_TRACE, "").orEmpty(),
+            exitDetail = preferences.getString(KEY_EXIT_DETAIL, "").orEmpty(),
             id = preferences.getString(KEY_ID, null) ?: UUID.nameUUIDFromBytes(
                 "$capturedAt\n$stackTrace".toByteArray(Charsets.UTF_8),
             ).toString(),
@@ -80,23 +89,8 @@ class CrashReportStore(context: Context) {
     fun loadForDisplay(): CrashReport? = load()?.takeUnless { preferences.getBoolean(KEY_DISMISSED, false) }
 
     @Synchronized
-    fun loadPending(): List<CrashReport> {
-        val saved = JSONArray(preferences.getString(KEY_PENDING, "[]"))
-        val pending = (0 until saved.length()).map { index ->
-            val json = saved.getJSONObject(index)
-            CrashReport(
-                capturedAtEpochSeconds = json.getLong(KEY_CAPTURED_AT),
-                threadName = json.getString(KEY_THREAD),
-                summary = json.getString(KEY_SUMMARY),
-                stackTrace = json.getString(KEY_STACK_TRACE),
-                uploadStackTrace = json.optString(KEY_UPLOAD_STACK_TRACE),
-                id = json.getString(KEY_ID),
-                appVersion = json.getString(KEY_APP_VERSION),
-                androidVersion = json.getString(KEY_ANDROID_VERSION),
-            )
-        }
-        return (pending + listOfNotNull(load()?.takeUnless { it.uploaded })).distinctBy { it.id }
-    }
+    fun loadPending(): List<CrashReport> =
+        (pendingReports() + listOfNotNull(load()?.takeUnless { it.uploaded })).distinctBy { it.id }
 
     @Synchronized
     fun markUploaded(id: String) {
@@ -135,7 +129,68 @@ class CrashReportStore(context: Context) {
             .putString(KEY_SUMMARY, report.summary)
             .putString(KEY_STACK_TRACE, report.stackTrace.take(MAX_STACK_TRACE_CHARS))
             .putString(KEY_UPLOAD_STACK_TRACE, report.uploadStackTrace.take(MAX_STACK_TRACE_CHARS))
+            .putString(KEY_EXIT_DETAIL, report.exitDetail.take(MAX_STACK_TRACE_CHARS))
             .commit()
+    }
+
+    fun scheduleExitCollection() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            exitCollected.countDown()
+            return
+        }
+        if (!collecting.compareAndSet(false, true)) return
+        Thread({
+            try {
+                collectExits()
+            } catch (_: Throwable) {
+            } finally {
+                exitCollected.countDown()
+            }
+        }, "crash-exit-reasons").apply { isDaemon = true }.start()
+    }
+
+    fun awaitExitCollection() {
+        try {
+            exitCollected.await(EXIT_COLLECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (_: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+    }
+
+    @Synchronized
+    private fun collectExits() {
+        val records = exitSource.exits()
+        if (records.isEmpty()) return
+        val highWater = preferences.getLong(KEY_EXIT_HIGH_WATER, 0L)
+        val (reports, newHighWater) = ExitReasons.reports(
+            records,
+            highWater,
+            "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+            "${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})",
+        )
+        val merged = (pendingReports() + reports).distinctBy(CrashReport::id).takeLast(MAX_PENDING_REPORTS)
+        preferences.edit()
+            .putString(KEY_PENDING, pendingJson(merged))
+            .putLong(KEY_EXIT_HIGH_WATER, maxOf(highWater, newHighWater))
+            .commit()
+    }
+
+    private fun pendingReports(): List<CrashReport> {
+        val saved = JSONArray(preferences.getString(KEY_PENDING, "[]"))
+        return (0 until saved.length()).map { index ->
+            val json = saved.getJSONObject(index)
+            CrashReport(
+                capturedAtEpochSeconds = json.getLong(KEY_CAPTURED_AT),
+                threadName = json.getString(KEY_THREAD),
+                summary = json.getString(KEY_SUMMARY),
+                stackTrace = json.getString(KEY_STACK_TRACE),
+                uploadStackTrace = json.optString(KEY_UPLOAD_STACK_TRACE),
+                exitDetail = json.optString(KEY_EXIT_DETAIL),
+                id = json.getString(KEY_ID),
+                appVersion = json.getString(KEY_APP_VERSION),
+                androidVersion = json.getString(KEY_ANDROID_VERSION),
+            )
+        }
     }
 
     private fun pendingJson(reports: List<CrashReport>): String = JSONArray(reports.map { report ->
@@ -148,6 +203,7 @@ class CrashReportStore(context: Context) {
             .put(KEY_SUMMARY, report.summary)
             .put(KEY_STACK_TRACE, report.stackTrace)
             .put(KEY_UPLOAD_STACK_TRACE, report.uploadStackTrace)
+            .put(KEY_EXIT_DETAIL, report.exitDetail)
     }).toString()
 
     private fun Throwable.uploadStackTrace(): String = buildString {
@@ -169,6 +225,8 @@ class CrashReportStore(context: Context) {
 
     private companion object {
         const val KEY_UPLOAD_STACK_TRACE = "upload_stack_trace"
+        const val KEY_EXIT_DETAIL = "exit_detail"
+        const val KEY_EXIT_HIGH_WATER = "exit_high_water"
         const val KEY_PENDING = "pending"
         const val KEY_ID = "id"
         const val KEY_APP_VERSION = "app_version"
@@ -180,5 +238,7 @@ class CrashReportStore(context: Context) {
         const val KEY_SUMMARY = "summary"
         const val KEY_STACK_TRACE = "stack_trace"
         const val MAX_STACK_TRACE_CHARS = 16_000
+        const val MAX_PENDING_REPORTS = 20
+        const val EXIT_COLLECTION_TIMEOUT_SECONDS = 10L
     }
 }

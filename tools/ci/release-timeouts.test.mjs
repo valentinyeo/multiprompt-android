@@ -18,7 +18,7 @@ const limit = block => Number(block.match(/^        timeout-minutes: (\d+)$/m)?.
 const slowestJob = 49.1;
 
 test('every release step carries a hard time limit', () => {
-  assert.equal(blocks.length, 24, 'release job step count changed, recheck the limits');
+  assert.equal(blocks.length, 26, 'release job step count changed, recheck the limits');
   for (const block of blocks) {
     const name = label(block);
     assert.ok(name, `Unnamed release step:\n${block.slice(0, 120)}`);

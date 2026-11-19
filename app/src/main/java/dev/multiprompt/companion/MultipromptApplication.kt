@@ -31,6 +31,7 @@ class MultipromptApplication : Application() {
         Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME)
         Security.insertProviderAt(BouncyCastleProvider(), 1)
         crashReportStore.install()
+        crashReportStore.scheduleExitCollection()
         UpdateNotifier.initialize(this)
         ReplyNotifier.initialize(this)
     }

@@ -109,6 +109,29 @@ jobs:
         timeout-minutes: 5
         run: node tools/baseline-profile.mjs apk app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/m3/app-m3.apk
 
+      - name: Retain the R8 mapping of both APKs for retrace
+        timeout-minutes: 5
+        run: |
+          mkdir -p build/r8-mapping
+          for pair in release:multiprompt-companion m3:multiprompt-m3; do
+            variant=${pair%%:*}
+            name=${pair##*:}
+            mapping="app/build/outputs/mapping/$variant/mapping.txt"
+            test -s "$mapping"
+            cp "$mapping" "build/r8-mapping/$name-mapping.txt"
+            cp "$mapping" "build/r8-mapping/$name-$VERSION_NAME-mapping.txt"
+          done
+          wc -l build/r8-mapping/*.txt
+
+      - name: Upload the R8 mapping as a release artifact
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-mapping-${{ env.VERSION_NAME }}
+          path: build/r8-mapping/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Enable emulator acceleration
         timeout-minutes: 2
         run: |
@@ -260,6 +283,7 @@ jobs:
           assets=(
             build/android-release/multiprompt-companion.apk
             build/android-release/multiprompt-companion-update.json
+            build/r8-mapping/multiprompt-companion-mapping.txt
           )
           if gh release view android-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload android-latest "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
@@ -328,6 +352,7 @@ jobs:
           assets=(
             build/android-m3/multiprompt-m3.apk
             build/android-m3/multiprompt-m3-update.json
+            build/r8-mapping/multiprompt-m3-mapping.txt
           )
           if gh release view android-m3-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload android-m3-latest "${assets[@]}" --clobber --repo "$GITHUB_REPOSITORY"
@@ -352,4 +377,5 @@ jobs:
           path: |
             build/android-release/*
             build/android-m3/*
+            build/r8-mapping/*
           if-no-files-found: error

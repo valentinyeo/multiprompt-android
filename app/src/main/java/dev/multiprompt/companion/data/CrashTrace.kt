@@ -3,7 +3,7 @@ package dev.multiprompt.companion.data
 object CrashTrace {
     private const val MAX_MESSAGE_CHARS = 200
 
-    private val frame = Regex("""at [^\s()]+\((?:[^\s()]+:\d+|Native Method|Unknown Source(?::\d+)?)\)""")
+    private val frame = Regex("""at [^\s()]+\([^\s()]+\)""")
     private val header = Regex("""((?:Caused by: |Suppressed: )?)([A-Za-z0-9_.$]+(?:Exception|Error|Throwable))(?:: (.*))?""")
     private val message = Regex("""[A-Za-z0-9 .,:()=_\-/'+]{1,$MAX_MESSAGE_CHARS}""")
 
