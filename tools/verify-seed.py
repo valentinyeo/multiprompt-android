@@ -10,6 +10,9 @@ LONG_SESSION = 'cl-long-chat'
 LONG_SID = '11560000-0000-4000-8000-000000001156'
 SHAPES_SCRIPT = 'chat-shapes-fixture.py'
 SHAPES_MANIFEST = 'chat-shapes.json'
+REAL_SCRIPT = 'real-chat-fixture.py'
+REAL_MANIFEST = 'chat-real.json'
+REAL_SESSION = 'live-real-2781'
 LIVE_PREFIX = 'live-'
 
 
@@ -27,11 +30,28 @@ def shapes(home, names):
     return recorded
 
 
+def real_chat(home, names):
+    script = home / REAL_SCRIPT
+    assert script.is_file(), 'SEED_REAL_CHAT_MISSING'
+    manifest = json.loads(subprocess.check_output([sys.executable, '-B', str(script), 'check', '--home', str(home)], text=True))
+    assert manifest['session'] in names, 'SEED_REAL_CHAT_SESSION_MISSING'
+    option = subprocess.check_output(['tmux', 'show-options', '-t', manifest['session'], '-v', '@mp_host_sid'], text=True).strip()
+    assert option == manifest['chat'], 'SEED_REAL_CHAT_IDENTITY'
+    rows = 0
+    with Path(manifest['transcript']).open('rb') as stream:
+        for _ in stream:
+            rows += 1
+    return dict(session=manifest['session'], chat=manifest['chat'], live=manifest['live'], bytes=Path(manifest['transcript']).stat().st_size,
+                rows=rows, transcript=manifest['transcript'], markers=manifest['markers'], cache=manifest['cache'],
+                init_sessions=manifest['init_sessions'], accepted=manifest['accepted'], delivered=manifest['delivered'])
+
+
 def inventory(home):
     names = sorted(subprocess.check_output(['tmux', 'list-sessions', '-F', '#{session_name}'], text=True).splitlines())
     assert len(names) >= 40, 'SEED_INBOX_TOO_SMALL'
     assert set(BULK_NAMES + [LONG_SESSION]) <= set(names), 'SEED_SESSIONS_MISSING'
     live_shapes = shapes(home, names)
+    real = real_chat(home, names)
     source = json.loads((home / 'long-chat-source.json').read_text())
     path = Path(source['path'])
     assert path == home / '.claude/projects' / str(home / 'long-chat-proof').replace('/', '-') / (LONG_SID + '.jsonl'), 'SEED_TRANSCRIPT_IDENTITY'
@@ -41,7 +61,7 @@ def inventory(home):
     assert size > 18 * 1024 * 1024, 'SEED_TRANSCRIPT_TOO_SMALL'
     assert rows == 1882, 'SEED_TRANSCRIPT_ROWS'
     assert (source['bytes'], source['rows'], source['sid']) == (size, rows, LONG_SID), 'SEED_SOURCE_MISMATCH'
-    return dict(sessions=len(names), bulk_sessions=len(BULK_NAMES), session_names=names, shapes=live_shapes,
+    return dict(sessions=len(names), bulk_sessions=len(BULK_NAMES), session_names=names, shapes=live_shapes, real_chat=real,
                 transcript=dict(session=LONG_SESSION, bytes=size, rows=rows, sid=LONG_SID, path=str(path), latest=source['latest']))
 
 

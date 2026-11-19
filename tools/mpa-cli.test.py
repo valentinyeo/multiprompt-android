@@ -58,6 +58,7 @@ class MpaCliTest(unittest.TestCase):
             path.mkdir()
         (self.home / 'console.py').write_text('')
         shutil.copyfile(ROOT / 'tools/chat-shapes/fixture.py', self.home / 'chat-shapes-fixture.py')
+        shutil.copyfile(ROOT / 'tools/real-chat/fixture.py', self.home / 'real-chat-fixture.py')
         self.screen = self.root / 'screen.xml'
         self.screen.write_text(SCREEN)
         self.menu = self.root / 'menu.xml'
@@ -140,6 +141,8 @@ class MpaCliTest(unittest.TestCase):
         self.assertTrue(payload['dry_run'])
         self.assertEqual(40, payload['rows'])
         self.assertEqual(['live-compacted-2715', 'live-fresh-2715', 'live-resumed-2715'], payload['shapes'])
+        self.assertEqual('live-real-2781', payload['real_chat'])
+        self.assertTrue(any('live-real-2781' in ' '.join(map(str, command)) for command in payload['commands']))
         self.assertFalse(marker.exists())
         self.assertFalse((self.home / 'pins-names.txt').exists())
 
