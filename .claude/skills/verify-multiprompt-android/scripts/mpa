@@ -525,6 +525,8 @@ def seed(session, dry_run):
     shape_plan = json.loads(run([sys.executable, "-B", str(shapes), "plan"]).stdout)
     real = home / "real-chat-fixture.py"
     if not real.is_file():
+        real = SCRIPTS.parents[3] / "tools/real-chat/fixture.py"
+    if not real.is_file():
         raise MpaError("SEED_FIXTURE_MISSING", f"{real} is missing", "Run `.claude/skills/verify-multiprompt-android/scripts/fixture.sh` first.")
     real_plan = json.loads(run([sys.executable, "-B", str(real), "plan"]).stdout)
     tmux = ["tmux"]
