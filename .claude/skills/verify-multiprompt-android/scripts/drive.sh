@@ -260,6 +260,7 @@ fill() {
     adb shell input keyevent KEYCODE_BACK
 }
 source "$scripts/../../../../tools/android-break-it/drive.sh"
+source "$scripts/real-chat-screen.sh"
 
 scroll_to_newest() {
     local attempt
@@ -524,6 +525,7 @@ if ! wait_for_text verify-session; then
 fi
 shot sessions
 break_it_ready
+real_chat_step
 
 if [[ "$feature" == session-favorite-dot.md ]]; then
     [[ "$package" == dev.multiprompt.companion.debug ]]

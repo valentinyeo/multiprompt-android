@@ -523,6 +523,12 @@ def seed(session, dry_run):
     if not shapes.is_file():
         raise MpaError("SEED_FIXTURE_MISSING", f"{shapes} is missing", "Run `.claude/skills/verify-multiprompt-android/scripts/fixture.sh` first.")
     shape_plan = json.loads(run([sys.executable, "-B", str(shapes), "plan"]).stdout)
+    real = home / "real-chat-fixture.py"
+    if not real.is_file():
+        real = SCRIPTS.parents[3] / "tools/real-chat/fixture.py"
+    if not real.is_file():
+        raise MpaError("SEED_FIXTURE_MISSING", f"{real} is missing", "Run `.claude/skills/verify-multiprompt-android/scripts/fixture.sh` first.")
+    real_plan = json.loads(run([sys.executable, "-B", str(real), "plan"]).stdout)
     tmux = ["tmux"]
     names = [f"pin-{index:02d}" if index < 12 else f"row-{index - 12:02d}" for index in range(40)]
     commands = [[*tmux, "has-session", "-t", f"={session}"]]
@@ -540,8 +546,12 @@ def seed(session, dry_run):
         shape_commands.append([*tmux, "set-option", "-t", f"={name}:", "@mp_host_sid", shape["sid"]])
         shape_commands.append([*tmux, "set-window-option", "-t", f"={name}:", "automatic-rename", "off"])
         shape_commands.append([*tmux, "rename-window", "-t", f"={name}:", name])
+    real_commands = [[*tmux, "new-session", "-d", "-s", real_plan["session"], "-x", "100", "-y", "32", "-c", str(home / real_plan["cwd"]), "exec sleep infinity"],
+                     [*tmux, "set-option", "-t", f"={real_plan['session']}:", "@mp_host_sid", real_plan["chat"]],
+                     [*tmux, "set-window-option", "-t", f"={real_plan['session']}:", "automatic-rename", "off"],
+                     [*tmux, "rename-window", "-t", f"={real_plan['session']}:", real_plan["session"]]]
     if dry_run:
-        return {"ok": True, "command": "seed", "dry_run": True, "session": session, "rows": len(names), "long_chat": "cl-long-chat", "shapes": [shape["session"] for shape in shape_plan["shapes"]], "commands": commands + shape_commands}
+        return {"ok": True, "command": "seed", "dry_run": True, "session": session, "rows": len(names), "long_chat": "cl-long-chat", "shapes": [shape["session"] for shape in shape_plan["shapes"]], "real_chat": real_plan["session"], "commands": commands + shape_commands + real_commands}
     if subprocess.run([*tmux, "has-session", "-t", f"={session}"], capture_output=True).returncode != 0:
         raise MpaError("SEED_SESSION_MISSING", f"tmux session {session!r} does not exist", "Run fixture.sh again; it starts the fixture session before seeding.")
     for command in commands[1:-3]:
@@ -561,6 +571,9 @@ def seed(session, dry_run):
         time.sleep(0.1)
     else:
         raise MpaError("SEED_LONG_CHAT_TIMEOUT", "Long chat seed did not become ready", "Read the cl-long-chat pane with `tmux capture-pane -pt cl-long-chat` and check the long-chat fixture.")
+    run([sys.executable, "-B", str(real), "seed"])
+    for command in real_commands:
+        run(command)
     run([sys.executable, "-B", str(shapes), "seed"])
     for command in shape_commands:
         run(command)
@@ -568,7 +581,8 @@ def seed(session, dry_run):
         seeded_shapes = json.loads(run([sys.executable, "-B", str(shapes), "check"]).stdout)
     except MpaError as error:
         raise MpaError("SEED_SHAPES_INVALID", f"Chat shapes failed their own check: {error.message}", "Read `$HOME/chat-shapes.json` and rerun `python3 $HOME/chat-shapes-fixture.py seed`.") from error
-    return {"ok": True, "command": "seed", "dry_run": False, "session": session, "rows": len(seeded), "long_chat": "cl-long-chat", "shapes": [shape["session"] for shape in seeded_shapes["shapes"]], "source": str(source), "manifest": str(home / "chat-shapes.json")}
+    real_manifest = json.loads(run([sys.executable, "-B", str(real), "check"]).stdout)
+    return {"ok": True, "command": "seed", "dry_run": False, "session": session, "rows": len(seeded), "long_chat": "cl-long-chat", "shapes": [shape["session"] for shape in seeded_shapes["shapes"]], "real_chat": real_manifest["session"], "source": str(source), "manifest": str(home / "chat-shapes.json"), "real_manifest": str(home / "chat-real.json")}
 
 
 def screenshot(name):
@@ -927,7 +941,7 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     launch_parser.add_argument("--force-stop", action="store_true", help="Stop the app before starting it. Loses unsent drafts.")
     launch_parser.add_argument("--dry-run", action="store_true", help="Print the adb commands without running them.")
 
-    seed_parser = commands.add_parser("seed", formatter_class=argparse.RawDescriptionHelpFormatter, help="Create the shared inbox sessions, the long chat and the compacted, fresh-started and resumed chat shapes.", description="Start 40 pin/row inbox sessions, the cl-long-chat fixture and the seeded compacted, fresh-started and resumed chats as the verifyssh fixture user. GitHub runner only.", epilog="Examples:\n  mpa seed --session verify-session")
+    seed_parser = commands.add_parser("seed", formatter_class=argparse.RawDescriptionHelpFormatter, help="Create the shared inbox sessions, the long chat, the real-size restarted chat and the compacted, fresh-started and resumed chat shapes.", description="Start 40 pin/row inbox sessions, the cl-long-chat fixture, the live-real-2781 real-size restarted chat and the seeded compacted, fresh-started and resumed chats as the verifyssh fixture user. GitHub runner only.", epilog="Examples:\n  mpa seed --session verify-session")
     seed_parser.add_argument("--session", default="verify-session", help="Existing fixture session that must be present (default: verify-session).")
     seed_parser.add_argument("--dry-run", action="store_true", help="Print the tmux commands without creating sessions.")
 

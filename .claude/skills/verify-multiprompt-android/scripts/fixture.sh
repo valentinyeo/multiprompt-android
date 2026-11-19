@@ -301,6 +301,8 @@ if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true ]
     sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
     sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py
     sudo install -m 755 tools/chat-shapes/fixture.py /home/verifyssh/chat-shapes-fixture.py
+    sudo install -m 755 tools/real-chat/fixture.py /home/verifyssh/real-chat-fixture.py
+    sudo install -m 755 tools/real-chat/phone-cache.py /home/verifyssh/real-chat-phone-cache.py
     sudo install -m 644 tools/verify-seed.py /home/verifyssh/verify-seed.py
     sudo -u verifyssh mkdir -p /home/verifyssh/long-chat-bin
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/long-chat-bin/claude

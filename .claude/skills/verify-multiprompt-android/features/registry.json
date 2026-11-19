@@ -438,7 +438,7 @@
     },
     "session-reader.md": {
       "name": "Session reader",
-      "description": "native output, Send, Enter/approve and Interrupt, with independent console receipts.",
+      "description": "Native output, Send, Enter/approve and Interrupt, with independent console receipts, on the shared real-size restarted chat whose rendered newest reply is checked after open and after scrolling.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -523,7 +523,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 45 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 45 rows render.",
+      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 46 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -536,7 +536,7 @@
         "legacy.igsh-414"
       ],
       "evidence": {
-        "seed-counts.json": 1500,
+        "seed-counts.json": 2500,
         "seed-check.json": 1200,
         "seed-search.xml": 2000,
         "seed-deep-target.xml": 1000,
@@ -1081,7 +1081,7 @@
         "fresh-chat.json": 700,
         "fresh-chat-proof.txt": 700,
         "pre-425-reader.txt": 1500,
-        "seed-counts.json": 2000
+        "seed-counts.json": 3000
       }
     }
   },
