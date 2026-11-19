@@ -213,6 +213,56 @@ done
         self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
         self.assertEqual(leftovers, ['fetched.deb'])
 
+    def test_stale_package_cache_repairs_dpkg_before_downloading_again(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            script = path / 'packages.sh'
+            script.write_text(source('.github/actions/android-proof/packages.sh'))
+            (path / 'state').write_text('')
+            calls = path / 'calls'
+            calls.write_text('')
+            (path / 'dpkg-query').write_text('''#!/usr/bin/env bash
+set -u
+for arg in "$@"; do
+  case "$arg" in -*) continue ;; esac
+  if grep -qx "$arg" "$PROOF_STATE"; then echo 'install ok installed'; else echo 'deinstall ok config-files'; fi
+done
+''')
+            (path / 'dpkg').write_text('''#!/usr/bin/env bash
+case "$*" in *stale.deb*) : > "$PROOF_BROKEN"; exit 1 ;; esac
+printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE"
+''')
+            (path / 'apt-get').write_text('''#!/usr/bin/env bash
+set -u
+echo "apt-get $*" >> "$PROOF_CALLS"
+case "$*" in
+  *"-f install"*) rm -f "$PROOF_BROKEN"; exit 0 ;;
+esac
+if [ -e "$PROOF_BROKEN" ]; then echo 'E: Unmet dependencies' >&2; exit 100; fi
+for arg in "$@"; do
+  case "$arg" in *Dir::Cache::archives=*) dir=${arg#*archives=} ; mkdir -p "$dir"; : > "$dir/fetched.deb" ;; esac
+done
+''')
+            for name in ('dpkg-query', 'dpkg', 'apt-get'):
+                (path / name).chmod(0o700)
+            (path / 'sudo').write_text('#!/usr/bin/env bash\nexec "$@"\n')
+            (path / 'sudo').chmod(0o700)
+            debs = path / '.cache/android-proof/debs'
+            debs.mkdir(parents=True)
+            (debs / 'stale.deb').write_text('deb')
+            env = dict(os.environ, HOME=tmp, PROOF_STATE=str(path / 'state'), PROOF_CALLS=str(calls), PROOF_BROKEN=str(path / 'broken'), PATH=f'{path}:{os.environ["PATH"]}')
+            result = subprocess.run(['bash', str(script), 'gdb', 'libpulse0'], env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('ANDROID_PROOF_PACKAGES_CACHE_REJECTED', result.stdout)
+            self.assertLess(calls.read_text().index('-f install'), calls.read_text().index('--download-only'))
+            self.assertEqual(sorted(item.name for item in debs.glob('*')), ['fetched.deb'])
+            self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
+
+    def test_package_cache_key_names_the_runner_image(self):
+        action = source('.github/actions/android-proof/action.yml')
+        self.assertIn('ImageVersion', action)
+        self.assertIn('steps.image.outputs.image', action)
+
     def test_unusable_package_cache_falls_back_to_the_installed_apt_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)

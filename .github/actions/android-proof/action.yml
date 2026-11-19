@@ -20,11 +20,15 @@ runs:
           ~/.cache/android-proof
           ${{ env.ANDROID_HOME }}/system-images/android-35/${{ inputs.target }}/x86_64
         key: android-proof-${{ runner.os }}-24.04-35-${{ inputs.target }}-emulator-13610412-v2
+    - name: Name the runner image for the package cache
+      id: image
+      shell: bash
+      run: echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
     - name: Cache emulator packages
       uses: actions/cache@v4
       with:
         path: ~/.cache/android-proof/debs
-        key: android-proof-debs-${{ runner.os }}-24.04-gdb-libpulse0-v1
+        key: android-proof-debs-${{ runner.os }}-${{ steps.image.outputs.image }}-gdb-libpulse0-v2
     - name: Install pinned emulator packages
       shell: bash
       run: bash "${{ github.action_path }}/packages.sh" gdb libpulse0
