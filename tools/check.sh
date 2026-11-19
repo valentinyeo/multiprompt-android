@@ -23,6 +23,7 @@ source_checks() {
   python3 -I tools/verify-seed.test.py
   python3 -B tools/fixture-journeys.test.py
   python3 -B tools/mpa-cli.test.py
+  python3 -B tools/message-reply/console.test.py
   python3 -B tools/cancel-fixture.test.py
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py
