@@ -21,10 +21,11 @@ real_chat_cache_seed() {
         printf 'REAL_CHAT_CACHE_SKIPPED: the app has no saved host preferences yet\n' > "$EVIDENCE/real-chat-cache.txt"
         return 0
     fi
-    chmod 644 "$prefs"
+    cp "$prefs" /tmp/real-chat-hosts-2781.xml
+    chmod 644 /tmp/real-chat-hosts-2781.xml
     sudo rm -rf "$out"
     if ! sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/real-chat-phone-cache.py prepare \
-        --prefs "$prefs" --fixture /home/verifyssh/real-chat-fixture.py --home /home/verifyssh \
+        --prefs /tmp/real-chat-hosts-2781.xml --fixture /home/verifyssh/real-chat-fixture.py --home /home/verifyssh \
         --out-dir "$out" --session "$real_session" > "$EVIDENCE/real-chat-cache.json"; then
         setup_failure=1
         cat "$EVIDENCE/real-chat-cache.json" >&2
