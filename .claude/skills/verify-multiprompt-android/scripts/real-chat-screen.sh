@@ -46,19 +46,24 @@ real_chat_cache_seed() {
 real_chat_interleaved() {
     local numbers
     numbers=$(python3 - "$EVIDENCE/current.xml" <<'PY'
+import re
 import sys
 import xml.etree.ElementTree as ET
 
-texts = [node.get('text') or '' for node in ET.parse(sys.argv[1]).getroot().iter('node')]
-texts = [text for text in texts if text]
-prompts = [(index, text.split()[2]) for index, text in enumerate(texts) if text.startswith('Synthetic prompt ')]
-replies = [(index, text.split()[2]) for index, text in enumerate(texts) if text.startswith('Synthetic reply ')]
+rows = []
+for node in ET.parse(sys.argv[1]).getroot().iter('node'):
+    text = node.get('text') or ''
+    bounds = re.findall(r'-?\d+', node.get('bounds') or '')
+    if len(bounds) == 4 and (text.startswith('Synthetic prompt ') or text.startswith('Synthetic reply ')):
+        rows.append((int(bounds[1]), text))
+rows.sort()
+prompts = [(index, text.split()[2]) for index, (top, text) in enumerate(rows) if text.startswith('Synthetic prompt ')]
+replies = [(index, text.split()[2]) for index, (top, text) in enumerate(rows) if text.startswith('Synthetic reply ')]
 for index, number in prompts:
     answered = [position for position, reply in replies if position > index and reply == number]
     if not answered:
         continue
-    following = [position for position, _ in prompts if position > answered[0]]
-    if following:
+    if any(position > answered[0] for position, _ in prompts):
         print(number)
         sys.exit(0)
 sys.exit(1)
@@ -68,7 +73,7 @@ PY
     [[ -n "$real_number" ]]
     real_prompt="Synthetic prompt $real_number for the phone fixture."
     real_reply="Synthetic reply $real_number starts the fixture turn."
-    real_next_prompt="Synthetic prompt $((real_number - 1)) for the phone fixture."
+    real_next_prompt="Synthetic prompt $((real_number + 1)) for the phone fixture."
     python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$real_prompt" > /dev/null &&
         python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$real_reply" > /dev/null &&
         python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$real_next_prompt" > /dev/null
