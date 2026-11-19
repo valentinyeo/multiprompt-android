@@ -17,6 +17,9 @@ install_from_cache() {
     sudo env DEBIAN_FRONTEND=noninteractive dpkg -i "$cache"/*.deb > /dev/null 2>&1 || true
     [ "$(installed_count)" -eq "${#packages[@]}" ] && return 0
   done
+  echo ANDROID_PROOF_PACKAGES_CACHE_REJECTED
+  sudo env DEBIAN_FRONTEND=noninteractive apt-get -f install -y > /dev/null 2>&1 || true
+  sudo rm -f "$cache"/*.deb
   return 1
 }
 if [ "$(installed_count)" -eq "${#packages[@]}" ]; then
