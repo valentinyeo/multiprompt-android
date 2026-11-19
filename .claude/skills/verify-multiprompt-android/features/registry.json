@@ -1102,7 +1102,7 @@
       ],
       "evidence": {
         "crash-reports-received.txt": 3200,
-        "crash-exit-summaries.json": 600,
+        "crash-exit-summaries.json": 900,
         "crash-exits.txt": 1600
       }
     }
@@ -1771,7 +1771,7 @@
         },
         "result": {
           "file": "crash-exit-summaries.json",
-          "quote": "\"uncaught exception\": \"java.lang.IllegalStateException: IGSH-2840 crash\""
+          "quote": "\"native crash\": {\n    \"summary\": \"Native crash: crash\",\n    \"reason\": \"reason=Native crash (5)\""
         },
         "sideEffect": {
           "file": "crash-reports-received.txt",

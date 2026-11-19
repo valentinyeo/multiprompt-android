@@ -82,7 +82,10 @@ plant_and_wait() {
         missing="$missing $exit"
         return 0
     fi
-    printf 'REPORTED %s: %s\n' "$label" "$(received "$needle" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read() or "{}").get("summary", ""))')" \
+    printf 'REPORTED %s: %s\n' "$label" "$(received "$needle" | python3 -c 'import json,sys
+report = json.loads(sys.stdin.read() or "{}")
+reason = next((line for line in report.get("stack_trace", "").splitlines() if line.startswith("reason=")), "")
+print(report.get("summary", "") + (" | " + reason if reason else ""))')" \
         | tee -a "$shared_report"
 }
 
@@ -107,11 +110,17 @@ needles = {'uncaught': 'java.lang.IllegalStateException: IGSH-2840 crash', 'nati
            'kill': 'Signaled exit', 'anr': 'ANR'}
 labels = {'uncaught': 'uncaught exception', 'native': 'native crash', 'kill': 'system kill',
           'anr': 'application not responding'}
+def reason_line(report):
+    for line in report['stack_trace'].splitlines():
+        if line.startswith('reason='):
+            return line.strip()
+    return None
+
 summaries = {}
 for exit, needle in needles.items():
     matches = [report for report in reports if report['summary'].startswith(needle)]
     if matches:
-        summaries[labels[exit]] = matches[-1]['summary']
+        summaries[labels[exit]] = {'summary': matches[-1]['summary'], 'reason': reason_line(matches[-1])}
 for report in reports:
     assert set(report) == fields, sorted(report)
     assert report['id'] and report['thread'] in {'main', 'background'}, report
@@ -120,8 +129,8 @@ for report in reports:
     assert report['app_version'].strip() and report['android_version'].strip(), report
 (root / 'crash-exit-summaries.json').write_text(json.dumps(summaries, indent=2))
 print('REPORTS RECEIVED:', [report['summary'] for report in reports])
-for label, summary in summaries.items():
-    print(label, '->', summary)
+for label, found in summaries.items():
+    print(label, '->', found['summary'], '|', found['reason'])
 if missing:
     print('MISSING_EXITS', ' '.join(labels[exit] for exit in missing))
     sys.exit(1)
