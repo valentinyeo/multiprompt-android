@@ -2,10 +2,10 @@
 pills_state() {
     local name=$1 text=$2
     shot "pills-$name"
-    python3 tools/skill-pills/ui.py \
-        "$EVIDENCE/$(printf '%02d' "$step")-pills-$name.xml" \
-        "$EVIDENCE/$(printf '%02d' "$step")-pills-$name.png" \
-        "$name" "$text" "$EVIDENCE/skill-pills-state.json"
+    python3 "$scripts/mpa" skill-pills \
+        --xml "$EVIDENCE/$(printf '%02d' "$step")-pills-$name.xml" \
+        --png "$EVIDENCE/$(printf '%02d' "$step")-pills-$name.png" \
+        --phase "$name" --text "$text" --out "$EVIDENCE/skill-pills-state.json"
 }
 
 tap_text verify-session
@@ -23,7 +23,7 @@ wait_for_text '/pill-guide-01'
 pills_state picker 'Please / this'
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent '/review-native'
 for attempt in {1..4}; do
-    read -r x1 y1 x2 y2 < <(python3 tools/skill-pills/ui.py scroll "$EVIDENCE/current.xml")
+    read -r x1 y1 x2 y2 < <(python3 "$scripts/mpa" skill-pills --xml "$EVIDENCE/current.xml" --scroll | jq -r .stdout)
     adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
     dump_ui
     if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text '/review-native' >/dev/null 2>&1; then break; fi

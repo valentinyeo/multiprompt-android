@@ -1,6 +1,7 @@
-import importlib.util
+import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -8,9 +9,27 @@ import xml.etree.ElementTree as ET
 
 from PIL import Image, ImageDraw
 
-spec = importlib.util.spec_from_file_location('table_ui', Path(__file__).with_name('ui.py'))
-ui = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(ui)
+MPA = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/mpa'
+PACKAGE = 'dev.multiprompt.companion.debug'
+
+
+def run(*arguments):
+    result = subprocess.run([sys.executable, '-B', str(MPA), 'chat-table', *arguments], capture_output=True, text=True)
+    return result, json.loads(result.stdout)
+
+
+def table_check(xml, png, state, target, hidden=''):
+    result, payload = run('--xml', str(xml), '--png', str(png), '--state', state, '--target', target, '--hidden', hidden)
+    if result.returncode != 0:
+        raise AssertionError(payload['message'])
+    return payload['result']
+
+
+def table_scroll(xml, axis):
+    result, payload = run('--xml', str(xml), '--scroll', axis)
+    if result.returncode != 0:
+        raise AssertionError(payload['message'])
+    return tuple(payload['from'] + payload['to'])
 
 
 class TableUiTest(unittest.TestCase):
@@ -32,12 +51,12 @@ class TableUiTest(unittest.TestCase):
         ImageDraw.Draw(self.image).text((40, 605), 'R24-C06 harvest', fill=(242, 242, 242))
 
     def node(self, parent, **attrs):
-        return ET.SubElement(parent, 'node', {'package': ui.PACKAGE, **attrs})
+        return ET.SubElement(parent, 'node', {'package': PACKAGE, **attrs})
 
     def check(self, state='down', target='R24-C06 harvest', hidden='R01-C06 harvest'):
         ET.ElementTree(self.root).write(self.xml)
         self.image.save(self.png)
-        return ui.check(self.xml, self.png, state, target, hidden)
+        return table_check(self.xml, self.png, state, target, hidden)
 
     def test_far_cell_inside_expanded_table_passes(self):
         self.assertEqual(self.check()['target'], 'R24-C06 harvest')
@@ -94,15 +113,18 @@ class TableUiTest(unittest.TestCase):
             self.check('closed', hidden='')
 
     def test_swipes_stay_inside_the_table_and_use_the_requested_axis(self):
-        x1, y1, x2, y2 = ui.swipe(self.root, 'sideways')
+        self.image.save(self.png)
+        ET.ElementTree(self.root).write(self.xml)
+        x1, y1, x2, y2 = table_scroll(self.xml, 'sideways')
         self.assertTrue(20 < x2 < x1 < 380)
         self.assertEqual(y1, y2)
-        x1, y1, x2, y2 = ui.swipe(self.root, 'down')
+        x1, y1, x2, y2 = table_scroll(self.xml, 'down')
         self.assertEqual(x1, x2)
         self.assertTrue(180 < y2 < y1 < 720)
         self.viewport.set('scrollable', 'false')
+        ET.ElementTree(self.root).write(self.xml)
         with self.assertRaisesRegex(AssertionError, 'no vertical scroll container'):
-            ui.swipe(self.root, 'down')
+            table_scroll(self.xml, 'down')
 
 
 class RetainedPhoneTest(unittest.TestCase):
@@ -114,7 +136,7 @@ class RetainedPhoneTest(unittest.TestCase):
         root = ET.parse(xml).getroot()
         self.assertFalse(any(node.get('text') == 'Close' for node in root.iter('node')))
         self.assertFalse(any(node.get('resource-id', '').startswith('table-') for node in root.iter('node')))
-        result = ui.check(xml, xml.with_suffix('.png'), 'open', 'R01-C01 orchard', 'R01-C06 harvest')
+        result = table_check(xml, xml.with_suffix('.png'), 'open', 'R01-C01 orchard', 'R01-C06 harvest')
         self.assertEqual(result['state'], 'open')
 
     def run_expand(self, xml):

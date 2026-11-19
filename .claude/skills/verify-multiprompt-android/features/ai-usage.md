@@ -16,7 +16,7 @@ Every step saves a numbered PNG/XML pair and checks the captured text before con
 
 ## Evidence
 
-`tools/ai-usage/ui.py` reads the captured XML and screenshot dimensions. It rejects swapped provider values, incorrect numbers, off-screen blocks, missing host receipts, and an unclosed sheet. `ai-usage-menu.json`, `ai-usage-open.json`, and `ai-usage-closed.json` link the screenshot and XML for each step. `ai-usage-proof.txt` appears only after the complete journey passes.
+`mpa ai-usage --phase menu|open|closed` reads the captured XML and screenshot dimensions. It rejects swapped provider values, incorrect numbers, off-screen blocks, missing host receipts, and an unclosed sheet. `ai-usage-menu.json`, `ai-usage-open.json`, and `ai-usage-closed.json` link the screenshot and XML for each step. `ai-usage-proof.txt` appears only after the complete journey passes.
 
 The registry removes `ai.usage` from the missing-coverage baseline. It schedules this journey for AI usage product changes and edits to this recipe, even when the model omits it. Inspect the PNGs, JSON, raw host receipts, and `driver-transcript.txt` in the retained head artifact at the exact APK source SHA after cleanup.
 

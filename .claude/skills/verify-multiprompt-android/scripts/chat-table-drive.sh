@@ -3,8 +3,8 @@ table_reveal() {
     local target=$1 axis=$2 attempt coordinates
     for attempt in {1..12}; do
         dump_ui
-        if python3 tools/chat-table/ui.py visible "$EVIDENCE/current.xml" "$target"; then return; fi
-        coordinates=$(python3 tools/chat-table/ui.py swipe "$EVIDENCE/current.xml" "$axis")
+        if python3 "$scripts/mpa" chat-table --xml "$EVIDENCE/current.xml" --visible "$target" >/dev/null 2>&1; then return; fi
+        coordinates=$(python3 "$scripts/mpa" chat-table --xml "$EVIDENCE/current.xml" --scroll "$axis" | jq -r .stdout)
         adb shell input swipe $coordinates 500
     done
     printf 'Table cell never became visible: %s\n' "$target" >&2
@@ -14,10 +14,10 @@ table_reveal() {
 table_state() {
     local state=$1 target=$2 hidden=${3:-}
     shot "table-$state"
-    python3 tools/chat-table/ui.py \
-        "$EVIDENCE/$(printf '%02d' "$step")-table-$state.xml" \
-        "$EVIDENCE/$(printf '%02d' "$step")-table-$state.png" \
-        "$state" "$target" "$hidden" > "$EVIDENCE/table-$state.json"
+    python3 "$scripts/mpa" chat-table \
+        --xml "$EVIDENCE/$(printf '%02d' "$step")-table-$state.xml" \
+        --png "$EVIDENCE/$(printf '%02d' "$step")-table-$state.png" \
+        --state "$state" --target "$target" --hidden "$hidden" > "$EVIDENCE/table-$state.json"
     cat "$EVIDENCE/table-$state.json"
 }
 

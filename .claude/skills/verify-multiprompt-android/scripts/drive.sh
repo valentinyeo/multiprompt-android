@@ -2122,10 +2122,10 @@ if [[ "$feature" == chat-queued.md ]]; then
         local expected=$1 name=$2 attempt
         for attempt in {1..30}; do
             dump_ui
-            if python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" "$EVIDENCE/queue-ui-$name.json" >/dev/null 2>&1; then return; fi
+            if python3 "$scripts/mpa" queue --xml "$EVIDENCE/current.xml" --expected "$expected" --phase "$name" --evidence "$EVIDENCE/queue-state.tmp" --out "$EVIDENCE/queue-ui-$name.json" >/dev/null 2>&1; then return; fi
             sleep 1
         done
-        python3 "$scripts/queued.py" "$EVIDENCE/current.xml" "$expected" "$name" "$EVIDENCE/queue-state.tmp" "$EVIDENCE/queue-ui-$name.json"
+        python3 "$scripts/mpa" queue --xml "$EVIDENCE/current.xml" --expected "$expected" --phase "$name" --evidence "$EVIDENCE/queue-state.tmp" --out "$EVIDENCE/queue-ui-$name.json"
     }
     provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
     fixture_counts() {
@@ -2477,7 +2477,7 @@ if [[ "$feature" == chat-resync.md ]]; then
         cat "$EVIDENCE/resync-server-after.json" "$EVIDENCE/resync-server-error.txt" >&2
         exit 1
     fi
-    python3 "$scripts/toast.py" "$EVIDENCE/toast-settled.png" "${toast_shots[@]}" | tee "$EVIDENCE/toast-result.txt"
+    python3 "$scripts/mpa" toast --settled "$EVIDENCE/toast-settled.png" "${toast_shots[@]/#/--shot }" | tee "$EVIDENCE/toast-result.txt"
     resync_rows after
     shot resync-draft-after
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"
@@ -2499,7 +2499,7 @@ if [[ "$feature" == chat-reactions.md ]]; then
     wait_for_text 'SECOND REPLY'
     fill 'Message verify-session' 'draft%sstays%shere'
     shot reactions-before
-    read -r reaction_x reaction_y <<< "$(python3 "$scripts/reactions.py" point "$EVIDENCE/current.xml")"
+    read -r reaction_x reaction_y < <(python3 "$scripts/mpa" reaction --mode point --xml "$EVIDENCE/current.xml" | jq -r .stdout)
     adb shell input swipe "$reaction_x" "$reaction_y" "$reaction_x" "$reaction_y" 900
     shot reactions-menu
     if ! wait_for_text '👍'; then
@@ -2521,9 +2521,9 @@ if [[ "$feature" == chat-reactions.md ]]; then
     done
     sleep 2
     shot reactions-badge
-    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-badge.png" badge "$EVIDENCE/reactions-result.json"
+    python3 "$scripts/mpa" reaction --mode check --xml "$EVIDENCE/current.xml" --png "$EVIDENCE/$(printf '%02d' "$step")-reactions-badge.png" --stage badge --out "$EVIDENCE/reactions-result.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
-    python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
+    python3 "$scripts/mpa" reaction --mode transport --receipts "$EVIDENCE/reaction-receipts.txt" --out "$EVIDENCE/reaction-transport.json"
     for attempt in {1..30}; do
         if sudo grep -F 'Reaction received.' /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl >/dev/null; then break; fi
         sleep 1
@@ -2538,13 +2538,13 @@ if [[ "$feature" == chat-reactions.md ]]; then
         sleep 1
     done
     shot reactions-restart
-    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-restart.png" restart "$EVIDENCE/reactions-result.json"
+    python3 "$scripts/mpa" reaction --mode check --xml "$EVIDENCE/current.xml" --png "$EVIDENCE/$(printf '%02d' "$step")-reactions-restart.png" --stage restart --out "$EVIDENCE/reactions-result.json"
     sudo -u verifyssh python3 /home/verifyssh/reaction-console.py append-unmatched
     wait_for_text 'Unavailable reply'
     shot reactions-fallback
-    python3 "$scripts/reactions.py" check "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-reactions-fallback.png" fallback "$EVIDENCE/reactions-result.json"
+    python3 "$scripts/mpa" reaction --mode check --xml "$EVIDENCE/current.xml" --png "$EVIDENCE/$(printf '%02d' "$step")-reactions-fallback.png" --stage fallback --out "$EVIDENCE/reactions-result.json"
     sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reaction-receipts.txt"
-    python3 "$scripts/reactions.py" transport "$EVIDENCE/reaction-receipts.txt" "$EVIDENCE/reaction-transport.json"
+    python3 "$scripts/mpa" reaction --mode transport --receipts "$EVIDENCE/reaction-receipts.txt" --out "$EVIDENCE/reaction-transport.json"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
     sudo -u verifyssh python3 /home/verifyssh/reaction-console.py append-mixed
     wait_for_text 'My follow-up stays visible'
@@ -2555,7 +2555,7 @@ if [[ "$feature" == chat-reactions.md ]]; then
     done
     wait_for_text 'Answer to the follow-up'
     shot reactions-mixed
-    python3 "$scripts/reactions.py" mixed "$EVIDENCE/current.xml" "$EVIDENCE/reactions-mixed-result.json"
+    python3 "$scripts/mpa" reaction --mode mixed --xml "$EVIDENCE/current.xml" --out "$EVIDENCE/reactions-mixed-result.json"
     sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-reaction-work/a1b2c3d4-0975-4000-8000-000000000975.jsonl > "$EVIDENCE/reaction-transcript.jsonl"
     printf 'ANDROID_REACTIONS_REAL_SSH_RESTART_PROVEN\n'
     exit 0
@@ -2694,7 +2694,7 @@ dump_ui
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'ETA '
 adb shell input keyevent KEYCODE_BACK
 shot eta-idle
-python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-idle.png" idle
+python3 "$scripts/mpa" composer-strip --state idle --xml "$EVIDENCE/current.xml" --png "$EVIDENCE/$(printf '%02d' "$step")-eta-idle.png"
 sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
 #!/usr/bin/env bash
 printf '%s start %s\n' "$(date +%T.%N)" "${SSH_ORIGINAL_COMMAND:0:90}" >> /home/verifyssh/commands.log
@@ -2711,7 +2711,7 @@ shot send-draft
 tap_desc 'Send prompt'
 timeout 15s adb logcat -s SendTiming:I -e box_cleared_frame -m 1 > "$EVIDENCE/cleared-frame-receipt.txt"
 shot eta-sending
-python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
+python3 "$scripts/mpa" composer-strip --state sending --xml "$EVIDENCE/current.xml" --png "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png"
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
 send_timing "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'

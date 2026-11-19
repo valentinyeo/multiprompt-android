@@ -8,7 +8,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from PIL import Image, ImageDraw
 
-SCRIPT = Path(__file__).with_name('reactions.py')
+SCRIPT = Path(__file__).with_name('mpa')
 
 
 class ReactionOracleTest(unittest.TestCase):
@@ -34,7 +34,7 @@ class ReactionOracleTest(unittest.TestCase):
                 ET.SubElement(tree, 'node', node)
             ET.ElementTree(tree).write(root / 'ui.xml', encoding='utf-8')
             image.save(root / 'screen.png')
-            result = subprocess.run([sys.executable, str(SCRIPT), 'check', str(root / 'ui.xml'), str(root / 'screen.png'), 'badge', str(root / 'result.json')], capture_output=True, text=True)
+            result = subprocess.run([sys.executable, '-B', str(SCRIPT), 'reaction', '--mode', 'check', '--xml', str(root / 'ui.xml'), '--png', str(root / 'screen.png'), '--stage', 'badge', '--out', str(root / 'result.json')], capture_output=True, text=True)
             self.assertEqual(result.returncode == 0, expect, result.stdout + result.stderr)
 
     def test_mixed_wire_is_rejected_and_clean_words_are_accepted(self):
@@ -48,7 +48,7 @@ class ReactionOracleTest(unittest.TestCase):
                 if wire:
                     ET.SubElement(tree, 'node', text='👍 to: Quote [mp:6d8e353d25c5fe23]')
                 ET.ElementTree(tree).write(root / 'ui.xml', encoding='utf-8')
-                result = subprocess.run([sys.executable, str(SCRIPT), 'mixed', str(root / 'ui.xml'), str(root / 'result.json')], capture_output=True, text=True)
+                result = subprocess.run([sys.executable, '-B', str(SCRIPT), 'reaction', '--mode', 'mixed', '--xml', str(root / 'ui.xml'), '--out', str(root / 'result.json')], capture_output=True, text=True)
                 self.assertEqual(result.returncode == 0, expected, result.stdout + result.stderr)
 
     def test_valid_badge(self):

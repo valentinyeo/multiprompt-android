@@ -8,7 +8,7 @@ The independent SSH fixture writes a real Claude JSONL reply with a six-column, 
 
 ## Journey
 
-Every step retains a numbered PNG/XML pair and a `table-<state>.json` result. The assertions require the named cell fully inside its scroll view and screenshot, with visible text pixels. Off-screen cells do not count.
+Every step retains a numbered PNG/XML pair and a `table-<state>.json` result. `mpa chat-table --state` asserts each state, `--visible` names the cell to reveal and `--scroll` answers the swipe plan. The assertions require the named cell fully inside its scroll view and screenshot, with visible text pixels. Off-screen cells do not count.
 
 1. Open `verify-session`. Require `TABLE_READY_2544` and **Message verify-session**. Scroll the chat toward older content until **Plot** is fully visible. Require the inline table and **Expand table**, with `R01-C06 harvest` off screen. Capture `table-inline`.
 2. Tap **Expand table**. Require the full-width, tall table sheet, **Garden harvest table**, **Close**, and `R01-C01 orchard`. Require `R01-C06 harvest` off screen. Capture `table-open`.

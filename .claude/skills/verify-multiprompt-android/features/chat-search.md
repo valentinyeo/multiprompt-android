@@ -24,7 +24,7 @@ Every step retains a numbered PNG/XML pair and checks the resulting text. Search
 
 ## Evidence
 
-`tools/chat-search/ui.py` checks match counts, query text, search controls, destination bounds, and active highlight pixels inside the destination's text bounds. It rejects ordinary unhighlighted text. `search-proof.txt` is written only after all steps pass. Inspect the PNGs alongside the XML, state JSON, and `driver-transcript.txt` in `verify-chat-search.md-<run-id>` after cleanup.
+`mpa chat-search` checks match counts, query text, search controls, destination bounds, and active highlight pixels inside the destination's text bounds. It rejects ordinary unhighlighted text. `search-proof.txt` is written only after all steps pass. Inspect the PNGs alongside the XML, state JSON, and `driver-transcript.txt` in `verify-chat-search.md-<run-id>` after cleanup.
 
 The registry maps chat search source changes to this journey. The picker must schedule it even when the model omits it or fills all three optional slots. Hosted Node tests replay the real PR #380 diff and reject its unrelated successful reader proof.
 

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -893,6 +894,620 @@ def legacy(argv):
     print(result["stdout"])
 
 
+def pillow(description):
+    try:
+        from PIL import Image
+    except ImportError as error:
+        raise MpaError("PIL_MISSING", f"Pillow is not installed: {error}", "Run `python3 -m pip install Pillow` on the runner; the screenshot checks need it.")
+    return Image
+
+
+def image_rgb(path):
+    Image = pillow("screenshot")
+    try:
+        image = Image.open(path).convert("RGB")
+    except (OSError, ValueError) as error:
+        raise MpaError("IMAGE_UNREADABLE", f"Cannot read a screenshot from {path}: {error}", "Run `mpa screenshot NAME` to keep a fresh PNG, then retry.")
+    if image.width < 100 or image.height < 100:
+        raise MpaError("IMAGE_TOO_SMALL", f"{path} is {image.width}x{image.height}", "Capture the phone again with `mpa screenshot NAME`; a real screen is at least 100 px each way.")
+    return image
+
+
+def image_grey(path):
+    Image = pillow("screenshot")
+    try:
+        return Image.open(path).convert("L")
+    except (OSError, ValueError) as error:
+        raise MpaError("IMAGE_UNREADABLE", f"Cannot read a screenshot from {path}: {error}", "Run `mpa screenshot NAME` to keep a fresh PNG, then retry.")
+
+
+def png_size(path):
+    try:
+        image = Path(path).read_bytes()
+    except OSError as error:
+        raise MpaError("IMAGE_UNREADABLE", f"Cannot read a screenshot from {path}: {error}", "Run `mpa screenshot NAME` to keep a fresh PNG, then retry.")
+    if len(image) <= 100 or image[:8] != b"\x89PNG\r\n\x1a\n":
+        raise MpaError("IMAGE_INVALID", f"{path} is not a PNG screenshot", "Run `mpa screenshot NAME`; a real capture is a PNG over 100 bytes.")
+    width, height = struct.unpack(">II", image[16:24])
+    if width < 100 or height < 100:
+        raise MpaError("IMAGE_TOO_SMALL", f"{path} is {width}x{height}", "Capture the phone again with `mpa screenshot NAME`.")
+    return width, height
+
+
+def app_nodes(root):
+    return [node for node in root.iter("node") if node.get("package") == package()]
+
+
+def composer_strip(state, xml_path, png_path):
+    if state not in ("idle", "sending"):
+        raise MpaError("COMPOSER_STATE_UNKNOWN", f"Unknown composer state {state!r}", "Use `--state idle` or `--state sending`.")
+    root = load_tree(Path(xml_path))
+    fields = [node for node in root.iter("node") if node.get("class") == "android.widget.EditText"]
+    if len(fields) != 1:
+        raise MpaError("COMPOSER_MISSING", f"Expected one chat composer, found {len(fields)}", "Open the chat and run `mpa read` before checking the composer strip.")
+    bounds = rect(fields[0].get("bounds"))
+    if not bounds:
+        raise MpaError("COMPOSER_EMPTY_BOUNDS", "The composer has no usable bounds", "Run `mpa read` and check the composer node's bounds in the dump.")
+    x1, y1, x2, y2 = bounds
+    image = image_rgb(png_path)
+    if not (0 < y1 < y2 <= image.height and 0 <= x1 < x2 <= image.width):
+        raise MpaError("COMPOSER_OFFSCREEN", f"Composer bounds {list(bounds)} sit outside the {image.width}x{image.height} screenshot", "Run `mpa screenshot composer` and compare the PNG with the dump.")
+    limit = (x2 - x1) / 4
+    for row in range(max(0, y1 - (y2 - y1)), y1):
+        blue = 0
+        for column in range(x1, x2):
+            red, green, blue_value = image.getpixel((column, row))
+            blue += 1 if blue_value > red + 30 and blue_value > green + 20 else 0
+        if blue >= limit:
+            raise MpaError("PROGRESS_STRIP_VISIBLE", f"Blue progress strip above the composer at y={row}", "Wait for the reply to finish, then retry; a chat progress bar must not cover the message bar.")
+    spinners = []
+    if state == "sending":
+        for node in root.iter("node"):
+            found = rect(node.get("bounds"))
+            if node.get("class") == "android.widget.ProgressBar" and found and y1 <= found[1] < y2:
+                spinners.append(list(found))
+        if not spinners:
+            raise MpaError("SEND_SPINNER_MISSING", "No send spinner inside the composer", "Capture the screen while the prompt is still sending, then retry.")
+    return {"ok": True, "command": "composer-strip", "state": state, "xml": Path(xml_path).name, "screenshot": Path(png_path).name, "spinners": spinners, "message": "NO_CHAT_BAR " + state}
+
+
+TOAST_MIN_DARK_PIXELS = 2000
+
+
+def toast_dark_pixels(path):
+    image = image_grey(path)
+    width, height = image.size
+    region = image.crop((int(width * 0.2), int(height * 0.82), int(width * 0.8), int(height * 0.9)))
+    return sum(1 for value in region.getdata() if value < 90)
+
+
+def toast(settled, shots):
+    if not shots:
+        raise MpaError("TOAST_SHOTS_MISSING", "No toast screenshots after the settled one", "Pass `--shot PNG` at least once after `--settled PNG`.")
+    settled_pixels = toast_dark_pixels(settled)
+    gains = [{"screenshot": shot, "gain": toast_dark_pixels(shot) - settled_pixels} for shot in shots]
+    best = max(gains, key=lambda entry: entry["gain"])
+    if best["gain"] < TOAST_MIN_DARK_PIXELS:
+        raise MpaError("TOAST_MISSING", "No toast pill appeared", "Capture again right after the action; the pill sits in the lower fifth of the screen.")
+    return {"ok": True, "command": "toast", "settled": settled_pixels, "shots": gains, "appeared": best["screenshot"], "message": "TOAST_PILL_APPEARED " + best["screenshot"]}
+
+
+QUEUE_PHASES = {
+    "QUEUE_WAITING": (("WAITING_ONE", "queued"), ("WAITING_TWO", "queued")),
+    "QUEUE_SUBMITTED": (("WAITING_ONE", "sent"), ("WAITING_TWO", "queued")),
+    "QUEUE_FIRST_DELIVERED": (("WAITING_ONE", "started"), ("WAITING_TWO", "sent")),
+    "QUEUE_ANSWERED": (("WAITING_ONE", "started"), ("WAITING_TWO", "started")),
+    "QUEUE_BOTH_DELIVERED": (("WAITING_ONE", "started"), ("WAITING_TWO", "started")),
+    "FOLLOWUP_SUBMITTED": (("FOLLOWUP", "sent"),),
+    "FOLLOWUP_DELIVERED": (("FOLLOWUP", "started"),),
+    "UNCERTAIN_SUBMITTED": (("UNCERTAIN_ONE", "sent"), ("UNCERTAIN_TWO", "queued")),
+}
+DELIVERY_LABELS = ("Queued", "Sending", "Delivered", "Not sent")
+
+
+def queue_verify(root, expected, name, evidence=None):
+    texts = [node.get("text") for node in root.iter("node")]
+    if evidence is None:
+        if texts.count("Queued") != expected:
+            raise MpaError("QUEUE_COUNT_MISMATCH", f"{name}: expected {expected} Queued labels", "Run `mpa read` and compare the visible bubbles with the host queue state.")
+        return {"phase": name, "queued": expected}
+    pairs = QUEUE_PHASES.get(name)
+    if pairs is None:
+        raise MpaError("QUEUE_PHASE_UNKNOWN", f"Unknown queue phase {name!r}", "Use one of " + ", ".join(QUEUE_PHASES) + ".")
+    observed = [(row["text"], row["state"]) for row in evidence]
+    if observed != list(pairs):
+        raise MpaError("QUEUE_STATE_MISMATCH", f"{name}: canonical queue state mismatch", "Run `mpa queue-evidence` to read the host rows, then compare them with the phone bubbles.")
+    if sum(state == "queued" for _, state in pairs) != expected:
+        raise MpaError("QUEUE_COUNT_MISMATCH", f"{name}: expected {expected} Queued labels", "Run `mpa read` and compare the visible bubbles with the host queue state.")
+    if any(label in texts for label in DELIVERY_LABELS):
+        raise MpaError("QUEUE_LABEL_VISIBLE", f"{name}: unexpected delivery label", "Read the screen with `mpa read`; an answered row must show no delivery label.")
+    for body, state in pairs:
+        if texts.count(body) != 1:
+            raise MpaError("QUEUE_BUBBLE_COUNT", f"{name}: {body} must stay visible exactly once while {state}", "Run `mpa read`; a queued message appears once, never duplicated or dropped.")
+    result = {"phase": name, "queued": expected, "ids": [row["id"] for row in evidence], "visible": [body for body, _ in pairs]}
+    if name == "QUEUE_ANSWERED":
+        if texts.count("Both messages received.") != 1:
+            raise MpaError("QUEUE_ANSWER_MISSING", "QUEUE_ANSWERED: the provider answer must be visible exactly once", "Wait for the reply, then run `mpa read` and check the answered row.")
+        result["answer"] = "Both messages received."
+    return result
+
+
+def queue(xml_path, expected, phase, evidence=None, out=None, dry_run=False):
+    result = queue_verify(load_tree(Path(xml_path)), expected, phase, evidence)
+    payload = {"ok": True, "command": "queue", "dry_run": dry_run, "result": result, "message": "QUEUE_UI_" + phase}
+    if out is None:
+        return payload
+    output = Path(out)
+    payload["out"] = str(output)
+    if dry_run:
+        return payload
+    snapshot = output.with_suffix(".xml")
+    shutil.copyfile(xml_path, snapshot)
+    result["xml"] = snapshot.name
+    output.write_text(json.dumps(result) + "\n")
+    return payload
+
+
+REACTION_TRANSPORT_TEXT = "👍 to: " + " ".join(("Same first words " + "for this example " * 8).split())[:80].rstrip() + " [mp:6d8e353d25c5fe23]"
+
+
+def reaction_reply(nodes, text):
+    found = [node for node in nodes if text in (node.get("text") or "")]
+    if len(found) != 1:
+        raise MpaError("REACTION_REPLY_MISSING", f"{text}: expected one reply, found {len(found)}", "Run `mpa read` and check the seeded reply before asserting the reaction badge.")
+    return found[0]
+
+
+def reaction_bounds(node):
+    found = rect(node.get("bounds"))
+    if not found:
+        raise MpaError("REACTION_EMPTY_BOUNDS", f"No usable bounds: {node.get('text') or node.get('content-desc')}", "Run `mpa screenshot reaction` and compare the PNG with the dump.")
+    return list(found)
+
+
+def reaction(mode, xml_path=None, png_path=None, receipts=None, stage=None, out=None, dry_run=False):
+    if mode not in ("point", "check", "transport", "mixed"):
+        raise MpaError("REACTION_MODE_UNKNOWN", f"Unknown reaction mode {mode!r}", "Use one of point, check, transport, mixed.")
+    writing = out is not None and not dry_run
+    if mode == "transport":
+        if not receipts:
+            raise MpaError("REACTION_RECEIPTS_MISSING", "No host receipts for the reaction transport check", "Pass `--receipts PATH` with the copied verifyssh receipts file.")
+        lines = Path(receipts).read_text(encoding="utf-8").splitlines()
+        if len(lines) != 1 or not lines[0].startswith("VERIFY_RECEIVED:"):
+            raise MpaError("REACTION_TRANSPORT_COUNT", f"Expected one host receipt, found {len(lines)}", "A matched reaction reaches the real tmux exactly once; read the copied receipts file.")
+        text = lines[0].removeprefix("VERIFY_RECEIVED:")
+        if text != REACTION_TRANSPORT_TEXT:
+            raise MpaError("REACTION_TRANSPORT_TEXT", f"Host received {text!r}", "The quoted send must carry the padded first words once; compare the receipts with the seeded reply.")
+        record = {"text": text, "submissions": 1}
+        payload = {"ok": True, "command": "reaction", "mode": mode, "dry_run": dry_run, "record": record, "message": "REACTION_REACHED_REAL_TMUX_ONCE"}
+        if writing:
+            Path(out).write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+        return payload
+    if not xml_path:
+        raise MpaError("REACTION_XML_MISSING", "No UI dump for the reaction check", "Pass `--xml PATH` or run `mpa read --out screen.xml` first.")
+    nodes = list(load_tree(Path(xml_path)).iter("node"))
+    if mode == "mixed":
+        texts = [node.get("text") or "" for node in nodes]
+        if "My follow-up stays visible" not in texts or "Answer to the follow-up" not in texts:
+            raise MpaError("REACTION_MIXED_MESSAGES", "The follow-up and its answer must both stay visible", "Run `mpa read`; the mixed reaction screen lost one of the real messages.")
+        if any("[mp:6d8e353d25c5fe23]" in text for text in texts):
+            raise MpaError("REACTION_WIRE_VISIBLE", "A matched reaction must not make a message bubble", "Read the screen; the quoted send must stay off the chat.")
+        if any("Padded reaction received." in text for text in texts):
+            raise MpaError("REACTION_REPLY_VISIBLE", "The session reply to a matched reaction must stay hidden", "Read the screen; only the badge and the thread's own messages belong there.")
+        if not any(node.get("content-desc") == "Reactions: 👍" for node in nodes):
+            raise MpaError("REACTION_BADGE_MISSING", "No thumbs-up badge on screen", "Wait for the reaction to arrive, then run `mpa read`.")
+        record = {"status": "passed", "mixedWords": True, "answer": True, "badge": True, "wireHidden": True}
+        payload = {"ok": True, "command": "reaction", "mode": mode, "dry_run": dry_run, "record": record, "message": "MIXED_REACTION_DISPLAY_VERIFIED"}
+        if writing:
+            Path(out).write_text(json.dumps(record), encoding="utf-8")
+        return payload
+    first = reaction_bounds(reaction_reply(nodes, "FIRST REPLY"))
+    if mode == "point":
+        x, y = (first[0] + first[2]) // 2, (first[1] + first[3]) // 2
+        return {"ok": True, "command": "reaction", "mode": mode, "point": [x, y], "stdout": f"{x} {y}", "message": "REACTION_POINT"}
+    if stage not in ("badge", "restart", "fallback"):
+        raise MpaError("REACTION_STAGE_UNKNOWN", f"Unknown reaction stage {stage!r}", "Use `--stage badge`, `--stage restart` or `--stage fallback`.")
+    image = image_rgb(png_path)
+    second = reaction_bounds(reaction_reply(nodes, "SECOND REPLY"))
+    badges = [node for node in nodes if node.get("content-desc") == "Reactions: 👍"]
+    if len(badges) != 1:
+        raise MpaError("REACTION_BADGE_COUNT", f"Expected one thumbs-up badge, found {len(badges)}", "Run `mpa read`; the badge must sit on the first reply alone.")
+    badge = reaction_bounds(badges[0])
+    if not (first[3] <= badge[1] < badge[3] <= second[1]):
+        raise MpaError("REACTION_BADGE_POSITION", "The badge must stay on the first reply", "Read the screen; the badge left its reply row.")
+    if badge[2] - badge[0] >= image.width // 3:
+        raise MpaError("REACTION_BADGE_SIZE", "The badge is bubble sized, not a small badge", "Read the screen; a message bubble is not a reaction badge.")
+    if not (0 <= badge[0] < badge[2] <= image.width and 0 <= badge[1] < badge[3] <= image.height):
+        raise MpaError("REACTION_BADGE_OFFSCREEN", "The badge sits outside the screenshot", "Capture the screen again with `mpa screenshot reaction`.")
+    crop = image.crop(tuple(badge))
+    colors = sorted(crop.getcolors(crop.width * crop.height) or [], reverse=True)
+    if len(colors) <= 3 or crop.width * crop.height - colors[0][0] <= 20:
+        raise MpaError("REACTION_BADGE_BLANK", "The badge glyph is not painted", "Read the PNG; a reaction badge draws a glyph inside its own outline.")
+    palette = {rgb: count for count, rgb in colors}
+    light = sum(image.getpixel((0, (badge[1] + badge[3]) // 2))) > 3 * 128
+    fill, outline = ((225, 225, 225), (155, 155, 155)) if light else ((53, 53, 53), (74, 74, 74))
+    if palette.get(fill, 0) <= crop.width * crop.height // 4:
+        raise MpaError("REACTION_BADGE_FILL", "The desktop grey reaction fill is missing", "Read the PNG; the badge fill must be the kit grey, not a tinted Material colour.")
+    if palette.get(outline, 0) <= 10:
+        raise MpaError("REACTION_BADGE_OUTLINE", "The desktop grey reaction outline is missing", "Read the PNG; the badge needs its own 1 dp outline.")
+    quoted = [node.get("text") for node in nodes if "👍 to:" in (node.get("text") or "")]
+    replies = [node.get("text") for node in nodes if "Reaction received." in (node.get("text") or "")]
+    if replies:
+        raise MpaError("REACTION_REPLY_VISIBLE", "The session reply to a matched reaction must stay hidden", "Read the screen; only the badge belongs there.")
+    if stage == "fallback":
+        if len(quoted) != 1 or "Unavailable reply" not in quoted[0]:
+            raise MpaError("REACTION_FALLBACK_MISSING", "The unavailable-reply bubble must appear once for the fallback stage", "Read the screen; the fallback quote names Unavailable reply.")
+    elif quoted:
+        raise MpaError("REACTION_WIRE_VISIBLE", "A matched reaction must not make a message bubble", "Read the screen; the quoted send must stay off the chat.")
+    if stage == "badge":
+        drafts = [node for node in nodes if node.get("class") == "android.widget.EditText"]
+        if not any(node.get("text") == "draft stays here" for node in drafts):
+            raise MpaError("REACTION_DRAFT_LOST", "The reaction cleared the composer draft", "Read the screen; a reaction must retain the draft.")
+    record = {"stage": stage, "badge": badge, "first": first, "second": second, "passed": True}
+    payload = {"ok": True, "command": "reaction", "mode": mode, "stage": stage, "dry_run": dry_run, "record": record, "message": "REACTION_BADGE_PROVEN " + stage}
+    if writing:
+        output = Path(out)
+        data = json.loads(output.read_text()) if output.exists() else {"feature": "chat-reactions", "checks": []}
+        data["checks"].append(record)
+        data["status"] = "passed" if {row["stage"] for row in data["checks"]} >= {"badge", "restart", "fallback"} else "incomplete"
+        output.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    return payload
+
+
+def ai_usage(phase, xml_path, png_path, receipts=None, out=None, dry_run=False):
+    if phase not in ("menu", "open", "closed"):
+        raise MpaError("AI_USAGE_PHASE_UNKNOWN", f"Unknown AI usage phase {phase!r}", "Use `--phase menu`, `--phase open` or `--phase closed`.")
+    width, height = png_size(png_path)
+    nodes = list(load_tree(Path(xml_path)).iter("node"))
+    texts = [node.get("text", "") for node in nodes if node.get("text")]
+    result = {"phase": phase, "xml": Path(xml_path).name, "screenshot": Path(png_path).name}
+    if phase == "menu":
+        if "AI usage" not in texts or "Refresh" not in texts:
+            raise MpaError("AI_USAGE_MENU_MISSING", "The session list menu must show AI usage and Refresh", "Open Session list actions and run `mpa read` before asserting the menu.")
+    elif phase == "closed":
+        if any(text in texts for text in ("AI usage", "Claude", "Codex")):
+            raise MpaError("AI_USAGE_STILL_OPEN", "The AI usage sheet is still open", "Press back, wait for the inbox, then capture again.")
+        if "Inbox" not in texts or "verify-session" not in texts:
+            raise MpaError("AI_USAGE_NO_INBOX", "The inbox did not return after closing AI usage", "Run `mpa read`; the inbox rows must be back.")
+    else:
+        if "AI usage" not in texts:
+            raise MpaError("AI_USAGE_TITLE_MISSING", "The AI usage sheet title is missing", "Open AI usage and run `mpa read` before capturing.")
+        for failed in ("Loading usage", "No usage yet", "Usage is out of date", "Could not read AI usage"):
+            if failed in texts:
+                raise MpaError("AI_USAGE_FAILED_STATE", f"AI usage shows {failed!r}", "Wait for both providers to load, then capture the sheet again.")
+        if not receipts:
+            raise MpaError("AI_USAGE_RECEIPTS_MISSING", "No host receipts for the AI usage numbers", "Pass `--receipts PATH` with the copied ai-usage receipts file.")
+        rows = [json.loads(line) for line in Path(receipts).read_text().splitlines()]
+        if not rows or not all(row["command"] == "cat ~/.local/state/token-ladder/status.json" and row["exitCode"] == 0 for row in rows):
+            raise MpaError("AI_USAGE_RECEIPT_INVALID", "Every host receipt must be one successful token-ladder read", "Copy the verifyssh ai-usage receipts again and compare with the sheet.")
+        snapshots = [json.loads(row["stdout"]) for row in rows]
+        if not all(snapshot == snapshots[0] for snapshot in snapshots):
+            raise MpaError("AI_USAGE_RECEIPT_DRIFT", "The host status changed while the sheet was open", "Capture the sheet again once the host status stops moving.")
+        accounts = snapshots[0]["accounts"]
+        providers = {account["provider"] for account in accounts}
+        if len(accounts) < 2 or not {"claude", "codex"} <= providers:
+            raise MpaError("AI_USAGE_ACCOUNTS_MISSING", f"The host status lists {sorted(providers)}", "The receipt must carry a Claude and a Codex account before the sheet can prove anything.")
+        labels = [account["label"] for account in accounts]
+        plans = {}
+        for account in accounts:
+            name = account["label"]
+            if texts.count(name) != 1:
+                raise MpaError("AI_USAGE_LABEL_COUNT", f"Expected one {name} block, found {texts.count(name)}", "Read the sheet; each provider appears once.")
+            start = texts.index(name)
+            end = next((index for index in range(start + 1, len(texts)) if texts[index] in labels), len(texts))
+            block = texts[start:end]
+            week = f"{account['week']['used']:g}%"
+            five = f"{account['five_hour']['used']:g}%"
+            if week not in block:
+                raise MpaError("AI_USAGE_WEEK_MISMATCH", f"{name} does not show the host week figure {week}", "Compare the sheet with the copied token-ladder status.")
+            detail = next((text for text in block if text.startswith("WEEK ")), None)
+            expected = f"WEEK {week} | 5H {five} | EMPTY IN {account['week']['pace']['empty_hours']:g}H"
+            if detail != expected:
+                raise MpaError("AI_USAGE_DETAIL_MISMATCH", f"{name} shows {detail!r}, expected {expected!r}", "Compare the sheet with the copied token-ladder status.")
+            difference = account["week"]["time_gone"] - account["week"]["used"]
+            pace = "BEHIND" if difference > 5 else "AHEAD" if difference < -5 else "ON PACE"
+            if pace not in block:
+                raise MpaError("AI_USAGE_PACE_MISSING", f"{name} does not show {pace}", "Compare the sheet with the copied token-ladder status.")
+            for text in (name, week, detail, pace):
+                matching = [node for node in nodes if node.get("text") == text]
+                if not matching:
+                    raise MpaError("AI_USAGE_NODE_MISSING", f"No node for {text!r}", "Run `mpa read` and check the sheet's nodes.")
+                for node in matching:
+                    found = rect(node.get("bounds"))
+                    if not found or not (0 <= found[0] < found[2] <= width and 0 <= found[1] < found[3] <= height):
+                        raise MpaError("AI_USAGE_OFFSCREEN", f"{text!r} is not fully on screen", "Scroll the sheet or capture again; the plan blocks must be fully visible.")
+            plans[name] = {"week": week, "fiveHour": five, "detail": detail, "pace": pace}
+        result["plans"] = plans
+    payload = {"ok": True, "command": "ai-usage", "dry_run": dry_run, "result": result, "message": "AI_USAGE_" + phase.upper() + "_OK"}
+    if out is not None:
+        payload["out"] = out
+        if not dry_run:
+            Path(out).write_text(json.dumps(result, indent=2) + "\n")
+    return payload
+
+
+def chat_search(xml_path, png_path, query, count, target=""):
+    root = load_tree(Path(xml_path))
+    nodes = app_nodes(root)
+    if not nodes:
+        raise MpaError("APP_UI_MISSING", "Chat UI is missing", "Run `mpa launch` and `mpa doctor` before checking chat search.")
+    texts = [node.get("text", "") for node in nodes]
+    descriptions = [node.get("content-desc", "") for node in nodes]
+    image = image_rgb(png_path)
+    if count == "closed":
+        if "Session actions" not in descriptions:
+            raise MpaError("CHAT_SEARCH_NOT_CLOSED", "Search did not close back to the chat", "Read the screen; the chat toolbar must be back.")
+        if "Close search" in descriptions:
+            raise MpaError("CHAT_SEARCH_CONTROLS_VISIBLE", "The search controls are still visible", "Press Close search again and capture the closed state.")
+        if any(node.get("resource-id") == "chat-search" for node in nodes):
+            raise MpaError("CHAT_SEARCH_FIELD_VISIBLE", "The chat search field is still visible", "Close search, then capture the closed state.")
+        if "Message verify-session" not in texts:
+            raise MpaError("CHAT_SEARCH_NO_COMPOSER", "The chat composer did not return", "Read the screen; closing search must return the live chat.")
+    else:
+        if count not in texts:
+            raise MpaError("CHAT_SEARCH_COUNT_MISSING", f"Missing match count {count!r}", "Read the screen; the search bar shows the match count.")
+        for label in ("Close search", "Previous match", "Next match"):
+            if label not in descriptions:
+                raise MpaError("CHAT_SEARCH_CONTROL_MISSING", f"Missing search control {label!r}", "Open the chat search bar and capture it again.")
+        editors = [node for node in nodes if node.get("class") == "android.widget.EditText"]
+        if not any(node.get("text") == query or (not query and node.get("text") == "Search this chat") for node in editors):
+            raise MpaError("CHAT_SEARCH_QUERY_MISMATCH", f"The search field does not show {query!r}", "Type the query with `mpa fill`, read it back, then capture again.")
+    result = {"query": query, "count": count, "target": target}
+    if target:
+        matches = [node for node in nodes if node.get("text") == target]
+        if len(matches) != 1:
+            raise MpaError("CHAT_SEARCH_TARGET", f"Missing or ambiguous search destination {target!r} ({len(matches)})", "Read the screen; the active match must appear exactly once.")
+        bounds = rect(matches[0].get("bounds"))
+        if not bounds:
+            raise MpaError("CHAT_SEARCH_TARGET_BOUNDS", f"No usable bounds for {target!r}", "Read the screen and check the match row.")
+        x1, y1, x2, y2 = bounds
+        if not (0 <= x1 < x2 <= image.width and 0 <= y1 < y2 <= image.height):
+            raise MpaError("CHAT_SEARCH_TARGET_OFFSCREEN", f"Search destination {target!r} is off screen", "Tap Next match until the match is fully on screen, then capture again.")
+        crop = image.crop(tuple(bounds))
+        longest = 0
+        bright = 0
+        for y in range(crop.height):
+            run = 0
+            for x in range(crop.width):
+                lit = all(abs(channel - 242) <= 3 for channel in crop.getpixel((x, y)))
+                bright += int(lit)
+                run = run + 1 if lit else 0
+                longest = max(longest, run)
+        fraction = bright / (crop.width * crop.height)
+        if not (fraction > 0.22 and longest >= max(24, crop.width * 0.35)):
+            raise MpaError("CHAT_SEARCH_NO_HIGHLIGHT", f"The active match highlight is missing on {target!r}", "Read the PNG; plain text is not a highlighted match.")
+        result.update(bounds=list(bounds), highlight_fraction=round(fraction, 3), highlight_run=longest)
+    return {"ok": True, "command": "chat-search", "result": result, "message": "CHAT_SEARCH_" + count.replace(" ", "_").upper() + "_OK"}
+
+
+def chat_table_container(root):
+    matches = [node for node in app_nodes(root) if node.get("class") == "android.widget.HorizontalScrollView"
+               and any(re.fullmatch(r"R\d{2}-C\d{2} (orchard|harvest)", child.get("text", "")) for child in node.iter("node"))]
+    if len(matches) != 1:
+        raise MpaError("CHAT_TABLE_CONTAINER", f"Missing or ambiguous table scroll container ({len(matches)})", "Run `mpa read`; the garden harvest table must be on screen once.")
+    return matches[0]
+
+
+def chat_table_viewport(root):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    node = chat_table_container(root)
+    while node in parents:
+        node = parents[node]
+        if node.get("scrollable") == "true" and node.get("class") != "android.widget.HorizontalScrollView":
+            return node
+    raise MpaError("CHAT_TABLE_VIEWPORT", "The table has no vertical scroll container", "Read the screen; the table must sit inside a scrollable chat.")
+
+
+def chat_table_visible(root, text):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    matches = [node for node in app_nodes(root) if node.get("text") == text]
+    for node in matches:
+        found = rect(node.get("bounds"))
+        if not found:
+            continue
+        parent = node
+        clipped = False
+        while parent in parents:
+            parent = parents[parent]
+            outer = rect(parent.get("bounds"))
+            if outer and not (outer[0] <= found[0] and found[2] <= outer[2] and outer[1] <= found[1] and found[3] <= outer[3]):
+                clipped = True
+        if not clipped:
+            return list(found)
+    raise MpaError("CHAT_TABLE_CELL_HIDDEN", f"Table cell is not fully visible: {text}", "Scroll the table with `mpa chat-table --scroll` until the cell is on screen.")
+
+
+def chat_table_scroll(root, axis):
+    if axis not in ("older", "sideways", "down"):
+        raise MpaError("CHAT_TABLE_AXIS_UNKNOWN", f"Unknown scroll direction {axis!r}", "Use `--scroll older`, `--scroll sideways` or `--scroll down`.")
+    found = rect(chat_table_viewport(root).get("bounds"))
+    if not found or found[2] - found[0] <= 100 or found[3] - found[1] <= 100:
+        raise MpaError("CHAT_TABLE_VIEWPORT_SMALL", "The table scroll viewport is too small to swipe", "Expand the table first with `mpa tap desc 'Expand table'`.")
+    x1, y1, x2, y2 = found
+    if axis != "older":
+        if not any(node.get("content-desc") == "Close" for node in root.iter("node")):
+            raise MpaError("CHAT_TABLE_NOT_EXPANDED", "The expanded table is not open", "Tap Expand table before scrolling sideways or down.")
+        table = rect(chat_table_container(root).get("bounds"))
+        if table:
+            x1, y1, x2, y2 = max(x1, table[0]), max(y1, table[1]), min(x2, table[2]), min(y2, table[3])
+    dx, dy = (x2 - x1) // 5, (y2 - y1) // 5
+    x, y = (x1 + x2) // 2, (y1 + y2) // 2
+    if axis == "sideways":
+        return [x2 - dx, y, x1 + dx, y]
+    if axis == "down":
+        return [x, y2 - dy, x, y1 + dy]
+    return [x, y1 + dy, x, y2 - dy]
+
+
+def chat_table(xml_path, png_path=None, state=None, target=None, hidden="", visible=None, scroll=None):
+    root = load_tree(Path(xml_path))
+    if visible:
+        found = chat_table_visible(root, visible)
+        return {"ok": True, "command": "chat-table", "action": "visible", "value": visible, "bounds": found, "stdout": " ".join(map(str, found)), "message": "CHAT_TABLE_CELL_VISIBLE"}
+    if scroll:
+        found = chat_table_scroll(root, scroll)
+        return {"ok": True, "command": "chat-table", "action": "scroll", "axis": scroll, "from": found[:2], "to": found[2:], "stdout": " ".join(map(str, found)), "message": "CHAT_TABLE_SWIPE_" + scroll.upper()}
+    if state is None or target is None:
+        raise MpaError("CHAT_TABLE_ARGUMENTS", "A table check needs `--state` and `--target`", "Run `mpa chat-table --help` to see the state, visible and scroll forms.")
+    nodes = app_nodes(root)
+    if not nodes:
+        raise MpaError("APP_UI_MISSING", "Chat UI is missing", "Run `mpa launch` and `mpa doctor` before checking the table.")
+    texts = [node.get("text") for node in nodes]
+    descriptions = [node.get("content-desc") for node in nodes]
+    image = image_rgb(png_path)
+    container = chat_table_container(root)
+    if state in ("inline", "closed"):
+        if "Close" in descriptions:
+            raise MpaError("CHAT_TABLE_STILL_OPEN", "The expanded table remains open", "Tap Close, wait for the chat, then capture again.")
+        if "Message verify-session" not in texts or "Session actions" not in descriptions:
+            raise MpaError("CHAT_TABLE_NO_CHAT", "Chat did not return", "Read the screen; the composer and toolbar must be back.")
+        if "Expand table" not in descriptions:
+            raise MpaError("CHAT_TABLE_EXPAND_MISSING", "The inline expand action is missing", "Read the screen; the inline table keeps its Expand table control.")
+    else:
+        if state not in ("open", "sideways", "down"):
+            raise MpaError("CHAT_TABLE_STATE_UNKNOWN", f"Unknown table state {state!r}", "Use one of inline, open, sideways, down, closed.")
+        if "Garden harvest table" not in texts:
+            raise MpaError("CHAT_TABLE_TITLE_MISSING", "The table title is missing", "Read the screen; the expanded sheet names the garden harvest table.")
+        if "Close" not in descriptions or "Expand table" in descriptions:
+            raise MpaError("CHAT_TABLE_NOT_EXPANDED", "The expanded table is not open", "Tap Expand table and capture the expanded sheet.")
+        area = rect(chat_table_viewport(root).get("bounds"))
+        if not area or area[2] - area[0] < image.width * 0.8 or area[3] - area[1] < image.height * 0.5:
+            raise MpaError("CHAT_TABLE_NOT_FULLSCREEN", "The table did not expand to full width and half height", "Read the screen; the expanded sheet fills the chat area.")
+    if not any(node.get("text") == target for node in container.iter("node")):
+        raise MpaError("CHAT_TABLE_TARGET_OUTSIDE", f"{target!r} is outside the table", "Read the screen and name a cell inside the garden harvest table.")
+    cell = chat_table_visible(root, target)
+    x1, y1, x2, y2 = cell
+    if not (x2 <= image.width and y2 <= image.height):
+        raise MpaError("CHAT_TABLE_CELL_OUTSIDE", f"Cell {target!r} sits outside the screenshot", "Capture the screen again with `mpa screenshot table`.")
+    crop = image.crop(tuple(cell)).convert("L")
+    low, high = crop.getextrema()
+    if high - low < 35:
+        raise MpaError("CHAT_TABLE_CELL_BLANK", f"Cell {target!r} pixels are blank", "Read the PNG; the visible cell must paint its text.")
+    if hidden:
+        try:
+            chat_table_visible(root, hidden)
+        except MpaError:
+            pass
+        else:
+            raise MpaError("CHAT_TABLE_HIDDEN_VISIBLE", f"Expected cell to be off screen: {hidden}", "Scroll the table so the other cell leaves the screen, then capture again.")
+    result = {"state": state, "target": target, "bounds": cell, "hidden": hidden, "screenshot": Path(png_path).name}
+    return {"ok": True, "command": "chat-table", "result": result, "message": "CHAT_TABLE_" + state.upper() + "_OK"}
+
+
+def skill_pills_outlines(image, box, inset):
+    x1, y1, x2, y2 = box
+    if not (0 <= x1 < x2 <= image.width and 0 <= y1 < y2 <= image.height):
+        raise MpaError("SKILL_PILL_OFFSCREEN", "The skill pill sits outside the screenshot", "Capture the composer again with `mpa screenshot pills`.")
+    margin = max(3, (y2 - y1) // 10) if inset else 0
+    lines = []
+    for y in range(y1 + margin, y2 - margin):
+        start = None
+        for x in range(x1 + margin, x2 - margin + 1):
+            pixel = image.getpixel((x, y)) if x < x2 - margin else None
+            grey = pixel is not None and all(abs(channel - 46) <= 2 for channel in pixel)
+            if grey and start is None:
+                start = x
+            if not grey and start is not None:
+                if x - start >= 24:
+                    lines.append((start, x, y))
+                start = None
+    return [(top, bottom) for top in lines for bottom in lines
+            if 12 <= bottom[2] - top[2] <= y2 - y1
+            and abs(top[0] - bottom[0]) <= 3 and abs(top[1] - bottom[1]) <= 3]
+
+
+def skill_pills_swipe(root):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    windows = [node for node in root if node.tag == "node" and node.get("visible-to-user") != "false"]
+    if not windows:
+        raise MpaError("WINDOW_MISSING", "Active window is missing", "Run `mpa read` and `mpa doctor` to see what the phone shows.")
+    window = windows[-1]
+    labels = [node for node in window.iter("node") if (node.get("text") or "").startswith("/pill-guide-") and node.get("package") == package()]
+    if not labels:
+        raise MpaError("SKILL_PICKER_MISSING", "The visible skill guide is missing", "Type a slash in the composer and wait for the picker, then retry.")
+    node = labels[0]
+    while node is not window and node.get("scrollable") != "true":
+        if node.get("enabled") == "false":
+            raise MpaError("SKILL_PICKER_DISABLED", "The skill picker is disabled", "Wait for the composer to accept skills, then retry.")
+        node = parents[node]
+    if node is window or node.get("class") != "android.widget.ScrollView":
+        raise MpaError("SKILL_PICKER_SCROLL_AREA", "The skill picker scroll area is missing", "Read the screen; the picker list must sit in its own scroll view.")
+    found = rect(node.get("bounds"))
+    window_bounds = rect(window.get("bounds"))
+    if not found or not window_bounds:
+        raise MpaError("SKILL_PICKER_BOUNDS", "The skill picker has no usable bounds", "Run `mpa read` and check the picker nodes.")
+    if not (window_bounds[0] <= found[0] < found[2] <= window_bounds[2] and window_bounds[1] <= found[1] < found[3] <= window_bounds[3]):
+        raise MpaError("SKILL_PICKER_CLIPPED", "The skill picker is clipped", "Read the screen; the picker must sit fully inside the active window.")
+    if node.get("enabled") == "false" or found[3] - found[1] < 20:
+        raise MpaError("SKILL_PICKER_DISABLED", "The skill picker cannot scroll", "Wait for the picker to become enabled, then retry.")
+    x = (found[0] + found[2]) // 2
+    return [x, found[3] - (found[3] - found[1]) // 5, x, found[1] + (found[3] - found[1]) // 5]
+
+
+def skill_pills(xml_path, png_path=None, phase=None, text=None, scroll=False, out=None, dry_run=False):
+    root = load_tree(Path(xml_path))
+    if scroll:
+        found = skill_pills_swipe(root)
+        return {"ok": True, "command": "skill-pills", "action": "scroll", "from": found[:2], "to": found[2:], "stdout": " ".join(map(str, found)), "message": "SKILL_PILLS_SWIPE"}
+    if phase is None or text is None:
+        raise MpaError("SKILL_PILLS_ARGUMENTS", "A skill pill check needs `--phase` and `--text`", "Run `mpa skill-pills --help` to see the phase, text and scroll forms.")
+    nodes = app_nodes(root)
+    if not nodes:
+        raise MpaError("APP_UI_MISSING", "Chat UI is missing", "Run `mpa launch` and `mpa doctor` before checking skill pills.")
+    image = image_rgb(png_path)
+    editors = [node for node in nodes if node.get("class") == "android.widget.EditText"]
+    if len(editors) != 1:
+        raise MpaError("COMPOSER_MISSING", f"Expected one composer, found {len(editors)}", "Open the chat and run `mpa read` before checking skill pills.")
+    editor = editors[0]
+    result = {"screenshot": Path(png_path).name, "text": text}
+    if phase in ("sent", "sent-removed"):
+        if editor.get("text") not in ("", "Message verify-session"):
+            raise MpaError("SKILL_PILLS_COMPOSER", "Sending did not clear the composer", "Read the screen; a sent message empties the composer.")
+        messages = [node for node in nodes if node.get("class") != "android.widget.EditText" and node.get("text") == text]
+        if not messages:
+            raise MpaError("SKILL_PILLS_MESSAGE_MISSING", f"The exact sent message {text!r} is missing", "Wait for the sent bubble, then capture again.")
+        if phase == "sent":
+            pills = [child for message in messages for child in message.iter("node") if child.get("text") == "/review-native"]
+            if len(pills) != 1:
+                raise MpaError("SKILL_PILLS_PILL_COUNT", f"The sent message needs one inline skill pill, found {len(pills)}", "Read the screen; the slash skill must ride inside the message once.")
+            text_bounds = rect(pills[0].get("bounds"))
+            message_node = next(message for message in messages if pills[0] in message.iter("node"))
+            message_bounds = rect(message_node.get("bounds"))
+            if not text_bounds or not message_bounds:
+                raise MpaError("SKILL_PILLS_BOUNDS", "The sent pill has no usable bounds", "Run `mpa read` and check the sent message nodes.")
+            height = text_bounds[3] - text_bounds[1]
+            pad_x, pad_y = (height + 1) // 2, (height + 15) // 16
+            pill_bounds = [max(message_bounds[0], text_bounds[0] - pad_x), max(message_bounds[1], text_bounds[1] - pad_y),
+                           min(message_bounds[2], text_bounds[2] + pad_x), min(message_bounds[3], text_bounds[3] + pad_y)]
+            if not skill_pills_outlines(image, pill_bounds, False):
+                raise MpaError("SKILL_PILLS_OUTLINE", "The sent skill pill outline is missing", "Read the PNG; the pill draws its own 1 dp outline.")
+            result.update(sent_pill="/review-native", sent_pill_bounds=pill_bounds)
+    else:
+        if editor.get("text") != text:
+            raise MpaError("SKILL_PILLS_COMPOSER_TEXT", f"Wrong composer text: shows {editor.get('text')!r}, expected {text!r}", "Run `mpa fill` and read the composer back before capturing.")
+        if phase in ("picker", "scrolled"):
+            label = "/pill-guide-01" if phase == "picker" else "/review-native"
+            if not any(node.get("text") == label for node in nodes):
+                raise MpaError("SKILL_PICKER_MISSING", f"The skill picker is missing {label}", "Type a slash in the composer and wait for the picker, then capture again.")
+        else:
+            found = rect(editor.get("bounds"))
+            if not found:
+                raise MpaError("SKILL_PILLS_BOUNDS", "The composer has no usable bounds", "Run `mpa read` and check the composer node.")
+            expected = phase in ("inserted", "removable")
+            if bool(skill_pills_outlines(image, found, True)) != expected:
+                raise MpaError("SKILL_PILLS_OUTLINE", "The composer skill pill outline is missing or survived removal", "Read the PNG; only a real pill draws the kit outline.")
+            result["composer_pill"] = expected
+    payload = {"ok": True, "command": "skill-pills", "phase": phase, "dry_run": dry_run, "result": result, "message": "SKILL_PILLS_" + phase.replace("-", "_").upper() + "_OK"}
+    if out is not None:
+        output = Path(out)
+        payload["out"] = out
+        if not dry_run:
+            states = json.loads(output.read_text()) if output.exists() else {}
+            states[phase] = result
+            output.write_text(json.dumps(states, indent=2) + "\n")
+    return payload
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="mpa",
@@ -998,6 +1613,65 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     terminal_parser.add_argument("--session", default="verify-session", help="Fixture tmux session (default: verify-session).")
     terminal_parser.add_argument("--dry-run", action="store_true", help="Print the pane command without reading it.")
 
+    composer_parser = commands.add_parser("composer-strip", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the chat composer has no progress strip above it.", description="Assert that no blue progress strip sits directly above the composer, and while sending that a ProgressBar appears inside the composer. It answers the old no-chat-bar.py check with JSON.", epilog="Examples:\n  mpa composer-strip --state idle --xml screen.xml --png screen.png\n  mpa composer-strip --state sending --xml screen.xml --png screen.png")
+    composer_parser.add_argument("--state", required=True, choices=["idle", "sending"], help="Composer state: idle, or sending with a visible spinner.")
+    composer_parser.add_argument("--xml", required=True, help="UI dump that contains the composer.")
+    composer_parser.add_argument("--png", required=True, help="Screenshot that matches the dump.")
+
+    toast_parser = commands.add_parser("toast", formatter_class=argparse.RawDescriptionHelpFormatter, help="Find the toast pill across a burst of screenshots.", description="Measure dark pixels in the lower fifth of a settled screenshot and of each later shot. The shot with the most new dark pixels must gain at least 2000, which is the toast pill.", epilog="Examples:\n  mpa toast --settled toast-settled.png --shot toast-1.png --shot toast-2.png")
+    toast_parser.add_argument("--settled", required=True, help="Screenshot taken before the action, with no toast.")
+    toast_parser.add_argument("--shot", dest="shots", action="append", default=[], help="Screenshot taken after the action. Repeatable.")
+
+    queue_parser = commands.add_parser("queue", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check queued, sent and answered phone bubbles against host state.", description="Combine the copied host queue evidence with the phone dump: each named bubble appears exactly once, no delivery label lingers, the queued count matches and the answered phase shows the provider answer once.", epilog="Examples:\n  mpa queue --xml current.xml --expected 2 --phase QUEUE_WAITING --evidence queue-state.json\n  mpa queue --xml current.xml --expected 0 --phase QUEUE_ANSWERED --evidence queue-state.json --out queue-ui-answered.json --dry-run")
+    queue_parser.add_argument("--xml", required=True, help="UI dump of the chat.")
+    queue_parser.add_argument("--expected", required=True, type=int, help="Number of visible Queued labels.")
+    queue_parser.add_argument("--phase", required=True, help="Queue phase: " + ", ".join(QUEUE_PHASES) + ".")
+    queue_parser.add_argument("--evidence", help="JSON rows copied from the host queue evidence.")
+    queue_parser.add_argument("--out", help="Write the compact result JSON here and keep the source XML beside it.")
+    queue_parser.add_argument("--dry-run", action="store_true", help="Check without writing the result files.")
+
+    reaction_parser = commands.add_parser("reaction", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check a reaction badge, its host transport or a mixed reaction screen.", description="Resolve the reaction point on the first reply, assert the desktop grey badge sits between the two replies with a painted glyph and no message bubble, read the one real tmux receipt, or check a mixed reaction screen keeps its real messages.", epilog="Examples:\n  mpa reaction --mode point --xml current.xml\n  mpa reaction --mode check --xml current.xml --png current.png --stage badge --out reactions-result.json\n  mpa reaction --mode transport --receipts reaction-receipts.txt --out reaction-transport.json\n  mpa reaction --mode mixed --xml current.xml --out reactions-mixed-result.json --dry-run")
+    reaction_parser.add_argument("--mode", required=True, choices=["point", "check", "transport", "mixed"], help="What to prove.")
+    reaction_parser.add_argument("--xml", help="UI dump for point, check and mixed.")
+    reaction_parser.add_argument("--png", help="Screenshot for check.")
+    reaction_parser.add_argument("--receipts", help="Copied host receipts for transport.")
+    reaction_parser.add_argument("--stage", choices=["badge", "restart", "fallback"], help="Stage name recorded by check.")
+    reaction_parser.add_argument("--out", help="Write the result JSON here.")
+    reaction_parser.add_argument("--dry-run", action="store_true", help="Check without writing the result file.")
+
+    ai_usage_parser = commands.add_parser("ai-usage", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the AI usage sheet against the host status receipts.", description="Compare the menu, open sheet or closed inbox with the copied token-ladder receipts: each provider block appears once, fully on screen, with the host week and five-hour figures, the WEEK detail line and the pace word.", epilog="Examples:\n  mpa ai-usage --phase menu --xml menu.xml --png menu.png\n  mpa ai-usage --phase open --xml open.xml --png open.png --receipts ai-usage-receipts.txt --out ai-usage-open.json\n  mpa ai-usage --phase closed --xml closed.xml --png closed.png")
+    ai_usage_parser.add_argument("--phase", required=True, choices=["menu", "open", "closed"], help="Sheet phase to check.")
+    ai_usage_parser.add_argument("--xml", required=True, help="UI dump that matches the phase.")
+    ai_usage_parser.add_argument("--png", required=True, help="Screenshot that matches the dump.")
+    ai_usage_parser.add_argument("--receipts", help="Copied ai-usage receipts; required for the open phase.")
+    ai_usage_parser.add_argument("--out", help="Write the result JSON here.")
+    ai_usage_parser.add_argument("--dry-run", action="store_true", help="Check without writing the result file.")
+
+    search_parser = commands.add_parser("chat-search", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the in-chat search bar, match count and active highlight.", description="Require the match count, the search controls, the typed query and, when a target is named, exactly one destination whose text carries the active highlight pixels. The closed form requires the restored chat and no search controls.", epilog="Examples:\n  mpa chat-search --xml chat.xml --png chat.png --count closed\n  mpa chat-search --xml open.xml --png open.png --query orchard --count '2 of 2' --target 'orchard south'")
+    search_parser.add_argument("--xml", required=True, help="UI dump of the chat or search bar.")
+    search_parser.add_argument("--png", required=True, help="Screenshot that matches the dump.")
+    search_parser.add_argument("--query", default="", help="Query the search field must show.")
+    search_parser.add_argument("--count", required=True, help="Match count text, or closed for the restored chat.")
+    search_parser.add_argument("--target", default="", help="Match destination that must carry the active highlight.")
+
+    table_parser = commands.add_parser("chat-table", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the chat table state, or resolve its cells and scroll steps.", description="Assert the inline, open, sideways, down or closed table state with a visible target cell and an optional cell that must stay off screen. The visible and scroll forms answer one cell's bounds or one swipe plan as JSON for the shell loop.", epilog="Examples:\n  mpa chat-table --xml table.xml --png table.png --state down --target 'R24-C06 harvest' --hidden 'R01-C06 harvest'\n  mpa chat-table --xml current.xml --visible 'R24-C06 harvest'\n  mpa chat-table --xml current.xml --scroll sideways")
+    table_parser.add_argument("--xml", required=True, help="UI dump of the chat or table.")
+    table_parser.add_argument("--png", help="Screenshot for the state check.")
+    table_parser.add_argument("--state", choices=["inline", "open", "sideways", "down", "closed"], help="Table state to assert.")
+    table_parser.add_argument("--target", help="Cell that must be fully visible.")
+    table_parser.add_argument("--hidden", default="", help="Cell that must stay off screen.")
+    table_parser.add_argument("--visible", help="Print one cell's bounds instead of checking a state.")
+    table_parser.add_argument("--scroll", choices=["older", "sideways", "down"], help="Print one swipe plan instead of checking a state.")
+
+    pills_parser = commands.add_parser("skill-pills", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check a slash skill pill in the composer or in a sent message.", description="Assert the composer text, the picker rows and the painted kit outline for a composer or sent pill, and merge each phase into one state file. The scroll form answers the picker swipe plan as JSON.", epilog="Examples:\n  mpa skill-pills --xml pills.xml --png pills.png --phase inserted --text 'Please /review-native this' --out pills-state.json\n  mpa skill-pills --xml sent.xml --png sent.png --phase sent --text 'Please /review-native this'\n  mpa skill-pills --xml current.xml --scroll")
+    pills_parser.add_argument("--xml", required=True, help="UI dump of the composer or the sent message.")
+    pills_parser.add_argument("--png", help="Screenshot for the pill outline check.")
+    pills_parser.add_argument("--phase", choices=["draft", "picker", "scrolled", "inserted", "removable", "removed", "sent", "sent-removed"], help="Pill phase to assert.")
+    pills_parser.add_argument("--text", help="Exact composer or sent message text.")
+    pills_parser.add_argument("--scroll", action="store_true", help="Print the picker swipe plan instead of checking a phase.")
+    pills_parser.add_argument("--out", help="Merge this phase into the state JSON at this path.")
+    pills_parser.add_argument("--dry-run", action="store_true", help="Check without writing the state file.")
+
     legacy_parser = commands.add_parser("legacy", formatter_class=argparse.RawDescriptionHelpFormatter, help="Run the pre-CLI ui.py argument form.", description="Compatibility entry point for journeys that still call ui.py XML MODE VALUE. New journeys use read and tap.", epilog="Examples:\n  mpa legacy screen.xml desc 'Session actions'")
     legacy_parser.add_argument("arguments", nargs=argparse.REMAINDER, help="XML path, mode, value and extras.")
 
@@ -1035,6 +1709,23 @@ def main(argv=None):
             payload = swipe(args.inside, args.axis, args.direction, args.xml, args.dry_run)
         elif args.command == "terminal":
             payload = terminal(args.step, args.evidence, args.session, args.dry_run)
+        elif args.command == "composer-strip":
+            payload = composer_strip(args.state, args.xml, args.png)
+        elif args.command == "toast":
+            payload = toast(args.settled, args.shots)
+        elif args.command == "queue":
+            evidence = json.loads(Path(args.evidence).read_text()) if args.evidence else None
+            payload = queue(args.xml, args.expected, args.phase, evidence, args.out, args.dry_run)
+        elif args.command == "reaction":
+            payload = reaction(args.mode, args.xml, args.png, args.receipts, args.stage, args.out, args.dry_run)
+        elif args.command == "ai-usage":
+            payload = ai_usage(args.phase, args.xml, args.png, args.receipts, args.out, args.dry_run)
+        elif args.command == "chat-search":
+            payload = chat_search(args.xml, args.png, args.query, args.count, args.target)
+        elif args.command == "chat-table":
+            payload = chat_table(args.xml, args.png, args.state, args.target, args.hidden, args.visible, args.scroll)
+        elif args.command == "skill-pills":
+            payload = skill_pills(args.xml, args.png, args.phase, args.text, args.scroll, args.out, args.dry_run)
         elif args.command == "legacy":
             legacy(args.arguments)
             return 0

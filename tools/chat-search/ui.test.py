@@ -1,15 +1,23 @@
 import ast
-import importlib.util
 from pathlib import Path
+import json
+import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
 from PIL import Image, ImageDraw
 
-spec = importlib.util.spec_from_file_location('search_ui', Path(__file__).with_name('ui.py'))
-ui = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(ui)
+MPA = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/mpa'
+
+
+def search_check(xml, png, query, count, target=''):
+    result = subprocess.run([sys.executable, '-B', str(MPA), 'chat-search', '--xml', str(xml), '--png', str(png), '--query', query, '--count', count, '--target', target], capture_output=True, text=True)
+    payload = json.loads(result.stdout)
+    if result.returncode != 0:
+        raise AssertionError(payload['message'])
+    return payload['result']
 
 
 class SearchUiTest(unittest.TestCase):
@@ -33,7 +41,7 @@ class SearchUiTest(unittest.TestCase):
     def check(self, query='orchard', count='2 of 2', target='orchard south'):
         ET.ElementTree(self.root).write(self.xml)
         self.image.save(self.png)
-        return ui.check(self.xml, self.png, query, count, target)
+        return search_check(self.xml, self.png, query, count, target)
 
     def highlight(self):
         ImageDraw.Draw(self.image).rectangle((20, 100, 109, 125), fill=(242, 242, 242))
