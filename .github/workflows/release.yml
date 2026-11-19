@@ -105,6 +105,15 @@ jobs:
           -PversionCode="$VERSION_CODE"
           -PversionName="$VERSION_NAME"
 
+      - name: Keep the R8 mapping for crash retrace
+        timeout-minutes: 5
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-mapping-${{ env.VERSION_CODE }}
+          path: app/build/outputs/mapping/
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Check the baseline profile is compiled into both APKs
         timeout-minutes: 5
         run: node tools/baseline-profile.mjs apk app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/m3/app-m3.apk

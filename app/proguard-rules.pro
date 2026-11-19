@@ -3,3 +3,5 @@
 -dontwarn org.slf4j.**
 -keep class org.bouncycastle.** { *; }
 -dontwarn org.bouncycastle.**
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile

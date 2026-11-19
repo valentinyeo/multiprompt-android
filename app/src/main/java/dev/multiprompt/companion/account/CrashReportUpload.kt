@@ -14,7 +14,7 @@ class CrashReportUpload(private val http: AccountHttp, private val auth: Account
             val lines = report.uploadStackTrace.ifBlank { report.stackTrace }.lineSequence().mapNotNull { line ->
                 val trimmed = line.trim()
                 frame.matchEntire(trimmed)?.value ?: exception.matchEntire(trimmed)?.let {
-                    it.groupValues[1] + it.groupValues[2]
+                    it.groupValues[1] + it.groupValues[2] + layoutCrashMessage(it.groupValues[3])
                 }
             }.toList()
             val body = JSONObject()
@@ -42,7 +42,23 @@ class CrashReportUpload(private val http: AccountHttp, private val auth: Account
 
     private companion object {
         const val CLASS = "(?:dev\\.multiprompt\\.companion|android|androidx|java|javax|kotlin|kotlinx|com\\.trilead\\.ssh2|okhttp3|okio)\\.[A-Za-z0-9_.$]+"
-        val frame = Regex("at $CLASS\\((?:[A-Za-z0-9_$-]+\\.(?:java|kt):[0-9]+|SourceFile:[0-9]+|Native Method|Unknown Source)\\)")
-        val exception = Regex("(Caused by: |Suppressed: )?($CLASS(?:Exception|Error|Throwable))(?::.*)?")
+        const val MINIFIED = "[A-Za-z_$][A-Za-z0-9_$]{0,2}(?:\\.[A-Za-z0-9_$]{1,3})+"
+        val frame = Regex("at (?:$CLASS|$MINIFIED)\\((?:[A-Za-z0-9_$-]+\\.(?:java|kt):[0-9]+|SourceFile:[0-9]+|r8-map-id-[0-9a-f]+:[0-9]+|Native Method|Unknown Source(?::[0-9]+)?)\\)")
+        val exception = Regex("(Caused by: |Suppressed: )?($CLASS(?:Exception|Error|Throwable))(?:: (.*))?")
     }
 }
+
+private const val N = "-?[0-9]+"
+private val layoutMessages = listOf(
+    Regex("Can't represent a (?:size|width|height) of $N in Constraints"),
+    Regex("maxWidth\\($N\\) must be >= (?:than )?minWidth\\($N\\)"),
+    Regex("maxHeight\\($N\\) must be >= (?:than )?minHeight\\($N\\)"),
+    Regex("(?:width|height|minWidth|minHeight|maxWidth|maxHeight)\\($N\\) (?:and (?:width|height)\\($N\\) )?must be >= 0"),
+    Regex("Layout: $N < 0"),
+    Regex("Padding must be non-negative"),
+    Regex("width and height must be > 0"),
+    Regex("Cannot round NaN value\\."),
+)
+
+fun layoutCrashMessage(message: String?): String =
+    if (message != null && layoutMessages.any { it.matches(message) }) ": $message" else ""

@@ -3,6 +3,7 @@ package dev.multiprompt.companion.data
 import android.content.Context
 import android.os.Build
 import dev.multiprompt.companion.BuildConfig
+import dev.multiprompt.companion.account.layoutCrashMessage
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -154,7 +155,7 @@ class CrashReportStore(context: Context) {
         var failure: Throwable? = this@uploadStackTrace
         while (failure != null && seen.add(failure) && seen.size <= 32) {
             if (failure !== this@uploadStackTrace) append("Caused by: ")
-            appendLine(failure.javaClass.name)
+            appendLine(failure.javaClass.name + layoutCrashMessage(failure.message))
             failure.stackTrace.forEach { frame ->
                 appendLine("at ${frame.className}.${frame.methodName}(${frame.fileName}:${frame.lineNumber})")
             }
