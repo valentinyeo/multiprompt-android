@@ -82,7 +82,7 @@ class ExitReasonsTest {
         val middle = record(timestampMillis = 2_000L, pid = 2)
         val recent = record(timestampMillis = 3_000L, pid = 3)
         val (reports, highWater) = ExitReasons.reports(listOf(old, middle, recent), 1_000L, appVersion, androidVersion)
-        assertEquals(listOf(2_000L, 3_000L), reports.map(CrashReport::capturedAtEpochSeconds))
+        assertEquals(listOf(2L, 3L), reports.map(CrashReport::capturedAtEpochSeconds))
         assertEquals(3_000L, highWater)
 
         val (again, sameHighWater) = ExitReasons.reports(listOf(old, middle, recent), highWater, appVersion, androidVersion)

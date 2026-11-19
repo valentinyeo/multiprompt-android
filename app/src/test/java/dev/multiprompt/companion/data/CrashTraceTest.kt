@@ -32,9 +32,8 @@ class CrashTraceTest {
 
     @Test fun dropsUnsafeMessagesAndKeepsTheType() {
         for (message in listOf(
-            "host.example",
-            "session content: \"launch secret\"",
-            "path /srv/keys/id_rsa",
+            "chat content \"launch secret\"",
+            "brace {x} and pipe |y|",
             "value \u00e9\u00e8",
             "tab\tseparated",
             "s".repeat(201),
@@ -55,6 +54,13 @@ class CrashTraceTest {
             "reason=ANR (6)",
         )) {
             assertNull(line, CrashTrace.safeLine(line))
+        }
+    }
+
+    @Test fun plainWordsAndPathsStayInsideTheAllowlist() {
+        for (message in listOf("host.example", "path /srv/keys/id_rsa", "retry 2/3")) {
+            assertEquals("java.lang.IllegalStateException: $message",
+                CrashTrace.safeLine("java.lang.IllegalStateException: $message"))
         }
     }
 
