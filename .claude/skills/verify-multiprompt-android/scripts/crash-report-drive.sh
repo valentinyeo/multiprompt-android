@@ -52,10 +52,8 @@ wait_report() {
 plant() {
     local exit=$1 label=$2 settle=$3
     adb shell am force-stop "$package"
-    {
-        printf 'PLANT %s\n' "$label"
-        timeout 90s adb shell am start -n "$activity" --es exit "$exit" 2>&1 | sed 's/^/  /' || true
-    } | tee -a "$shared_report"
+    printf 'PLANT %s: am start -n %s --es exit %s\n' "$label" "$activity" "$exit" | tee -a "$shared_report"
+    timeout 90s adb shell am start -n "$activity" --es exit "$exit" > /dev/null 2>&1 || true
     sleep "$settle"
 }
 
@@ -84,7 +82,8 @@ plant_and_wait() {
         missing="$missing $exit"
         return 0
     fi
-    received "$needle" | tee -a "$shared_report"
+    printf 'REPORTED %s: %s\n' "$label" "$(received "$needle" | python3 -c 'import json,sys; print(json.loads(sys.stdin.read() or "{}").get("summary", ""))')" \
+        | tee -a "$shared_report"
 }
 
 missing=""
