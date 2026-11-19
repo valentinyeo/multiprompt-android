@@ -11,6 +11,7 @@ real_chat_scroll_back() {
 
 real_chat_cache_seed() {
     local prefs="$EVIDENCE/hosts-prefs.xml" prepared name remote=/data/local/tmp/real-chat-cache.jsonl
+    local out=/home/verifyssh/real-chat-cache-2781 manifest=/home/verifyssh/chat-real.json
     if [[ "$package" != dev.multiprompt.companion.debug ]]; then
         printf 'REAL_CHAT_CACHE_SKIPPED: %s is not a debuggable package\n' "$package" > "$EVIDENCE/real-chat-cache.txt"
         return 0
@@ -20,10 +21,20 @@ real_chat_cache_seed() {
         printf 'REAL_CHAT_CACHE_SKIPPED: the app has no saved host preferences yet\n' > "$EVIDENCE/real-chat-cache.txt"
         return 0
     fi
-    prepared=$(python3 tools/real-chat/phone-cache.py prepare --prefs "$prefs" --home /home/verifyssh \
-        --out-dir "$EVIDENCE/real-chat" --session "$real_session")
-    printf '%s\n' "$prepared" > "$EVIDENCE/real-chat-cache.json"
-    name=$(printf '%s' "$prepared" | jq -er .name)
+    chmod 644 "$prefs"
+    sudo rm -rf "$out"
+    if ! sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/real-chat-phone-cache.py prepare \
+        --prefs "$prefs" --fixture /home/verifyssh/real-chat-fixture.py --home /home/verifyssh \
+        --out-dir "$out" --session "$real_session" > "$EVIDENCE/real-chat-cache.json"; then
+        setup_failure=1
+        cat "$EVIDENCE/real-chat-cache.json" >&2
+        printf 'REAL_CHAT_CACHE_FAILED: the older cached position was not built\n' >&2
+        return 1
+    fi
+    name=$(jq -er .name "$EVIDENCE/real-chat-cache.json")
+    mkdir -p "$EVIDENCE/real-chat" "$EVIDENCE/real-chat-cache"
+    sudo cat "$out/$name" > "$EVIDENCE/real-chat/$name"
+    cp "$EVIDENCE/real-chat/$name" "$EVIDENCE/real-chat-cache/$name"
     adb push "$EVIDENCE/real-chat/$name" "$remote" > /dev/null
     adb shell run-as "$package" mkdir -p files/chat-history
     adb shell "run-as $package sh -c 'cat $remote > files/chat-history/$name'"

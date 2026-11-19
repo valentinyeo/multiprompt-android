@@ -202,7 +202,7 @@ All helpers are executable. These commands are **GitHub-job-only**, with workflo
 .claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"
 .claude/skills/verify-multiprompt-android/scripts/drive.sh signed-out-sync.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
-python3 -B tools/real-chat/phone-cache.py prepare --prefs "$EVIDENCE/hosts-prefs.xml" --home /home/verifyssh --out-dir "$EVIDENCE/real-chat" --session live-real-2781
+sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/real-chat-phone-cache.py prepare --prefs "$EVIDENCE/hosts-prefs.xml" --fixture /home/verifyssh/real-chat-fixture.py --home /home/verifyssh --out-dir /home/verifyssh/real-chat-cache-2781 --session live-real-2781
 python3 -u .claude/skills/verify-multiprompt-android/scripts/console.py /home/verifyssh/receipts.txt
 ```
 
