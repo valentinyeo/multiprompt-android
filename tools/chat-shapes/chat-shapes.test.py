@@ -27,6 +27,7 @@ def load(name, path):
 
 fixture = load('chat_shapes_fixture', HERE / 'fixture.py')
 probe = load('chat_shapes_probe', HERE / 'probe.py')
+repro = load('chat_shapes_repro', HERE / 'repro.py')
 
 
 def resolved(payload):
@@ -68,6 +69,8 @@ class ChatShapesTest(unittest.TestCase):
     def test_current_reader_follows_the_live_session_for_every_shape(self):
         payload = probe.probe(READER, self.home)
         shapes = resolved(payload)
+        print('CURRENT_READER_2715_GREEN ' + json.dumps({name: shape['transcript'] and shape['visible'][-1:] for name, shape in shapes.items()}),
+              flush=True)
         self.assertEqual(fixture.shape('compacted')['native'] + '.jsonl', shapes['compacted']['transcript'])
         self.assertEqual('COMPACTED_AFTER_2715', shapes['compacted']['visible'][-1])
         self.assertNotIn('COMPACTED_BEFORE_2715', shapes['compacted']['visible'])
@@ -89,6 +92,12 @@ class ChatShapesTest(unittest.TestCase):
         self.assertIsNone(shapes['resumed']['transcript'])
         self.assertEqual([], shapes['resumed']['visible'])
         self.assertEqual('FRESH_READY_2715', shapes['fresh']['visible'][-1])
+
+    def test_repro_is_red_on_the_pre_fix_reader_and_green_on_the_current_one(self):
+        result = repro.run(self.pinned_reader(), READER)
+        print(repro.report(result).strip(), flush=True)
+        self.assertTrue(result['red'], result['preFix'])
+        self.assertTrue(result['green'], result['current'])
 
     def test_seed_command_creates_the_shapes_as_supervised_live_chats(self):
         mpa = load('chat_shapes_mpa', SCRIPTS / 'mpa')

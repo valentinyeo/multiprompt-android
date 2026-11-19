@@ -66,6 +66,7 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    set +x
     break_it_failure "$code"
     restore_chat_link
     break_it_restore

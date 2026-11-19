@@ -12,12 +12,21 @@ The shared seed starts three supervised chats on the fixture host, each one shap
 | `live-resumed-2715` | resumed chat: a new chat id resumed an older Claude session | config `sid` `c02715e0-…` has no transcript of its own; the resumed session `c02715e1-…` does |
 | `live-fresh-2715` | fresh-started chat: the chat id is the Claude session id | own transcript only, with a neighbouring chat in the same folder |
 
-1. From Inbox, open `live-compacted-2715` and require `COMPACTED_AFTER_2715`.
-2. Forbid the pre-compaction reply `COMPACTED_BEFORE_2715` and the neighbouring chat's `COMPACTED_NEIGHBOUR_2715`.
-3. Open `live-resumed-2715` and require `RESUMED_READY_2715`; forbid `RESUMED_NEIGHBOUR_2715`.
-4. Open `live-fresh-2715` and require `FRESH_READY_2715`; forbid `FRESH_NEIGHBOUR_2715`.
+1. From Inbox, open `live-resumed-2715` and require `RESUMED_READY_2715`; forbid `RESUMED_NEIGHBOUR_2715`.
+2. Open `live-fresh-2715` and require `FRESH_READY_2715`; forbid `FRESH_NEIGHBOUR_2715`.
+3. Open `live-compacted-2715` and require `COMPACTED_AFTER_2715`.
+4. Forbid the pre-compaction reply `COMPACTED_BEFORE_2715` and the neighbouring chat's `COMPACTED_NEIGHBOUR_2715`.
 
-Every assertion is the phone's own text, captured as numbered PNG/XML plus `<shape>-chat.json` and `<shape>-chat-proof.txt`. The same journey on an APK whose bundled reader predates the live-session fix fails on step 1 at `PRODUCT_ASSERTION_FAILED`.
+The compacted chat is the last step, so its tap, screen and proof are the tail of `driver-transcript.txt` as well as rows in `<shape>-chat.json` and `<shape>-chat-proof.txt`. Every assertion is the phone's own text, captured as numbered PNG/XML.
+
+## Pre-fix reader check
+
+Before the journey, the same job runs `tools/chat-shapes/repro.py` over one seeded home twice: once with the bundled reader from before #425 (`af4d3699`) and once with the reader built into this run's APK. `pre-425-reader.txt` keeps both lines:
+
+- `PRE_425_READER_2715_RED` lists `COMPACTED_BEFORE_2715` for the compacted chat and no transcript at all for the resumed chat.
+- `CURRENT_READER_2715_GREEN` lists `COMPACTED_AFTER_2715` and `RESUMED_READY_2715`.
+
+The step fails if either line stops holding, so the reproduction cannot rot. `tools/chat-shapes/chat-shapes.test.py` runs the same pair in the hosted source checks.
 
 The seed itself is checked before any action: `seed-counts.json` lists each shape with its session, chat id, native session, transcript and latest marker, and `tools/chat-shapes/fixture.py check` re-reads the transcripts, host config and event log.
 

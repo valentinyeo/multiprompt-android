@@ -501,6 +501,17 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y ffmpeg tesseract-ocr
           ffmpeg -version
+      - name: Read the seeded chat shapes with the reader from before PR 425
+        id: chat-shapes-reader
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: (env.VERIFY_JOURNEY == 'chat-shapes.md') && steps.parent-cache.outputs.hit != 'true'
+        run: |
+          mkdir -p "$EVIDENCE"
+          curl -fsSL --retry 3 --retry-all-errors https://raw.githubusercontent.com/valentinyeo/multiprompt-android/af4d369923a28d27890d81fcb3335c181583f05d/app/src/main/assets/chat_history_reader.py -o "$RUNNER_TEMP/pre-425-reader.py"
+          test -s "$RUNNER_TEMP/pre-425-reader.py"
+          app_source="$GITHUB_WORKSPACE"
+          if [ -d "$GITHUB_WORKSPACE/app-source" ]; then app_source="$GITHUB_WORKSPACE/app-source"; fi
+          python3 -B tools/chat-shapes/repro.py --pre-fix-reader "$RUNNER_TEMP/pre-425-reader.py" --current-reader "$app_source/app/src/main/assets/chat_history_reader.py" --evidence "$EVIDENCE/pre-425-reader.txt"
       - name: Start ephemeral public-key-only SSH and tmux
         if: steps.parent-cache.outputs.hit != 'true'
         id: ssh-fixture
