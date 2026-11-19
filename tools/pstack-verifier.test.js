@@ -125,6 +125,20 @@ test('picker outcome typos get one correction and genuine unmapped behavior stil
   assert.equal(asked, 2);
 });
 
+test('code-mapped outcomes decide, so an unmapped answer only blocks a genuinely unmapped product change', () => {
+  const pick = outcomes => JSON.stringify({ features: [], changed_outcomes: outcomes, change_kind: 'bug', reason: 'Shared chat reader change.' });
+  const mapped = ['codex.transcript', 'reader.host-restart'];
+  const mixed = verifier.parsePick(pick(['reader.host-restart', 'unmapped']), { mapped, productSource: true });
+  assert.deepEqual(mixed.changedOutcomes, ['reader.host-restart', 'codex.transcript']);
+  assert.equal(mixed.unmapped, true);
+  assert.deepEqual(verifier.parsePick(pick(['unmapped']), { mapped, productSource: true }).changedOutcomes, mapped);
+  assert.deepEqual(verifier.parsePick(pick(['unmapped']), { mapped: ['reader.host-restart'], productSource: true }).changedOutcomes, ['reader.host-restart']);
+  assert.deepEqual(verifier.parsePick(pick(['unmapped']), { mapped: [], productSource: false }).changedOutcomes, []);
+  assert.throws(() => verifier.parsePick(pick(['unmapped']), { mapped: [], productSource: true }), /FEATURE_UNMAPPED/);
+  assert.throws(() => verifier.parsePick(pick(['unmapped'])), /FEATURE_UNMAPPED/);
+  assert.throws(() => verifier.parsePick(JSON.stringify({ features: [], changed_outcomes: ['unmapped', 'invented.outcome'], change_kind: 'product' }), { mapped: [], productSource: true }), /invented\.outcome/);
+});
+
 test('the picker can classify a bug fix, and only fix or bug words count', () => {
   const picked = verifier.parsePick(JSON.stringify({ features: ['hosts.md'], changed_outcomes: [], change_kind: 'bug', reason: 'Send drops the draft.' }));
   assert.equal(picked.changeKind, 'bug');
