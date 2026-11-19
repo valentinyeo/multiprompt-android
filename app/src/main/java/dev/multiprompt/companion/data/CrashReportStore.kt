@@ -211,7 +211,11 @@ class CrashReportStore(
         var failure: Throwable? = this@uploadStackTrace
         while (failure != null && seen.add(failure) && seen.size <= 32) {
             if (failure !== this@uploadStackTrace) append("Caused by: ")
-            appendLine(failure.javaClass.name)
+            append(failure.javaClass.name)
+            if (failure === this@uploadStackTrace) {
+                CrashTrace.safeMessage(failure.message)?.let { append(": ").append(it) }
+            }
+            appendLine()
             failure.stackTrace.forEach { frame ->
                 appendLine("at ${frame.className}.${frame.methodName}(${frame.fileName}:${frame.lineNumber})")
             }
