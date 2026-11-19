@@ -1725,7 +1725,7 @@
       "sideEffect": false,
       "match": [],
       "paths": [
-        "^tools/chat-shapes/"
+        "^tools/chat-shapes/fixture\\.py$"
       ],
       "citations": {
         "action": {
