@@ -677,14 +677,13 @@ def read_screen(args):
 
 
 def hold(mode, value, xml_path, dry_run):
-    planned = tap(mode, value, xml_path, dry_run=True)
-    if planned.get("action") != "tap":
-        raise MpaError("HOLD_NOT_REACHABLE", f"Could not reveal {value!r} for a long press", "Run `mpa read` and confirm the label is inside the active window, then retry `mpa hold`.")
-    x, y = planned["point"]
+    root = load_tree(Path(xml_path) if xml_path else dump_ui())
+    found = resolve(root, mode, value)
+    x, y = found["point"]
     if dry_run:
-        return {"ok": True, "command": "hold", "dry_run": True, "mode": planned["mode"], "value": planned["value"], "point": [x, y], "commands": [ADB + f" shell input swipe {x} {y} {x} {y} 800"]}
+        return {"ok": True, "command": "hold", "dry_run": True, "mode": mode, "value": value, "point": [x, y], "commands": [ADB + f" shell input swipe {x} {y} {x} {y} 800"]}
     adb("shell", "input", "swipe", x, y, x, y, 800)
-    return {"ok": True, "command": "hold", "dry_run": False, "mode": planned["mode"], "value": planned["value"], "point": [x, y]}
+    return {"ok": True, "command": "hold", "dry_run": False, "mode": mode, "value": value, "point": [x, y]}
 
 
 def key(name, dry_run):
@@ -777,7 +776,7 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     fill_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone (for replay and tests).")
     fill_parser.add_argument("--dry-run", action="store_true", help="Resolve the field and print the planned commands without touching the phone.")
 
-    hold_parser = commands.add_parser("hold", formatter_class=argparse.RawDescriptionHelpFormatter, help="Long-press a reachable label.", description="Resolve an enabled label in the active window, scroll it into view, then press and hold its center for 800 ms. Use it for long-press menus.", epilog="Examples:\n  mpa hold text REPLY_BUBBLE_418\n  mpa hold text REPLY_BUBBLE_418 --dry-run --xml screen.xml")
+    hold_parser = commands.add_parser("hold", formatter_class=argparse.RawDescriptionHelpFormatter, help="Long-press a label.", description="Resolve an enabled label and press and hold its own center for 800 ms. It does not need a clickable parent, which is what long-press menus on plain text need. Use `mpa tap` when the label must be scrolled into view first.", epilog="Examples:\n  mpa hold text REPLY_BUBBLE_418\n  mpa hold text REPLY_BUBBLE_418 --dry-run --xml screen.xml")
     hold_parser.add_argument("mode", choices=["text", "desc", "field", "text-containing"], help="How to find the control.")
     hold_parser.add_argument("value", help="Label, description or field placeholder to press and hold.")
     hold_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone (for replay and tests).")
