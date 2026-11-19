@@ -18,22 +18,17 @@ def runtime(source, home):
     return reader
 
 
-def visible_rows(reader, path):
+def frame(reader, query, resolved):
+    agent, sid, path, delegated = resolved
+    wire = reader['response'](dict(query, sid=sid, follow=False), None, False, resolved)
     texts = []
-    with Path(path).open('rb') as stream:
-        base, end, data = reader['read_tail'](stream, Path(path).stat().st_size, 'claude')
-    if isinstance(data, str):
-        data = data.encode()
-    for raw in data.split(b'\n'):
-        if not raw.strip():
-            continue
+    for line in wire.splitlines()[1:]:
         try:
-            event = json.loads(raw)
+            row = json.loads(line)
         except ValueError:
             continue
-        for row in reader['conversation_rows'](event, 'claude', base):
-            if row.get('role') in ('user', 'assistant') and row.get('text'):
-                texts.append(row['text'])
+        if row.get('role') in ('user', 'assistant') and row.get('text'):
+            texts.append(row['text'])
     return texts
 
 
@@ -44,13 +39,15 @@ def probe(source, home):
     results = []
     for index, item in enumerate(manifest['shapes'], start=1):
         query = dict(id=index, provider='claude', codex=False, sid=item['sid'], tmux=item['session'],
-                     cwd=item['cwd'], follow=False)
-        agent, sid, path, wire = reader['resolve_response_path'](dict(query))
-        texts = visible_rows(reader, path) if path is not None else []
+                     cwd=item['cwd'], follow=False, offset=0, before=0, cached_sid='', inode=0, mtime=0,
+                     probe='', start=0)
+        resolved = reader['resolve_response_path'](dict(query))
+        agent, sid, path, wire = resolved
         results.append(dict(shape=item['shape'], session=item['session'], sid=sid,
                             transcript=Path(path).name if path is not None else None,
                             latest=item['latest'], stale=item['stale'],
-                            visible=texts, wire=(wire or '').splitlines()[:1]))
+                            visible=frame(reader, query, resolved) if path is not None else [],
+                            wire=(wire or '').splitlines()[:1]))
     return dict(reader=str(source), home=str(home), shapes=results)
 
 
