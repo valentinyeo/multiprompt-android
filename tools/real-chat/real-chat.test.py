@@ -80,29 +80,51 @@ class RealChatFixtureTest(unittest.TestCase):
         self.assertEqual(fixture.STALE_FIRST, fixture.last_text(self.manifest['first_transcript']))
         self.assertEqual(fixture.STALE_SECOND, fixture.last_text(self.manifest['second_transcript']))
 
-    def test_bundled_reader_shows_the_newest_reply_of_the_live_session(self):
+    def read(self, reader, resolved, query):
+        agent, sid, path, delegated = resolved
+        wire = reader['response'](dict(query, sid=sid, follow=False), None, False, resolved)
+        fields = wire.splitlines()[0].split('\t')
+        rows = [json.loads(line) for line in wire.splitlines()[1:]
+                if line.startswith('{') and json.loads(line).get('role') in ('user', 'assistant')]
+        return fields, rows
+
+    def tail_and_older(self, query):
         reader = runtime(READER, self.home)
-        query = self.query()
         resolved = reader['resolve_response_path'](dict(query))
-        transcript, texts = visible(reader, query, resolved)
+        agent, sid, path, delegated = resolved
+        tail_fields, tail = self.read(reader, resolved, query)
+        older = dict(query, cached_sid=tail_fields[4], inode=int(tail_fields[7]), offset=int(tail_fields[6]),
+                     start=int(tail_fields[5]), mtime=int(tail_fields[11]), probe=tail_fields[12],
+                     before=int(tail_fields[5]))
+        older_fields, previous = self.read(reader, resolved, older)
+        return Path(path).name if path is not None else None, tail_fields, tail, older_fields, previous
+
+    def test_tool_only_tail_page_is_followed_by_the_newest_reply(self):
+        transcript, tail_fields, tail, older_fields, previous = self.tail_and_older(self.query())
         self.assertEqual(fixture.LIVE + '.jsonl', transcript)
-        self.assertEqual(fixture.REPLY_NEWEST, texts[-1])
+        self.assertEqual('tail', tail_fields[13])
+        self.assertEqual([], tail)
+        self.assertEqual('older', older_fields[13])
+        self.assertEqual(int(tail_fields[5]), int(older_fields[6]))
+        self.assertEqual(int(older_fields[5]), int(older_fields[14]))
+        self.assertEqual(fixture.REPLY_NEWEST, previous[-1]['text'])
+        texts = [row['text'] for row in previous]
         self.assertIn(fixture.USER_NEWEST, texts)
         self.assertNotIn(fixture.STALE_FIRST, texts)
         self.assertNotIn(fixture.STALE_SECOND, texts)
         self.assertNotIn(fixture.NEIGHBOUR_TEXT, texts)
 
-    def test_stale_cached_position_still_returns_the_newest_reply(self):
-        reader = runtime(READER, self.home)
+    def test_stale_cached_position_reaches_the_newest_reply(self):
         older = Path(self.manifest['first_transcript'])
         offsets = fixture.row_offsets(older)
         query = self.query(cached_sid=fixture.FIRST, inode=older.stat().st_ino,
                            offset=offsets[-1][1], start=offsets[0][0], mtime=int(older.stat().st_mtime),
                            probe=hashlib.sha256(older.read_bytes()).hexdigest())
-        resolved = reader['resolve_response_path'](dict(query))
-        transcript, texts = visible(reader, query, resolved)
+        transcript, tail_fields, tail, older_fields, previous = self.tail_and_older(query)
         self.assertEqual(fixture.LIVE + '.jsonl', transcript)
-        self.assertEqual(fixture.REPLY_NEWEST, texts[-1])
+        self.assertEqual([], tail)
+        self.assertEqual('older', older_fields[13])
+        self.assertEqual(fixture.REPLY_NEWEST, previous[-1]['text'])
 
     def test_phone_cache_file_matches_the_row_contract(self):
         payload = fixture.cache(self.home, 'host-id', '10.0.2.2', '2222', 'verifyssh', 'CLAUDE',

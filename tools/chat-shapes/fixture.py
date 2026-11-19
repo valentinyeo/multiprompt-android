@@ -30,21 +30,9 @@ SHAPES = (
          neighbour='c02715e2-0000-4000-8000-000000002715',
          stale='', latest='RESUMED_READY_2715',
          neighbour_text='RESUMED_NEIGHBOUR_2715'),
-    dict(shape='mirror', session='live-mirror-2779', project='mirror-work',
-         sid='c0272d90-0000-4000-8000-000000002779',
-         native='c0272d91-0000-4000-8000-000000002779',
-         neighbour='c0272d92-0000-4000-8000-000000002779',
-         stale='', latest='MIRROR_NEWEST_2779',
-         neighbour_text='MIRROR_NEIGHBOUR_2779'),
 )
 
-MIRROR_TAIL_BYTES = 512 * 1024
-MIRROR_TOOL_DETAIL = 4010
-MIRROR_EXCHANGES = 130
-MIRROR_TOOL_TAIL = 140
-
 TRANSCRIPTS = {
-    'mirror': {'native': [('user', 'MIRROR_ASK_2779'), ('assistant', 'MIRROR_NEWEST_2779')]},
     'compacted': {
         'sid': [('user', 'COMPACTED_QUESTION_2715'), ('assistant', 'COMPACTED_BEFORE_2715')],
         'native': [('user', 'COMPACTED_CONTINUE_2715'), ('assistant', 'COMPACTED_AFTER_2715')],
@@ -82,48 +70,6 @@ def paths(home, entry):
                 log=host / (key + '.events.log'))
 
 
-def mirror_rows(entry):
-    rows = []
-    for index in range(MIRROR_EXCHANGES):
-        stem = f'{index:04d}'
-        rows.append(dict(role='user', text=f'MIRROR_ASK_{stem}_2779', id='m-u-' + stem,
-                         timestamp=STAMP[:-5] + f'{index % 60:02d}.000Z'))
-        rows.append(dict(role='assistant', text=f'MIRROR_REPLY_{stem}_2779', id='m-a-' + stem,
-                         timestamp=STAMP[:-5] + f'{index % 60:02d}.000Z'))
-        for slot in ('a', 'b', 'c', 'd'):
-            rows.append(dict(role='tool_result', text='', id=f'm-r-{stem}-{slot}', status='ok',
-                             timestamp=STAMP, detail=('Synthetic tool output line.\n' * 140)[:MIRROR_TOOL_DETAIL]))
-    rows.append(dict(role='assistant', text=entry['latest'], id='m-a-newest', timestamp=STAMP))
-    for index in range(MIRROR_TOOL_TAIL):
-        rows.append(dict(role='tool_result', text='', id=f'm-r-tail-{index:04d}', status='ok',
-                         timestamp=STAMP, detail=('Synthetic tail output line.\n' * 140)[:MIRROR_TOOL_DETAIL]))
-    return rows
-
-
-def mirror_paths(home, entry):
-    root = home / HOST_ROOT
-    key = host_key(entry['sid'])
-    return dict(history=root / (key + '.history.jsonl'), root=root, key=key)
-
-
-def mirror_visible(rows):
-    return [row for row in rows if row['role'] in ('user', 'assistant')]
-
-
-def mirror_tail_visible(path):
-    raw = Path(path).read_bytes()
-    window = raw[max(0, len(raw) - MIRROR_TAIL_BYTES):]
-    found = []
-    for line in window.splitlines():
-        try:
-            row = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(row, dict) and row.get('type') == 'multiprompt_history' and row.get('row', {}).get('role') in ('user', 'assistant'):
-            found.append(row)
-    return found
-
-
 def write_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, separators=(',', ':'), sort_keys=True))
@@ -149,8 +95,6 @@ def plan():
     return dict(
         shapes=[dict(entry, cwd=entry['project']) for entry in SHAPES],
         long_chat=dict(session=LONG_SESSION, sid=LONG_SID),
-        mirror=dict(exchanges=MIRROR_EXCHANGES, tool_tail=MIRROR_TOOL_TAIL, tool_detail=MIRROR_TOOL_DETAIL,
-                    tail_bytes=MIRROR_TAIL_BYTES),
         markers=[entry['latest'] for entry in SHAPES] + [entry['neighbour_text'] for entry in SHAPES] +
                 [entry['stale'] for entry in SHAPES if entry['stale']])
 
@@ -182,36 +126,8 @@ def create(home):
         item.update(cwd=str(where['cwd']), transcript=str(where['transcript']), own_transcript=str(where['own']),
                     neighbour_transcript=str(where['neighbour']), config=str(where['config']),
                     state=str(where['state']), log=str(where['log']))
-        if entry['shape'] == 'mirror':
-            item.update(seed_mirror(home, entry))
     write_json(home / 'chat-shapes.json', manifest)
     return manifest
-
-
-def seed_mirror(home, entry):
-    where = mirror_paths(home, entry)
-    rows = mirror_rows(entry)
-    where['history'].parent.mkdir(parents=True, exist_ok=True)
-    where['history'].write_text(''.join(json.dumps(dict(type='multiprompt_history', row=row), separators=(',', ':')) + '\n'
-                                        for row in rows))
-    config = read_json(where['root'] / (where['key'] + '.config.json'))
-    write_json(where['root'] / (where['key'] + '.config.json'), dict(config, display_history=True))
-    write_json(where['root'] / (where['key'] + '.state.json'), dict(read_json(where['root'] / (where['key'] + '.state.json')),
-                                                                    display_history=True))
-    events = [dict(at=float(index + 1), event='init', detail=dict(session=sid))
-              for index, sid in enumerate((entry['sid'], entry['native'], entry['sid']))]
-    events += [dict(at=float(len(events) + index + 1), event=kind, detail=dict(id=f'mirror-queue-{index}', attempt=f'attempt-{index}'))
-               for index, kind in enumerate(('accepted', 'delivered'))]
-    events.append(dict(at=float(len(events) + 1), event='handover', detail=dict(previous='stopped')))
-    where['root'].joinpath(where['key'] + '.events.log').write_text(''.join(json.dumps(row) + '\n' for row in events))
-    handovers = []
-    for index in range(2):
-        path = where['root'] / (where['key'] + '.handover-' + f'{index + 1:032x}' + '.json')
-        write_json(path, dict(text='MIRROR_HANDOVER_2779 ' + str(index + 1), provider='claude', sid=entry['sid'], at=float(index + 1)))
-        handovers.append(str(path))
-    return dict(mirror=str(where['history']), mirror_bytes=where['history'].stat().st_size,
-                mirror_rows=len(rows), handovers=handovers,
-                init_sessions=[row['detail']['session'] for row in events if row['event'] == 'init'])
 
 
 def last_text(path):
@@ -253,20 +169,7 @@ def check(home):
         assert last_text(item['neighbour_transcript']) == entry['neighbour_text'], 'SHAPES_TRANSCRIPT_MISMATCH'
         native = latest_init(item['log'])
         sids = transcript_sids(home, entry)
-        if entry['shape'] == 'mirror':
-            mirror = Path(item['mirror'])
-            assert mirror.is_file(), 'SHAPES_MIRROR_MISSING'
-            rows = [json.loads(line)['row'] for line in mirror.read_text().splitlines()]
-            visible = mirror_visible(rows)
-            tools = [row for row in rows if row['role'] not in ('user', 'assistant')]
-            assert 0.60 <= len(tools) / len(rows) <= 0.80, 'SHAPES_MIRROR_TOOL_SHARE'
-            assert 2_400_000 <= item['mirror_bytes'] <= 3_400_000, 'SHAPES_MIRROR_BYTES'
-            assert visible[-1]['text'] == entry['latest'], 'SHAPES_MIRROR_NEWEST'
-            assert mirror_tail_visible(mirror) == [], 'SHAPES_MIRROR_TAIL_VISIBLE'
-            assert item['init_sessions'] == [entry['sid'], entry['native'], entry['sid']], 'SHAPES_MIRROR_RESTARTS'
-            assert len(item['handovers']) == 2, 'SHAPES_MIRROR_HANDOVER'
-            assert read_json(item['config']).get('display_history') is True, 'SHAPES_MIRROR_DISPLAY'
-        elif entry['shape'] == 'compacted':
+        if entry['shape'] == 'compacted':
             assert entry['sid'] != native == entry['native'], 'SHAPES_COMPACTED_IDENTITY'
             assert last_text(item['own_transcript']) == entry['stale'], 'SHAPES_TRANSCRIPT_MISMATCH'
             assert entry['sid'] in sids and entry['native'] in sids, 'SHAPES_COMPACTED_TRANSCRIPTS'

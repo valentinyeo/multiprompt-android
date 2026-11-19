@@ -17,13 +17,6 @@ product_checks=1
     --note FRESH_CHAT_STAYS_ON_ITS_OWN_TRANSCRIPT_2715 --proof-file "$EVIDENCE/fresh-chat-proof.txt"
 "$mpa" key back
 "$mpa" read --wait-text Inbox
-"$mpa" tap text live-mirror-2779
-"$mpa" read --select contains --value MIRROR_NEWEST_2779 --timeout 90
-"$mpa" screenshot mirror-chat
-"$mpa" proof --name mirror-chat --require-text MIRROR_NEWEST_2779 \
-    --note MIRROR_CHAT_SHOWS_NEWEST_REPLY_2779 --proof-file "$EVIDENCE/mirror-chat-proof.txt"
-"$mpa" key back
-"$mpa" read --wait-text Inbox
 "$mpa" tap text live-compacted-2715
 "$mpa" read --select contains --value COMPACTED_AFTER_2715 --timeout 60
 "$mpa" screenshot compacted-chat

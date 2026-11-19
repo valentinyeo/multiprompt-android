@@ -26,9 +26,11 @@ STALE_SECOND = 'REAL_CHAT_STALE_SECOND_2781'
 NEIGHBOUR_TEXT = 'REAL_CHAT_NEIGHBOUR_2781'
 HANDOVER_TEXT = 'REAL_CHAT_HANDOVER_2781'
 MIN_BYTES = 2_600_000
-MAX_BYTES = 3_600_000
+MAX_BYTES = 4_400_000
+TAIL_BYTES = 512 * 1024
+TOOL_TAIL_ROWS = 150
 MIN_ROWS = 3_900
-MAX_ROWS = 4_100
+MAX_ROWS = 4_300
 MIN_TOOL_SHARE = 0.64
 MAX_TOOL_SHARE = 0.76
 CACHE_ROWS = 12
@@ -78,6 +80,14 @@ def tool_result(index, slot):
                                   content=body)]))
 
 
+def tail_tool_result(index):
+    identity = f'{LIVE[:8]}-x{index:04d}'
+    body = 'Synthetic tail output line.\n' * 140
+    return dict(type='user', uuid=identity.replace('-', '-4000-8000-')[:36], sessionId=LIVE,
+                timestamp=STAMP, message=dict(role='user', id='msg_' + identity,
+                    content=[dict(type='tool_result', tool_use_id='toolu_' + identity, content=body)]))
+
+
 def text_row(role, identity, text):
     return dict(type=role, uuid=identity[:36], sessionId=LIVE, timestamp=STAMP,
                 message=dict(role=role, id='msg_' + identity.replace('-', ''), content=[dict(type='text', text=text)]))
@@ -117,6 +127,7 @@ def live_rows():
             rows.append(tool_result(index, 'c'))
             rows.append(tool_use(index, 'd'))
             rows.append(assistant_row(identity + '-f', f'Synthetic summary {index} closes the fixture turn.'))
+    rows.extend(tail_tool_result(index) for index in range(TOOL_TAIL_ROWS))
     return rows
 
 
@@ -203,9 +214,31 @@ def counts(path):
 
 
 def last_text(path):
-    lines = [line for line in Path(path).read_text().splitlines() if line.strip()]
-    event = json.loads(lines[-1])
-    return ''.join(part.get('text', '') for part in event['message']['content'])
+    found = None
+    for line in Path(path).read_text().splitlines():
+        if not line.strip():
+            continue
+        event = json.loads(line)
+        if event['message']['role'] in ('user', 'assistant'):
+            text = ''.join(part.get('text', '') for part in event['message']['content'])
+            found = text or found
+    return found
+
+
+def tail_visible(path):
+    raw = Path(path).read_bytes()
+    window = raw[max(0, len(raw) - TAIL_BYTES):]
+    found = []
+    for line in window.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if event.get('message', {}).get('role') not in ('user', 'assistant'):
+            continue
+        if any(part.get('type') == 'text' for part in event['message'].get('content') or []):
+            found.append(event)
+    return found
 
 
 def latest_init(path):
@@ -227,6 +260,7 @@ def check(home):
     assert MIN_ROWS <= measured['rows'] <= MAX_ROWS, 'REAL_CHAT_ROWS'
     assert MIN_TOOL_SHARE <= measured['tool_rows'] / measured['rows'] <= MAX_TOOL_SHARE, 'REAL_CHAT_TOOL_SHARE'
     assert last_text(manifest['transcript']) == REPLY_NEWEST, 'REAL_CHAT_LATEST'
+    assert tail_visible(manifest['transcript']) == [], 'REAL_CHAT_TAIL_VISIBLE'
     assert last_text(manifest['first_transcript']) == STALE_FIRST, 'REAL_CHAT_STALE_FIRST'
     assert last_text(manifest['second_transcript']) == STALE_SECOND, 'REAL_CHAT_STALE_SECOND'
     assert last_text(manifest['neighbour_transcript']) == NEIGHBOUR_TEXT, 'REAL_CHAT_NEIGHBOUR'
