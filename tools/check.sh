@@ -24,6 +24,7 @@ source_checks() {
   python3 -I tools/verify-seed.test.py
   python3 -B tools/fixture-journeys.test.py
   python3 -B tools/mpa-cli.test.py
+  python3 -B tools/message-reply/console.test.py
   python3 -B tools/cancel-fixture.test.py
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py
@@ -38,7 +39,6 @@ source_checks() {
   python3 -B tools/codex-sync.test.py
   python3 -B tools/structured-questions.test.py
   python3 -B tools/native-skills.test.py
-  python3 -B tools/clear-ranking/ui.test.py
   python3 -B tools/release-choices/ui.test.py
   python3 -B tools/check-approved-style-source.test.py
   python3 -B tools/historical_control.test.py

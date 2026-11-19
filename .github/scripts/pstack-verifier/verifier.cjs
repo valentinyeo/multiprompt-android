@@ -508,7 +508,7 @@ function journeyEvidence(directory, feature) {
   for (const name of priority) if (files.includes(name)) take(name, proof[name] ?? (name === 'driver-transcript.txt' ? TRANSCRIPT_TAIL_CHARS : SMALL_FILE_BYTES));
   if (files.includes('driver-transcript.txt')) {
     const actions = fs.readFileSync(path.join(directory, 'driver-transcript.txt'), 'utf8').split('\n')
-      .filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input)/.test(line))
+      .filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input|\S*\/mpa (?:doctor|launch|seed|tap|read|fill|key|screenshot|proof|cleanup)\b)/.test(line))
       .filter(line => !/^\++ adb shell input text (?:\S|'.'|"."|%s)$/.test(line));
     append(`--- driver-transcript.txt (user actions)\n${actions.slice(-60).join('\n').slice(-TRANSCRIPT_TAIL_CHARS)}`);
   }

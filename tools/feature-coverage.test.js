@@ -743,7 +743,7 @@ test('Claude remote-control proof requires its action, connected UI, independent
   const claim = { outcome, journey, ...gate.registry.outcomes[outcome].citations };
   try {
     const priority = gate.registry.journeys[journey].evidence;
-    assert.ok(priority['remote-control-state.json']);
+    assert.ok(priority['remote-control-connected.json']);
     assert.ok(priority['remote-control-host.json']);
     fs.writeFileSync(path.join(directory, 'app-source-sha.txt'), sha);
     for (const ref of [claim.action, claim.result, claim.sideEffect]) fs.writeFileSync(path.join(directory, ref.file), ref.quote);

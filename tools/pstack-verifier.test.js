@@ -468,6 +468,19 @@ test('registered queue UI and receipts survive generic evidence and oversized ac
   }
 });
 
+test('migrated CLI journeys show their mpa actions in the user-action summary', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-mpa-actions-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'), "+ /home/runner/scripts/mpa fill 'Message verify-session' /cl\n+ /home/runner/scripts/mpa read --wait-text /client\n+dump_ui\n");
+    const text = verifier.journeyEvidence(directory, 'clear-ranking.md');
+    assert.ok(text.includes('--- driver-transcript.txt (user actions)'));
+    assert.ok(text.includes("mpa fill 'Message verify-session' /cl"));
+    assert.ok(text.includes('mpa read --wait-text /client'));
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('identity evidence retains complete independent receipt JSON bodies', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-identity-proof-'));
   try {

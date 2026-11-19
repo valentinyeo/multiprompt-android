@@ -708,7 +708,8 @@
         "claude.remote-control"
       ],
       "evidence": {
-        "remote-control-state.json": 2000,
+        "remote-control-open.json": 400,
+        "remote-control-connected.json": 900,
         "remote-control-host.json": 3500,
         "remote-control-before.txt": 200
       }
@@ -1340,11 +1341,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "+ tap_desc 'Send prompt'"
+          "quote": "mpa fill 'Message verify-session' PHONE_REMOTE_CONTROL_2541"
         },
         "result": {
-          "file": "remote-control-state.json",
-          "quote": "REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1"
+          "file": "remote-control-connected.json",
+          "quote": "\"value\":\"REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1\""
         },
         "sideEffect": {
           "file": "remote-control-host.json",
@@ -1426,11 +1427,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap_text /clear"
+          "quote": "mpa fill 'Message verify-session' /cl"
         },
         "result": {
           "file": "clear-query.json",
-          "quote": "\"order\": [\n    \"/clear\",\n    \"/client\",\n    \"/aaa-paper\""
+          "quote": "\"values\":[\"/clear\",\"/client\",\"/aaa-paper\"]"
         },
         "sideEffect": {
           "file": "clear-receipts.txt",
@@ -1507,7 +1508,7 @@
       "match": []
     },
     "legacy.igsh-418": {
-      "description": "Long-press a Claude bubble, cancel Replying, then send a quoted reply. The host receipt contains the quote and the new text.",
+      "description": "Long-press a Claude bubble, cancel Replying, then send a quoted reply. The host receipt contains the quote and the new text, the host accepts the prompt, and the reply bubble is never marked Not sent.",
       "journey": "message-reply.md",
       "sideEffect": true,
       "match": [
@@ -1516,11 +1517,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap_text Reply"
+          "quote": "mpa hold text REPLY_BUBBLE_418"
         },
         "result": {
-          "file": "reply-open.json",
-          "quote": "\"cancel\": \"Cancel reply\""
+          "file": "reply-sent.json",
+          "quote": "\"value\":\"REPLY_DELIVERED_418\""
         },
         "sideEffect": {
           "file": "reply-receipts.txt",

@@ -26,15 +26,5 @@ class ReplyPointTest(unittest.TestCase):
         self.assertEqual((140, 130), state.point(root, "REPLY_BUBBLE_418"))
 
 
-class ReplyStateTest(unittest.TestCase):
-    def test_open_bar_names_the_bubble_and_cancel(self):
-        result = state.check(screen(True), "open")
-        self.assertEqual("Cancel reply", result["cancel"])
-        self.assertEqual("REPLY_BUBBLE_418", result["preview"])
-
-    def test_cancelled_bar_is_gone(self):
-        self.assertEqual(False, state.check(screen(False), "cancelled")["replying"])
-
-
 if __name__ == "__main__":
     unittest.main()
