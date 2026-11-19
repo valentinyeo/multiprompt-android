@@ -248,7 +248,7 @@ class CrashReportStoreTest {
             "reason=ANR (6)\ndescription=Input dispatching timed out\nimportance=100\npss=2048kB\nrss=8192kB",
             CrashPayload.stackTrace(anr))
         assertNull(store.loadForDisplay())
-        assertTrue(store.loadPending().isEmpty())
+        assertNull(collected.loadForDisplay())
     }
 
     @Test fun repeatedStartupsDoNotQueueTheSameExitTwice() {
