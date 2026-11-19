@@ -88,25 +88,26 @@ class RealChatFixtureTest(unittest.TestCase):
                 if line.startswith('{') and json.loads(line).get('role') in ('user', 'assistant')]
         return fields, rows
 
-    def tail_and_older(self, query):
+    def pages_back(self, query):
         reader = runtime(READER, self.home)
         resolved = reader['resolve_response_path'](dict(query))
         agent, sid, path, delegated = resolved
-        tail_fields, tail = self.read(reader, resolved, query)
-        older = dict(query, cached_sid=tail_fields[4], inode=int(tail_fields[7]), offset=int(tail_fields[6]),
-                     start=int(tail_fields[5]), mtime=int(tail_fields[11]), probe=tail_fields[12],
-                     before=int(tail_fields[5]))
-        older_fields, previous = self.read(reader, resolved, older)
-        return Path(path).name if path is not None else None, tail_fields, tail, older_fields, previous
+        fields, rows = self.read(reader, resolved, query)
+        pages = [dict(mode=fields[13], rows=rows)]
+        while rows == []:
+            query = dict(query, cached_sid=fields[4], inode=int(fields[7]), offset=int(fields[6]),
+                         start=int(fields[14]), before=int(fields[5]), mtime=int(fields[11]), probe=fields[12])
+            fields, rows = self.read(reader, resolved, query)
+            pages.append(dict(mode=fields[13], rows=rows))
+        return Path(path).name if path is not None else None, pages
 
-    def test_tool_only_tail_page_is_followed_by_the_newest_reply(self):
-        transcript, tail_fields, tail, older_fields, previous = self.tail_and_older(self.query())
+    def test_two_tool_only_pages_precede_the_newest_reply(self):
+        transcript, pages = self.pages_back(self.query())
         self.assertEqual(fixture.LIVE + '.jsonl', transcript)
-        self.assertEqual('tail', tail_fields[13])
-        self.assertEqual([], tail)
-        self.assertEqual('older', older_fields[13])
-        self.assertEqual(int(tail_fields[5]), int(older_fields[6]))
-        self.assertEqual(int(older_fields[5]), int(older_fields[14]))
+        self.assertEqual(['tail', 'older', 'older'], [page['mode'] for page in pages])
+        self.assertEqual([], pages[0]['rows'])
+        self.assertEqual([], pages[1]['rows'])
+        previous = pages[2]['rows']
         self.assertEqual(fixture.REPLY_NEWEST, previous[-1]['text'])
         texts = [row['text'] for row in previous]
         self.assertIn(fixture.USER_NEWEST, texts)
@@ -120,11 +121,11 @@ class RealChatFixtureTest(unittest.TestCase):
         query = self.query(cached_sid=fixture.FIRST, inode=older.stat().st_ino,
                            offset=offsets[-1][1], start=offsets[0][0], mtime=int(older.stat().st_mtime),
                            probe=hashlib.sha256(older.read_bytes()).hexdigest())
-        transcript, tail_fields, tail, older_fields, previous = self.tail_and_older(query)
+        transcript, pages = self.pages_back(query)
         self.assertEqual(fixture.LIVE + '.jsonl', transcript)
-        self.assertEqual([], tail)
-        self.assertEqual('older', older_fields[13])
-        self.assertEqual(fixture.REPLY_NEWEST, previous[-1]['text'])
+        self.assertEqual('tail', pages[0]['mode'])
+        self.assertEqual([], pages[0]['rows'])
+        self.assertEqual(fixture.REPLY_NEWEST, pages[-1]['rows'][-1]['text'])
 
     def test_phone_cache_file_matches_the_row_contract(self):
         payload = fixture.cache(self.home, 'host-id', '10.0.2.2', '2222', 'verifyssh', 'CLAUDE',
