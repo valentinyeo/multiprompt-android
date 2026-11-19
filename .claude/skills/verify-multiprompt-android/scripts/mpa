@@ -21,7 +21,7 @@ REMOTE_DUMP = "/sdcard/verify-ui.xml"
 DEFAULT_PACKAGE = "dev.multiprompt.companion.debug"
 ACTIVITY = "dev.multiprompt.companion.MainActivity"
 KEYS = {"back": "KEYCODE_BACK", "home": "KEYCODE_HOME", "enter": "KEYCODE_ENTER", "delete": "KEYCODE_DEL", "wakeup": "KEYCODE_WAKEUP"}
-SELECTOR_MODES = ["text", "desc", "contains", "absent", "lacks", "text-containing", "version", "field", "focused-field", "editor", "editor-value", "field-value", "checked", "unchecked", "key-row", "scroll-back", "terminal"]
+SELECTOR_MODES = ["text", "desc", "contains", "absent", "lacks", "text-containing", "version", "field", "focused-field", "editor", "editor-value", "field-value", "checked", "unchecked", "visible", "current", "draft", "desc-absent", "key-row", "scroll-back", "terminal"]
 EVIDENCE_HINT = "Set EVIDENCE to the run's evidence directory, for example: export EVIDENCE=$PWD/verification-evidence"
 RUNNER_HINT = "Run it on a GitHub runner through verify.yml or pstack-verifier.yml. This server never boots the emulator."
 
@@ -113,7 +113,7 @@ def point(bounds_text):
     return [(numbers[0] + numbers[2]) // 2, (numbers[1] + numbers[3]) // 2]
 
 
-def resolve(root, mode, value, extra=()):
+def resolve(root, mode, value, extra=(), inside=None):
     if mode == "snapshot":
         texts = [node.get("text") for node in root.iter("node") if node.get("text")]
         descriptions = [node.get("content-desc") for node in root.iter("node") if node.get("content-desc")]
@@ -143,8 +143,17 @@ def resolve(root, mode, value, extra=()):
         return {"mode": mode, "value": value, "stdout": f"{x} {y}", "point": [x, y]}
     parents = {child: parent for parent in root.iter() for child in parent}
     application = package()
+    candidates = list(root.iter("node"))
+    if inside:
+        anchors = [node for node in candidates if node.get("text") == inside or node.get("content-desc") == inside]
+        if not anchors:
+            raise MpaError("INSIDE_MISSING", f"Missing container: {inside}", f"Run `mpa read`; `{inside}` is not on screen.")
+        if len(anchors) != 1:
+            raise MpaError("INSIDE_AMBIGUOUS", f"Ambiguous container: {inside} ({len(anchors)})", "Scope with a unique text or description, then retry.")
+        allowed = {id(node) for node in anchors[0].iter("node")}
+        candidates = [node for node in candidates if id(node) in allowed]
     matches = []
-    for node in root.iter("node"):
+    for node in candidates:
         if mode == "scroll-back" and node.get("scrollable") == "true" and node.get("package") == application and node.get("class") != "android.widget.HorizontalScrollView":
             matches.append(node)
         elif mode in ("text", "absent", "version") and value == node.get("text"):
@@ -157,17 +166,26 @@ def resolve(root, mode, value, extra=()):
             matches.append(node)
         elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
             matches.append(node)
+        elif mode == "visible" and node.get("package") == application and value in (node.get("text"), node.get("content-desc")):
+            matches.append(node)
+        elif mode == "current" and node.get("package") == application and (node.get("text") or "").startswith("Current: ") and value in node.get("text"):
+            matches.append(node)
+        elif mode == "draft" and node.get("class") == "android.widget.EditText" and node.get("text") == value and node.get("package") == application:
+            matches.append(node)
+        elif mode == "desc-absent" and value in (node.get("content-desc") or "") and node.get("package") == application:
+            matches.append(node)
         elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
             if value == "" and mode == "focused-field":
                 if node.get("focused") == "true" and node.get("package") == application:
                     matches.append(node)
             elif any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
                 matches.append(node)
-    if mode in ("absent", "lacks"):
+    if mode in ("absent", "lacks", "desc-absent"):
         if not any(node.get("package") == application for node in root.iter("node")):
             raise MpaError("APP_UI_MISSING", "App UI is missing", "Run `mpa launch` and `mpa doctor` before asserting absence.")
         if matches:
-            raise MpaError("UNEXPECTED_TEXT", f"Unexpected text: {value}", "Read the screen with `mpa read` and fix the state before asserting absence.")
+            kind = "description" if mode == "desc-absent" else "text"
+            raise MpaError("UNEXPECTED_TEXT", f"Unexpected {kind}: {value}", "Read the screen with `mpa read` and fix the state before asserting absence.")
         return {"mode": mode, "value": value, "matches": 0, "stdout": f"Absent text: {value}", "message": f"Absent text: {value}"}
     if not matches:
         raise MpaError("SELECTOR_MISSING", f"Missing {mode}: {value}", f"Run `mpa read` to list the current texts and descriptions; `{value}` is not on screen.")
@@ -188,6 +206,25 @@ def resolve(root, mode, value, extra=()):
         if (mode == "editor-value" or not expected or node.get("password") != "true") and node.get("text") != expected:
             raise MpaError("FIELD_VALUE_MISMATCH", f"Field {value} has {node.get('text')!r}, expected {expected!r}", "Clear the field and retype the value; never retype into an uncleared field.")
         return {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": "FIELD_VALUE_VERIFIED", "message": "FIELD_VALUE_VERIFIED"}
+    if mode in ("visible", "current", "draft"):
+        if mode == "visible":
+            on_screen(node, parents)
+            if "enabled" in extra:
+                chain = node
+                while chain.get("clickable") != "true" and chain in parents:
+                    chain = parents[chain]
+                if chain.get("clickable") != "true" or node.get("enabled") == "false" or chain.get("enabled") == "false":
+                    raise MpaError("SELECTOR_DISABLED", f"Not actionable: {value}", f"`{value}` is visible but disabled; wait for it to become enabled.")
+        if mode == "current" and "disabled" in extra:
+            chain, disabled = node, node.get("enabled") == "false"
+            while not disabled and chain in parents:
+                chain = parents[chain]
+                disabled = chain.get("enabled") == "false"
+            if not disabled:
+                raise MpaError("CURRENT_ROW_ENABLED", f"Current row is enabled: {value}", "A current choice must be disabled; read the screen and check the menu state.")
+        if mode == "draft" and any((node.get("text") or "").startswith(("Current: ", "Set effort: ")) for node in root.iter("node")):
+            raise MpaError("MENU_STILL_OPEN", "A menu is still open", "Press back or wait for the menu to dismiss, then retry.")
+        return {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": f"{mode}: {value}", "message": f"{mode}: {value}"}
     if mode == "version":
         if node.get("content-desc") != f"Version {value}, open release notes":
             raise MpaError("VERSION_LABEL_MISMATCH", "Version label description does not match", "Check the installed versionName with `mpa doctor` and the expected version.")
@@ -199,7 +236,7 @@ def resolve(root, mode, value, extra=()):
         return {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": f"{mode}: {value}", "message": f"{mode}: {value}"}
     if node.get("enabled") == "false":
         raise MpaError("SELECTOR_DISABLED", "Selector is disabled", f"`{value}` is disabled on this screen; wait for it to become enabled.")
-    if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "scroll-back", "key-row"):
+    if mode not in ("field", "focused-field", "editor", "version", "checked", "unchecked", "visible", "current", "draft", "scroll-back", "key-row"):
         ancestor = node
         while ancestor.get("clickable") != "true" and ancestor in parents:
             ancestor = parents[ancestor]
@@ -276,6 +313,34 @@ def tap(mode, value, xml_path=None, reveal=False, dry_run=False, attempts=24):
                 return {"ok": True, "command": "tap", "action": "swipe", "mode": target_mode, "value": target_value, "from": list(map(int, coordinates[:2])), "to": list(map(int, coordinates[2:])), "attempts": attempt, "xml": str(current), "dry_run": True}
             adb("shell", "input", "swipe", *coordinates, "500")
     raise MpaError("JOURNEY_ACTION_UNREACHABLE", f"JOURNEY_ACTION_UNREACHABLE: {value!r}: not reachable after {attempts} scrolls in the active container", "Run `mpa read` to see the active screen, then tap a label that is inside the window or its scroll container.")
+
+
+def on_screen(node, parents):
+    found = rect(node.get("bounds"))
+    if not found:
+        label = node.get("text") or node.get("content-desc") or node.get("class")
+        raise MpaError("SELECTOR_EMPTY_BOUNDS", f"Empty bounds: {label}", "Run `mpa read` and check that node's bounds.")
+    box = found
+    current = node
+    ancestors = []
+    while current in parents:
+        current = parents[current]
+        ancestors.append(current)
+    window = next((rect(ancestor.get("bounds")) for ancestor in reversed(ancestors) if rect(ancestor.get("bounds"))), None)
+    if window:
+        box = (max(box[0], window[0]), max(box[1], window[1]), min(box[2], window[2]), min(box[3], window[3]))
+    for ancestor in ancestors:
+        if ancestor.get("visible-to-user") == "false":
+            label = node.get("text") or node.get("content-desc") or node.get("class")
+            raise MpaError("SELECTOR_HIDDEN", f"Hidden: {label}", "Run `mpa read`; the node is inside a hidden container.")
+        outer = rect(ancestor.get("bounds"))
+        if outer and ancestor.get("scrollable") == "true":
+            box = (max(box[0], outer[0]), max(box[1], outer[1]), min(box[2], outer[2]), min(box[3], outer[3]))
+    container = rect(ancestors[0].get("bounds")) if ancestors else found
+    if not (box[0] <= found[0] and found[2] <= box[2] and box[1] <= found[1] and found[3] <= box[3]):
+        label = node.get("text") or node.get("content-desc") or node.get("class")
+        raise MpaError("SELECTOR_OFFSCREEN", f"Off screen: {label}", "Scroll the row fully on screen, then assert visibility again.")
+    return found
 
 
 def rect(bounds_text):
@@ -634,6 +699,7 @@ def cleanup(fixture, dry_run):
 
 
 def read_screen(args):
+    extras = tuple(args.extra)
     if args.wait_text or args.wait_absent:
         value = args.wait_text or args.wait_absent
         def current():
@@ -650,6 +716,13 @@ def read_screen(args):
         path = Path(args.xml) if args.xml else dump_ui()
         root = load_tree(path)
         if args.select:
+            if args.select == "visible" and args.before:
+                try:
+                    resolve(load_tree(Path(args.before)), args.select, args.value, extras, args.inside)
+                except MpaError:
+                    pass
+                else:
+                    raise MpaError("SELECTOR_ALREADY_VISIBLE", f"Already visible before the scroll: {args.value}", "Scroll first, then assert; a row that was already on screen proves no new row was revealed.")
             if args.timeout:
                 def current_select():
                     return Path(args.xml) if args.xml else dump_ui()
@@ -657,7 +730,7 @@ def read_screen(args):
                 def check(path):
                     sample = load_tree(path)
                     try:
-                        found = resolve(sample, args.select, args.value, tuple(args.extra))
+                        found = resolve(sample, args.select, args.value, extras, args.inside)
                     except MpaError:
                         return None
                     return path, found
@@ -665,7 +738,7 @@ def read_screen(args):
                 path, payload = wait_for(current_select, check, args.timeout, f"{args.select}: {args.value!r}")
                 payload.update({"ok": True, "command": "read", "xml": str(path)})
                 return payload
-            payload = resolve(root, args.select, args.value, tuple(args.extra))
+            payload = resolve(root, args.select, args.value, extras, args.inside)
             payload.update({"ok": True, "command": "read", "xml": str(path)})
             return payload
     tree = [node_payload(node) for node in root.iter("node")]
@@ -674,6 +747,103 @@ def read_screen(args):
         Path(args.out).write_text(json.dumps(payload, separators=(",", ":")) + "\n")
         payload["out"] = args.out
     return payload
+
+
+def scroll_container(root, inside):
+    parents = {child: parent for parent in root.iter() for child in parent}
+    windows = [node for node in root if node.tag == "node" and node.get("visible-to-user") != "false"]
+    if not windows:
+        raise MpaError("WINDOW_MISSING", "Active window is missing", "Run `mpa read` and `mpa doctor` to see what the phone shows.")
+    window = windows[-1]
+    if inside:
+        anchors = [node for node in window.iter("node") if inside in (node.get("text"), node.get("content-desc"))]
+        if len(anchors) != 1:
+            raise MpaError("INSIDE_MISSING" if not anchors else "INSIDE_AMBIGUOUS", f"Container anchor: {inside} ({len(anchors)})", "Pass a unique label that sits inside the scrollable container.")
+        node = anchors[0]
+        while node is not window and node.get("scrollable") != "true":
+            if node not in parents:
+                break
+            node = parents[node]
+        if node.get("scrollable") != "true":
+            raise MpaError("CONTAINER_NOT_SCROLLABLE", f"Not scrollable: {inside}", "Assert the row is on screen instead of scrolling.")
+        return node
+    scrolls = [node for node in window.iter("node") if node.get("scrollable") == "true"]
+    visible = [node for node in scrolls if on_screen(node, parents)]
+    if len(visible) != 1:
+        raise MpaError("CONTAINER_AMBIGUOUS", f"Expected one visible scrollable container, found {len(visible)}", "Pass `--inside LABEL` to name the container's own label.")
+    return visible[0]
+
+
+def swipe(inside, axis, direction, xml_path, dry_run):
+    root = load_tree(Path(xml_path) if xml_path else dump_ui())
+    container = scroll_container(root, inside)
+    x1, y1, x2, y2 = rect(container.get("bounds"))
+    if axis == "vertical":
+        x = (x1 + x2) // 2
+        inset = (y2 - y1) // 5
+        forward, backward = [x, y2 - inset, x, y1 + inset], [x, y1 + inset, x, y2 - inset]
+    else:
+        y = (y1 + y2) // 2
+        inset = (x2 - x1) // 5
+        forward, backward = [x2 - inset, y, x1 + inset, y], [x1 + inset, y, x2 - inset, y]
+    plan = forward if direction == "forward" else backward
+    payload = {"ok": True, "command": "swipe", "axis": axis, "direction": direction, "from": plan[:2], "to": plan[2:], "container": rect(container.get("bounds")), "dry_run": dry_run}
+    if dry_run:
+        payload["commands"] = [ADB + " shell input swipe " + " ".join(map(str, plan)) + " 500"]
+        return payload
+    adb("shell", "input", "swipe", *plan, "500")
+    return payload
+
+
+TERMINAL_ERRORS = {
+    "ready": "Interactive Bash prompt did not appear",
+    "typed": "Typed echo did not produce exactly one TYPED_42 output line",
+    "sleep": "Typed sleep 300 did not start a real sleep process",
+    "interrupt": "Ctrl+C did not produce ^C, a fresh prompt and terminate sleep 300 within 5 seconds",
+    "history": "Up twice and Enter did not produce a second TYPED_42 output line",
+    "tab": "Tab and Enter did not list /tmp/verify_tabfile_unique.txt",
+}
+
+
+def terminal(step, evidence, session, dry_run):
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        raise MpaError("TERMINAL_NOT_ON_RUNNER", "terminal only runs on a GitHub runner", RUNNER_HINT)
+    if step not in TERMINAL_ERRORS:
+        raise MpaError("TERMINAL_STEP_UNKNOWN", f"Unknown terminal step {step!r}", "Use one of " + ", ".join(TERMINAL_ERRORS) + ".")
+    directory = Path(evidence)
+    command = ["sudo", "-u", "verifyssh", "tmux", "capture-pane", "-p", "-t", session]
+    if dry_run:
+        return {"ok": True, "command": "terminal", "step": step, "session": session, "dry_run": True, "commands": [command]}
+    directory.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + 5
+    while True:
+        pane = subprocess.check_output(command, text=True)
+        (directory / f"shell-input-{step}.txt").write_text(pane)
+        lines = pane.splitlines()
+        prompt = pane.rstrip().endswith("VERIFY_SHELL>")
+        passed = False
+        if step == "ready":
+            passed = prompt
+        elif step == "typed":
+            passed = lines.count("TYPED_42") == 1 and prompt
+        elif step in ("sleep", "interrupt"):
+            process = subprocess.run(["pgrep", "-f", "sleep 300"], capture_output=True, text=True)
+            (directory / f"shell-input-{step}-pgrep.txt").write_text(process.stdout)
+            if process.returncode not in (0, 1):
+                raise MpaError("TERMINAL_PGREP_FAILED", f"pgrep failed: {process.stderr.strip()}", "Run `pgrep -f 'sleep 300'` on the runner and check the process list.")
+            passed = process.returncode == 0 if step == "sleep" else ("^C" in pane and prompt and process.returncode == 1)
+        elif step == "history":
+            passed = lines.count("TYPED_42") == 2 and prompt
+        elif step == "tab":
+            passed = "/tmp/verify_tabfile_unique.txt" in lines and prompt
+        if passed:
+            message = f"SHELL_INPUT_{step.upper()}_OK"
+            with (directory / "shell-input-result.txt").open("a") as stream:
+                stream.write(message + "\n")
+            return {"ok": True, "command": "terminal", "step": step, "session": session, "message": message, "dry_run": False}
+        if time.monotonic() >= deadline:
+            raise MpaError("TERMINAL_STEP_FAILED", TERMINAL_ERRORS[step], "Read `shell-input-" + step + ".txt` in the evidence directory and check the terminal key presses.")
+        time.sleep(0.2)
 
 
 def hold(mode, value, xml_path, dry_run):
@@ -716,6 +886,9 @@ def build_parser():
   mpa read --select desc --value 'Session actions'
   mpa fill 'Message verify-session' /cl
   mpa hold text REPLY_BUBBLE_418
+  mpa swipe --inside 'keep this draft'
+  mpa read --select visible --value 'Add image' --extra enabled
+  mpa terminal --step ready
   mpa screenshot reader-sync
   mpa proof --name reader-sync --require-text 'Sign in to sync'
   mpa cleanup --fixture "$FIXTURE"
@@ -749,7 +922,9 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     read_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone.")
     read_parser.add_argument("--select", choices=SELECTOR_MODES, help="Answer one selector instead of printing the whole tree. With --timeout it polls until the selector matches.")
     read_parser.add_argument("--value", default="", help="Selector value for --select.")
-    read_parser.add_argument("--extra", nargs="*", default=[], help="Selector extras, for example the expected field value or scroll direction.")
+    read_parser.add_argument("--extra", nargs="*", default=[], help="Selector extras, for example the expected field value, `enabled`, `disabled` or a scroll direction.")
+    read_parser.add_argument("--inside", help="Scope the selector to the subtree of the one node with this text or description.")
+    read_parser.add_argument("--before", help="With --select visible, the earlier dump the row must have been missing from.")
     read_parser.add_argument("--wait-text", help="Poll until some text contains this value.")
     read_parser.add_argument("--wait-absent", help="Poll until no text contains this value.")
     read_parser.add_argument("--timeout", type=float, help="Seconds to keep polling (default: 30 for --wait-text and --wait-absent; --select never polls unless you pass it).")
@@ -790,6 +965,19 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     key_parser.add_argument("name", help="Key name: " + ", ".join(sorted(KEYS)) + ", or a KEYCODE_* name.")
     key_parser.add_argument("--dry-run", action="store_true", help="Print the keyevent without pressing it.")
 
+    swipe_parser = commands.add_parser("swipe", formatter_class=argparse.RawDescriptionHelpFormatter, help="Scroll the active container one step.", description="Find the one visible scrollable container (or the container named by --inside) in the active window and swipe it by a fifth of its size. A forward swipe moves towards the end of the list.", epilog="Examples:\n  mpa swipe\n  mpa swipe --axis horizontal --direction backward\n  mpa swipe --inside 'Open model picker (/model)' --dry-run --xml menu.xml")
+    swipe_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone (for replay and tests).")
+    swipe_parser.add_argument("--inside", help="Label of a node inside the container to scroll.")
+    swipe_parser.add_argument("--axis", choices=["vertical", "horizontal"], default="vertical", help="Axis to scroll along (default: vertical).")
+    swipe_parser.add_argument("--direction", choices=["forward", "backward"], default="forward", help="Direction along the axis (default: forward).")
+    swipe_parser.add_argument("--dry-run", action="store_true", help="Resolve the container and print the swipe without touching the phone.")
+
+    terminal_parser = commands.add_parser("terminal", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the terminal fallback's shell through the fixture pane.", description="Read the fixture tmux pane and assert the terminal fallback's shell state: ready prompt, typed echo, a real sleep, Ctrl+C interrupt, history recall or tab completion. GitHub runner only.", epilog="Examples:\n  mpa terminal --step ready\n  mpa terminal --step interrupt --evidence \"$EVIDENCE\" --dry-run")
+    terminal_parser.add_argument("--step", required=True, help="Check to run: " + ", ".join(TERMINAL_ERRORS) + ".")
+    terminal_parser.add_argument("--evidence", default=os.environ.get("EVIDENCE"), help="Directory for shell-input files (default: $EVIDENCE).")
+    terminal_parser.add_argument("--session", default="verify-session", help="Fixture tmux session (default: verify-session).")
+    terminal_parser.add_argument("--dry-run", action="store_true", help="Print the pane command without reading it.")
+
     legacy_parser = commands.add_parser("legacy", formatter_class=argparse.RawDescriptionHelpFormatter, help="Run the pre-CLI ui.py argument form.", description="Compatibility entry point for journeys that still call ui.py XML MODE VALUE. New journeys use read and tap.", epilog="Examples:\n  mpa legacy screen.xml desc 'Session actions'")
     legacy_parser.add_argument("arguments", nargs=argparse.REMAINDER, help="XML path, mode, value and extras.")
 
@@ -823,6 +1011,10 @@ def main(argv=None):
             payload = cleanup(args.fixture, args.dry_run)
         elif args.command == "key":
             payload = key(args.name, args.dry_run)
+        elif args.command == "swipe":
+            payload = swipe(args.inside, args.axis, args.direction, args.xml, args.dry_run)
+        elif args.command == "terminal":
+            payload = terminal(args.step, args.evidence, args.session, args.dry_run)
         elif args.command == "legacy":
             legacy(args.arguments)
             return 0
