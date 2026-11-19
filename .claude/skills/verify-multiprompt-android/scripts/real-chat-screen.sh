@@ -43,13 +43,41 @@ real_chat_cache_seed() {
     adb shell run-as "$package" wc -c "files/chat-history/$name" | tee "$EVIDENCE/real-chat-cache.txt"
 }
 
+real_chat_interleaved() {
+    local numbers
+    numbers=$(python3 - "$EVIDENCE/current.xml" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+texts = [node.get('text') or '' for node in ET.parse(sys.argv[1]).getroot().iter('node')]
+texts = [text for text in texts if text]
+prompts = [(index, text.split()[2]) for index, text in enumerate(texts) if text.startswith('Synthetic prompt ')]
+replies = [(index, text.split()[2]) for index, text in enumerate(texts) if text.startswith('Synthetic reply ')]
+for index, number in prompts:
+    answered = [position for position, reply in replies if position > index and reply == number]
+    if not answered:
+        continue
+    following = [position for position, _ in prompts if position > answered[0]]
+    if following:
+        print(number)
+        sys.exit(0)
+sys.exit(1)
+PY
+) || return 1
+    read -r real_number <<< "$numbers"
+    [[ -n "$real_number" ]]
+    real_prompt="Synthetic prompt $real_number for the phone fixture."
+    real_reply="Synthetic reply $real_number starts the fixture turn."
+    real_next_prompt="Synthetic prompt $((real_number - 1)) for the phone fixture."
+    python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$real_prompt" > /dev/null &&
+        python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$real_reply" > /dev/null &&
+        python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$real_next_prompt" > /dev/null
+}
+
 real_chat_screen() {
-    local reply_newest user_newest user_middle reply_middle user_after stale_first neighbour attempt
+    local reply_newest user_newest stale_first neighbour attempt real_prompt real_reply real_next_prompt real_number
     reply_newest=$(real_chat_marker reply_newest)
     user_newest=$(real_chat_marker user_newest)
-    user_middle=$(real_chat_marker user_middle)
-    reply_middle=$(real_chat_marker reply_middle)
-    user_after=$(real_chat_marker user_after)
     stale_first=$(real_chat_marker stale_first)
     neighbour=$(real_chat_marker neighbour)
     real_chat_cache_seed
@@ -69,20 +97,21 @@ real_chat_screen() {
     shot real-chat-open
     python3 "$scripts/mpa" proof --name real-chat-open --xml "$EVIDENCE/$(printf '%02d' "$step")-real-chat-open.xml" \
         --require-text "$reply_newest" --require-text "$user_newest" --order "$user_newest" --order "$reply_newest"
-    for attempt in {1..16}; do
-        dump_ui
-        if python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$reply_middle" > /dev/null 2>&1 &&
-            python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$user_middle" > /dev/null 2>&1 &&
-            python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select visible --value "$user_after" > /dev/null 2>&1; then
-            break
-        fi
+    for attempt in {1..10}; do
         real_chat_scroll_back "$user_newest"
         sleep 1
+        dump_ui
+        if python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value "$user_newest" > /dev/null 2>&1 &&
+            real_chat_interleaved; then
+            break
+        fi
     done
-    wait_for_text "$reply_middle"
-    shot real-chat-middle
-    python3 "$scripts/mpa" proof --name real-chat-middle --xml "$EVIDENCE/$(printf '%02d' "$step")-real-chat-middle.xml" \
-        --order "$user_middle" --order "$reply_middle" --order "$user_after"
+    python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value "$user_newest"
+    real_chat_interleaved
+    shot real-chat-scrolled
+    python3 "$scripts/mpa" proof --name real-chat-scrolled --xml "$EVIDENCE/$(printf '%02d' "$step")-real-chat-scrolled.xml" \
+        --require-text "$real_prompt" --require-text "$real_reply" --require-text "$real_next_prompt" \
+        --order "$real_prompt" --order "$real_reply" --order "$real_next_prompt"
     scroll_to_newest
     wait_for_text "$reply_newest"
     wait_for_text "$user_newest"
