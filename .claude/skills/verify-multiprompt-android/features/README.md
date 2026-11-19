@@ -64,8 +64,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `reader.stop-while-working`. Runner: `verify.yml` (debug).
 - [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
-- [Sessions](sessions.md): Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 42 rows render.
-  - Outcomes: `inbox.search`, `legacy.igsh-414`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (1500 characters), `seed-check.json` (1500 characters), `seed-search.xml` (2000 characters), `seed-deep-target.xml` (1000 characters), `seed-deep-choice.json` (1000 characters), `row-long-press-actions.xml` (1500 characters), `start-agent-picker.xml` (1500 characters), `start-agent-back-to-folder.xml` (1000 characters).
+- [Sessions](sessions.md): Default seed readback: 45 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 45 rows render.
+  - Outcomes: `inbox.search`, `legacy.igsh-414`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (1500 characters), `seed-check.json` (1200 characters), `seed-search.xml` (2000 characters), `seed-deep-target.xml` (1000 characters), `seed-deep-choice.json` (900 characters), `search-keyboard.json` (1200 characters), `row-long-press-actions.xml` (1500 characters), `start-agent-picker.xml` (1400 characters).
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
   - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.
@@ -110,6 +110,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `reader.host-restart`. Runner: `verify.yml` (debug). Priority evidence: `host-restart-state.json` (2500 characters), `host-restart-host.json` (6000 characters), `host-restart-processes.txt` (1000 characters).
 - [Inbox folder bar](folder-bar.md): Selected last/middle folders remain fully visible on selection and restart; overflow fades over a transparent bar. SOFT-2706.
   - Outcomes: `inbox.folder-bar`. Runner: `verify.yml` (debug). Priority evidence: `folder-bar-reopened.json` (1800 characters), `folder-bar-middle-reopened.json` (1400 characters), `folder-bar-all.json` (1400 characters), `folder-bar-proof.txt` (200 characters).
+- [Chats that compacted, fresh-started or resumed](chat-shapes.md): A compacted, a resumed and a fresh-started chat each show the transcript of their live Claude session, never the stale pre-compaction one. SOFT-2715.
+  - Outcomes: `chat.shapes`. Runner: `verify.yml` (debug). Priority evidence: `compacted-chat.json` (700 characters), `compacted-chat-proof.txt` (700 characters), `resumed-chat.json` (700 characters), `resumed-chat-proof.txt` (700 characters), `fresh-chat.json` (700 characters), `fresh-chat-proof.txt` (700 characters), `pre-425-reader.txt` (1500 characters), `seed-counts.json` (2000 characters).
 
 ## Initial coverage gaps
 

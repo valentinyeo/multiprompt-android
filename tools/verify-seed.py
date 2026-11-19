@@ -8,12 +8,30 @@ import xml.etree.ElementTree as ET
 BULK_NAMES = [f'pin-{index:02d}' for index in range(12)] + [f'row-{index:02d}' for index in range(28)]
 LONG_SESSION = 'cl-long-chat'
 LONG_SID = '11560000-0000-4000-8000-000000001156'
+SHAPES_SCRIPT = 'chat-shapes-fixture.py'
+SHAPES_MANIFEST = 'chat-shapes.json'
+LIVE_PREFIX = 'live-'
+
+
+def shapes(home, names):
+    script = home / SHAPES_SCRIPT
+    assert script.is_file(), 'SEED_SHAPES_MISSING'
+    manifest = json.loads(subprocess.check_output([sys.executable, '-B', str(script), 'check', '--home', str(home)], text=True))
+    recorded = []
+    for item in manifest['shapes']:
+        assert item['session'] in names, 'SEED_SHAPES_SESSION_MISSING'
+        option = subprocess.check_output(['tmux', 'show-options', '-t', item['session'], '-v', '@mp_host_sid'], text=True).strip()
+        assert option == item['sid'], 'SEED_SHAPES_IDENTITY'
+        recorded.append(dict(shape=item['shape'], session=item['session'], sid=item['sid'], native=item['native'],
+                             latest=item['latest'], stale=item['stale'], transcript=item['transcript']))
+    return recorded
 
 
 def inventory(home):
     names = sorted(subprocess.check_output(['tmux', 'list-sessions', '-F', '#{session_name}'], text=True).splitlines())
     assert len(names) >= 40, 'SEED_INBOX_TOO_SMALL'
     assert set(BULK_NAMES + [LONG_SESSION]) <= set(names), 'SEED_SESSIONS_MISSING'
+    live_shapes = shapes(home, names)
     source = json.loads((home / 'long-chat-source.json').read_text())
     path = Path(source['path'])
     assert path == home / '.claude/projects' / str(home / 'long-chat-proof').replace('/', '-') / (LONG_SID + '.jsonl'), 'SEED_TRANSCRIPT_IDENTITY'
@@ -23,7 +41,7 @@ def inventory(home):
     assert size > 18 * 1024 * 1024, 'SEED_TRANSCRIPT_TOO_SMALL'
     assert rows == 1882, 'SEED_TRANSCRIPT_ROWS'
     assert (source['bytes'], source['rows'], source['sid']) == (size, rows, LONG_SID), 'SEED_SOURCE_MISMATCH'
-    return dict(sessions=len(names), bulk_sessions=len(BULK_NAMES), session_names=names,
+    return dict(sessions=len(names), bulk_sessions=len(BULK_NAMES), session_names=names, shapes=live_shapes,
                 transcript=dict(session=LONG_SESSION, bytes=size, rows=rows, sid=LONG_SID, path=str(path), latest=source['latest']))
 
 
@@ -41,7 +59,8 @@ def target(evidence):
     root = ET.parse(pages[0]).getroot()
     present = {value for node in root.iter('node') for value in
                (node.get('text', ''), node.get('content-desc', '').removeprefix('Robot '))}
-    name = next((name for name in counts['session_names'] if name not in present), None)
+    name = next((name for name in counts['session_names']
+                 if name not in present and not name.startswith(LIVE_PREFIX)), None)
     if name is None:
         raise ValueError('SEED_DEEP_SETUP_FAILED: every seeded session is present in the initial dump; no off-screen target')
     return dict(name=name, description='Robot ' + name, reader_label='Message ' + name,

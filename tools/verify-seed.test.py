@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,7 @@ def load(name, path):
 
 seed = load('verify_seed', ROOT / 'tools/verify-seed.py')
 long_chat = load('long_chat', ROOT / 'tools/long-chat/fixture.py')
+chat_shapes = load('chat_shapes', ROOT / 'tools/chat-shapes/fixture.py')
 
 
 class VerifySeedTest(unittest.TestCase):
@@ -34,8 +36,22 @@ class VerifySeedTest(unittest.TestCase):
         self.source = self.home / 'long-chat-source.json'
         self.source.write_text(json.dumps(dict(path=str(self.transcript), bytes=self.transcript.stat().st_size,
                                               rows=1882, sid=long_chat.SID, latest=long_chat.LATEST)))
-        self.names = ['verify-session', 'cl-long-chat'] + seed.BULK_NAMES
-        self.tmux = patch.object(seed.subprocess, 'check_output', side_effect=lambda *args, **kwargs: '\n'.join(self.names) + '\n')
+        shutil.copyfile(ROOT / 'tools/chat-shapes/fixture.py', self.home / 'chat-shapes-fixture.py')
+        self.manifest = chat_shapes.create(self.home)
+        self.sids = {item['session']: item['sid'] for item in self.manifest['shapes']}
+        self.names = ['verify-session', 'cl-long-chat'] + seed.BULK_NAMES + sorted(self.sids)
+
+        real = subprocess.check_output
+
+        def tmux(*args, **kwargs):
+            command = args[0]
+            if command[0] != 'tmux':
+                return real(*args, **kwargs)
+            if command[1] == 'show-options':
+                return self.sids[command[3]] + '\n'
+            return '\n'.join(self.names) + '\n'
+
+        self.tmux = patch.object(seed.subprocess, 'check_output', side_effect=tmux)
         self.tmux.start()
         self.addCleanup(self.tmux.stop)
         self.evidence = self.home / 'seed-counts.json'
@@ -43,7 +59,7 @@ class VerifySeedTest(unittest.TestCase):
 
     def test_records_measured_counts_and_rechecks_the_evidence(self):
         counts = seed.check(self.home, self.evidence)
-        self.assertEqual(42, counts['sessions'])
+        self.assertEqual(45, counts['sessions'])
         self.assertEqual(40, counts['bulk_sessions'])
         self.assertEqual(sorted(self.names), counts['session_names'])
         self.assertGreater(counts['transcript']['bytes'], 18 * 1024 * 1024)
@@ -130,14 +146,15 @@ class VerifySeedTest(unittest.TestCase):
         binary = self.home / 'bin'
         binary.mkdir()
         tmux = binary / 'tmux'
-        tmux.write_text('#!/bin/sh\nprintf "%s\\n" ' + shlex.join(self.names) + '\n')
+        cases = ' '.join(f'{name}) printf "%s\\n" {sid} ;;' for name, sid in sorted(self.sids.items()))
+        tmux.write_text('#!/bin/sh\ncase "$3" in ' + cases + f' *) printf "%s\\n" {shlex.join(self.names)} ;; esac\n')
         tmux.chmod(0o755)
         command = next(line for line in (SCRIPTS / 'drive.sh').read_text().splitlines() if 'verify-seed.py check' in line)
         command = command.replace('-u verifyssh', '-u nobody').replace('/home/verifyssh', str(self.home))
         command = command.replace('env HOME=', 'env PATH=' + shlex.quote(str(binary) + os.pathsep + os.environ['PATH']) + ' HOME=')
         result = subprocess.run(['bash', '-euc', command], env=dict(os.environ, EVIDENCE=str(private)), capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(42, json.loads(result.stdout)['sessions'])
+        self.assertEqual(45, json.loads(result.stdout)['sessions'])
 
     def test_shared_seed_starts_real_sessions_and_a_discoverable_long_chat(self):
         self.tmux.stop()
@@ -150,6 +167,7 @@ class VerifySeedTest(unittest.TestCase):
         wrapper.chmod(0o755)
         (self.home / 'console.py').write_bytes((SCRIPTS / 'console.py').read_bytes())
         (self.home / 'long-chat-fixture.py').write_bytes((ROOT / 'tools/long-chat/fixture.py').read_bytes())
+        (self.home / 'chat-shapes-fixture.py').write_bytes((ROOT / 'tools/chat-shapes/fixture.py').read_bytes())
         (self.home / 'long-chat-bin').mkdir()
         (self.home / 'long-chat-bin/claude').symlink_to(sys.executable)
         self.source.unlink()
@@ -166,12 +184,18 @@ class VerifySeedTest(unittest.TestCase):
                 self.evidence.write_text(recorded)
                 counts = json.loads(subprocess.check_output(command + ['check', str(self.evidence)], text=True))
                 self.assertEqual(json.loads(recorded), counts)
-                self.assertEqual(42, counts['sessions'])
+                self.assertEqual(45, counts['sessions'])
                 self.assertEqual(40, len((self.home / 'pins-names.txt').read_text().splitlines()))
                 for name in seed.BULK_NAMES:
                     self.assertEqual(name, subprocess.check_output(['tmux', 'display-message', '-p', '-t', f'={name}:', '#{window_name}'], text=True).strip())
                     self.assertEqual('off', subprocess.check_output(['tmux', 'show-window-options', '-t', f'={name}:', '-v', 'automatic-rename'], text=True).strip())
                 self.assertEqual('cl-long-chat|claude', subprocess.check_output(['tmux', 'display-message', '-p', '-t', '=cl-long-chat:', '#{window_name}|#{pane_current_command}'], text=True).strip())
+                self.assertEqual({'compacted', 'fresh', 'resumed'}, {item['shape'] for item in counts['shapes']})
+                for item in counts['shapes']:
+                    target = '=' + item['session'] + ':'
+                    self.assertEqual('sleep', subprocess.check_output(['tmux', 'display-message', '-p', '-t', target, '#{pane_current_command}'], text=True).strip())
+                    self.assertEqual(item['sid'], subprocess.check_output(['tmux', 'show-options', '-t', item['session'], '-v', '@mp_host_sid'], text=True).strip())
+                    self.assertEqual(Path(item['transcript']), Path(chat_shapes.paths(self.home, chat_shapes.shape(item['shape']))['transcript']))
                 reader = load('seed_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
                 with patch.object(reader, 'HOME', self.home):
                     sid, transcript = reader.resolve_tmux_agent('claude', 'cl-long-chat')

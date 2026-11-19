@@ -523,7 +523,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 42 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 42 rows render.",
+      "description": "Default seed readback: 45 real tmux sessions and a large transcript, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 45 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -537,13 +537,13 @@
       ],
       "evidence": {
         "seed-counts.json": 1500,
-        "seed-check.json": 1500,
+        "seed-check.json": 1200,
         "seed-search.xml": 2000,
         "seed-deep-target.xml": 1000,
-        "seed-deep-choice.json": 1000,
+        "seed-deep-choice.json": 900,
+        "search-keyboard.json": 1200,
         "row-long-press-actions.xml": 1500,
-        "start-agent-picker.xml": 1500,
-        "start-agent-back-to-folder.xml": 1000
+        "start-agent-picker.xml": 1400
       }
     },
     "settings-navigation.md": {
@@ -1055,6 +1055,33 @@
         "folder-bar-middle-reopened.json": 1400,
         "folder-bar-all.json": 1400,
         "folder-bar-proof.txt": 200
+      }
+    },
+    "chat-shapes.md": {
+      "name": "Chats that compacted, fresh-started or resumed",
+      "description": "A compacted, a resumed and a fresh-started chat each show the transcript of their live Claude session, never the stale pre-compaction one. SOFT-2715.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/chat-shapes-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "chat.shapes"
+      ],
+      "evidence": {
+        "compacted-chat.json": 700,
+        "compacted-chat-proof.txt": 700,
+        "resumed-chat.json": 700,
+        "resumed-chat-proof.txt": 700,
+        "fresh-chat.json": 700,
+        "fresh-chat-proof.txt": 700,
+        "pre-425-reader.txt": 1500,
+        "seed-counts.json": 2000
       }
     }
   },
@@ -1689,6 +1716,25 @@
         "result": {
           "file": "folder-bar-reopened.json",
           "quote": "\"folder\": \"Folder 09\""
+        }
+      }
+    },
+    "chat.shapes": {
+      "description": "A desktop-hosted Claude chat whose session id changed after compaction or after resuming an older session shows that live transcript on the phone, not the stale pre-compaction file or an empty history.",
+      "journey": "chat-shapes.md",
+      "sideEffect": false,
+      "match": [],
+      "paths": [
+        "^tools/chat-shapes/"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa tap text live-compacted-2715"
+        },
+        "result": {
+          "file": "compacted-chat.json",
+          "quote": "COMPACTED_AFTER_2715"
         }
       }
     }

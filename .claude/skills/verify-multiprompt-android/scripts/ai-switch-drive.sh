@@ -174,7 +174,7 @@ with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
     submitted = db.execute('SELECT created FROM shared_messages WHERE id=?', (receipts[3]['id'],)).fetchone()[0] * 1000
     assert submitted < completed, (submitted, completed)
 configs = [json.loads(path.read_text()) for path in (root / 'agent-host').glob('*.config.json')]
-assert [config['provider'] for config in configs if config['enabled']] == ['claude'], configs
+assert [config['provider'] for config in configs if config['enabled'] and config['tmux'] == 'live-verify-session'] == ['claude'], configs
 print(json.dumps(dict(switches=2, followup_submitted_while_streaming=True, submitted=submitted, completed=completed, receipts=receipts[1:4] + receipts[5:])))
 PYSTRESSHOST
 python3 - "$EVIDENCE" <<'PYSTRESSUI'
