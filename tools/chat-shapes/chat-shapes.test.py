@@ -81,6 +81,8 @@ class ChatShapesTest(unittest.TestCase):
 
     def test_reader_before_the_live_session_fix_reads_the_wrong_transcript(self):
         shapes = resolved(probe.probe(self.pinned_reader(), self.home))
+        print('PRE_425_READER_2715 ' + json.dumps({name: shape['transcript'] and shape['visible'][-1:] for name, shape in shapes.items()}),
+              flush=True)
         self.assertEqual(fixture.shape('compacted')['sid'] + '.jsonl', shapes['compacted']['transcript'])
         self.assertEqual('COMPACTED_BEFORE_2715', shapes['compacted']['visible'][-1])
         self.assertNotIn('COMPACTED_AFTER_2715', shapes['compacted']['visible'])
