@@ -60,6 +60,26 @@ if [[ "${VERIFY_FEATURE:-}" == folder-bar.md && "${BREAK_IT_MODE:-}" == true ]];
 fi
 if [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
     source "$(dirname "$0")/host-restart-setup.sh"
+elif [[ "${VERIFY_FEATURE:-}" == reader-long-pane.md ]]; then
+    fixture_session=live-long-pane-2840
+    sudo install -m 755 tools/long-pane/fixture.py /home/verifyssh/long-pane-fixture.py
+    sudo -u verifyssh env HOME=/home/verifyssh python3 -B /home/verifyssh/long-pane-fixture.py seed > "$EVIDENCE/long-pane-seed.json"
+    sudo -u verifyssh tmux start-server
+    sudo -u verifyssh tmux set-option -g history-limit 8000
+    sudo -u verifyssh tmux new-session -d -s live-long-pane-2840 -x 98 -y 40 'cat /home/verifyssh/long-pane-2840.txt; exec sleep infinity'
+    sudo -u verifyssh tmux set-window-option -t =live-long-pane-2840: automatic-rename off
+    sudo -u verifyssh tmux rename-window -t =live-long-pane-2840: live-long-pane-2840
+    ready=false
+    for attempt in {1..30}; do
+        sudo -u verifyssh tmux capture-pane -p -J -S -5000 -t =live-long-pane-2840 > "$EVIDENCE/long-pane-capture.txt" 2>/dev/null || true
+        if grep -qx LONG_PANE_TAIL_2840 "$EVIDENCE/long-pane-capture.txt" &&
+            [[ $(sudo -u verifyssh tmux display-message -p -t =live-long-pane-2840 '#{alternate_on}') == 0 ]]; then ready=true; break; fi
+        sleep 1
+    done
+    if [[ "$ready" != true ]]; then
+        cat "$EVIDENCE/long-pane-capture.txt"
+        exit 1
+    fi
 elif [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
     source "$(dirname "$0")/remote-control-setup.sh"
 elif [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
