@@ -8,6 +8,7 @@ import threading
 import time
 import xml.etree.ElementTree as ET
 
+import catchup_frames
 from PIL import Image, ImageDraw, ImageFont
 
 assert os.environ.get('GITHUB_ACTIONS') == 'true'
@@ -42,16 +43,20 @@ def record_shell():
 
 def sample_screens():
     try:
+        start_raw = subprocess.check_output(['adb', 'exec-out', 'screencap'], timeout=15)
+        start_frame = catchup_frames.decode_screencap(start_raw)
+        catchup_frames.write_png(start_raw, screenshots / 'full-start.png')
+        half = catchup_frames.bottom_slice(start_frame)
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             began = time.monotonic()
             wall_began = time.time()
             sampler_started.set()
-            image = subprocess.check_output(['adb', 'exec-out', 'screencap', '-p'], timeout=5)
+            image = subprocess.check_output(['adb', 'exec-out', 'sh', '-c', half.command], timeout=10)
             ended = time.monotonic()
             wall_ended = time.time()
             path = screenshots / f'{len(captures):03d}.png'
-            path.write_bytes(image)
+            catchup_frames.write_slice_png(image, start_frame.width, half.rows, path)
             captures.append(dict(file=str(path.relative_to(root)), startMonotonic=began, endMonotonic=ended,
                                  startWall=wall_began, endWall=wall_ended))
             time.sleep(max(0, min(deadline - time.monotonic(), 0.5 - (time.monotonic() - began))))
@@ -138,8 +143,9 @@ finally:
             if capture['ocrPositive']:
                 shutil.copyfile(root / capture['file'], root / 'catchup-visible.png')
                 result['capture'] = capture
+                result['captureSeconds'] = capture['endMonotonic'] - capture['startMonotonic']
                 if reply is not None:
-                    result['replyLatencySeconds'] = capture['endMonotonic'] - reply['monotonic']
+                    result['replyLatencySeconds'] = catchup_frames.reply_latency_seconds(capture, reply['monotonic'])
                 break
     finally:
         (root / 'catchup-samples.json').write_text(json.dumps(samples, indent=2))
@@ -164,10 +170,7 @@ finally:
     if errors:
         raise RuntimeError(f'BACKGROUND_WORKER_FAILED: {errors}')
 
-latency = result['replyLatencySeconds']
-assert latency is not None, 'CHAT_VISIBILITY_INCONCLUSIVE: no OCR-positive screenshot or reply event'
-assert latency >= 0, 'OCR_POSITIVE_BEFORE_REPLY_EVENT'
-assert latency <= 3, f'CHAT_VISIBILITY_INCONCLUSIVE: upper bound {latency:.3f}s exceeds 3s'
+catchup_frames.assert_reply_latency(result['replyLatencySeconds'])
 result['status'] = 'passed'
 (root / 'catchup-result.json').write_text(json.dumps(result, indent=2))
 print('ANDROID_CHAT_CAUGHT_UP_WITHIN_3_SECONDS_FOR_120_SECONDS', result)
