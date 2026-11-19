@@ -27,6 +27,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.SshClient
 import org.json.JSONObject
 
+private const val FILL_BACK_PAGES = 8
+
 data class ChatHistoryState(
     val history: ChatHistory = ChatHistory(),
     val loaded: Boolean = false,
@@ -358,6 +360,8 @@ class ChatHistoryConnection(
                             var replica: MessageReplica? = null
                             var replicaSid: String? = null
                             var wasOlder = false
+                            var fillBack: Long? = null
+                            var fillBackPages = 0
                             val checked = mutableSetOf<String>()
                             var engine: Pair<Long, String>? = null
                             poll@ while (isActive) {
@@ -372,12 +376,17 @@ class ChatHistoryConnection(
                                 var caughtUp = true
                                 resyncing = resyncing ?: resyncs.tryReceive().getOrNull()
                                 val current = if (resyncing != null) _state.value.history.resetSeed() else _state.value.history
-                                val before = if (nearTop && !wasOlder && !current.more) current.start else 0
+                                val before = fillBack ?: if (nearTop && !wasOlder && !current.more && current.start > 0) current.start else 0
                                 requestId++
                                 val page = ChatHistoryProtocol.parse(exchange(ChatHistoryProtocol.request(requestId, identity,
                                     if (resyncing != null) current.copy(sid = "") else current, before, if (provider == null) deliveryIds else emptyList(), held = provider == null)), requestId, identity)
                                     ?: error("History unavailable")
-                                if (generation != historyGeneration) { replica = null; continue@poll }
+                                if (generation != historyGeneration) {
+                                    replica = null
+                                    fillBack = null
+                                    fillBackPages = 0
+                                    continue@poll
+                                }
                                 val next = current.apply(page)
                                 if (replicaSid != page.sid) {
                                     replica = null
@@ -541,6 +550,11 @@ class ChatHistoryConnection(
                                     }
                                 }
                                 if (!published) { replica = null; continue@poll }
+                                fillBack = when {
+                                    next.rows.isNotEmpty() -> { fillBackPages = 0; null }
+                                    page.inode != 0L && next.start > 0 && fillBackPages < FILL_BACK_PAGES -> { fillBackPages++; next.start }
+                                    else -> null
+                                }
                                 resyncing?.complete(Unit)
                                 resyncing = null
                                 retryDelay = ReconnectBackoff.INITIAL_MS
@@ -651,7 +665,7 @@ class ChatHistoryConnection(
                                     activeCommand = null
                                     if (replica == null) break
                                 }
-                                if (!next.more && !(nearTop && next.start > 0)) withTimeoutOrNull(if (awaitingMessages) 250L else 2_000L) { wake.receive() }
+                                if (fillBack == null && !next.more && !(nearTop && next.start > 0)) withTimeoutOrNull(if (awaitingMessages) 250L else 2_000L) { wake.receive() }
                             }
                     }
                 } catch (failure: Exception) {
