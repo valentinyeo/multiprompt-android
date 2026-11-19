@@ -51,7 +51,7 @@ class ChatShapesTest(unittest.TestCase):
         return path
 
     def test_seed_copies_real_shape_and_only_synthetic_text(self):
-        self.assertEqual(['compacted', 'fresh', 'resumed'], [item['shape'] for item in self.manifest['shapes']])
+        self.assertEqual(['compacted', 'fresh', 'resumed', 'mirror'], [item['shape'] for item in self.manifest['shapes']])
         self.assertEqual(fixture.check(self.home), self.manifest)
         for item in self.manifest['shapes']:
             for key in ('transcript', 'own_transcript', 'neighbour_transcript'):
@@ -62,7 +62,10 @@ class ChatShapesTest(unittest.TestCase):
                 self.assertLess(path.stat().st_size, 8192, path)
                 for row in path.read_text().splitlines():
                     text = ''.join(part.get('text', '') for part in json.loads(row)['message']['content'])
-                    self.assertTrue(text.endswith('_2715'), text)
+                    self.assertTrue(text.endswith('_2715') or text.endswith('_2779'), text)
+        mirror = [item for item in self.manifest['shapes'] if item['shape'] == 'mirror'][0]
+        self.assertGreater(mirror['mirror_bytes'], 2_400_000)
+        self.assertEqual([], fixture.mirror_tail_visible(mirror['mirror']))
         self.assertEqual(fixture.host_key('c02715c0-0000-4000-8000-000000002715'),
                          Path(self.manifest['shapes'][0]['config']).name.removesuffix('.config.json'))
 
@@ -106,7 +109,7 @@ class ChatShapesTest(unittest.TestCase):
         environment = dict(os.environ, GITHUB_ACTIONS='true', HOME=str(self.home))
         with patch.dict(os.environ, environment, clear=True):
             payload = mpa.seed('verify-session', True)
-        self.assertEqual(['live-compacted-2715', 'live-fresh-2715', 'live-resumed-2715'], payload['shapes'])
+        self.assertEqual(['live-compacted-2715', 'live-fresh-2715', 'live-resumed-2715', 'live-mirror-2779'], payload['shapes'])
         commands = [' '.join(str(part) for part in command) for command in payload['commands']]
         for shape in fixture.SHAPES:
             session = [command for command in commands if f'-s {shape["session"]} ' in command]
