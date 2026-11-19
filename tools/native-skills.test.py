@@ -134,6 +134,56 @@ fi
         self.assertEqual(result.returncode, 0)
         self.assertIn("null root node", (self.home / "current.xml").read_text())
 
+    def device_chain(self):
+        device = self.home / "device-bin"
+        device.mkdir()
+        umap = 'target=${2//\\/sdcard/$EVIDENCE}'
+        catmap = 'for arg in "$@"; do last=$arg; done'
+        self.write(device / "uiautomator", f"""#!/usr/bin/env bash
+{umap}
+n=$(cat "$EVIDENCE/attempts")
+if (( n >= 2 )); then printf '<hierarchy><node text="fresh" /></hierarchy>' > "$target"; fi
+exit 0
+""").chmod(0o755)
+        self.write(device / "cat", f"""#!/usr/bin/env bash
+{catmap}
+exec /bin/cat "${{last//\\/sdcard/$EVIDENCE}}"
+""").chmod(0o755)
+        adb = self.write(self.home / "adb", """#!/usr/bin/env bash
+if [[ "$1" == exec-out ]]; then
+    n=$(cat "$EVIDENCE/attempts")
+    echo "$((n + 1))" > "$EVIDENCE/attempts"
+    exec /bin/sh -c "$4"
+fi
+exit 1
+""")
+        adb.chmod(0o755)
+        return device
+
+    def test_dump_ui_retries_when_the_device_chain_writes_no_file(self):
+        function = "dump_ui() {" + DRIVER.read_text().split("dump_ui() {", 1)[1].split("\nshot() {", 1)[0]
+        device = self.device_chain()
+        (device / "uiautomator").write_text("#!/usr/bin/env bash\nexit 1\n")
+        (device / "uiautomator").chmod(0o755)
+        self.write(self.home / "attempts", "0")
+        self.write(self.home / "current.xml", "stale")
+        env = dict(os.environ, EVIDENCE=str(self.home), PATH=f"{self.home}:{device}:{os.environ['PATH']}")
+        result = subprocess.run(["bash", "-c", function + "\ndump_ui"], env=env, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.home / "attempts").read_text().strip(), "3")
+        self.assertFalse((self.home / "current.xml").exists())
+
+    def test_dump_ui_saves_the_hierarchy_after_a_retried_read(self):
+        function = "dump_ui() {" + DRIVER.read_text().split("dump_ui() {", 1)[1].split("\nshot() {", 1)[0]
+        device = self.device_chain()
+        self.write(self.home / "attempts", "0")
+        self.write(self.home / "current.xml", "stale")
+        env = dict(os.environ, EVIDENCE=str(self.home), PATH=f"{self.home}:{device}:{os.environ['PATH']}")
+        result = subprocess.run(["bash", "-c", function + "\ndump_ui"], env=env, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.home / "attempts").read_text().strip(), "2")
+        self.assertIn('<node text="fresh" />', (self.home / "current.xml").read_text())
+
     def test_relaunch_waits_for_trust_dialog_or_default_inbox(self):
         function = "relaunch_app() {" + DRIVER.read_text().split("relaunch_app() {", 1)[1].split("refresh_inbox() {", 1)[0]
         for screen, arguments in (("Inbox", []), ("Trust Verify?", ["Trust Verify?"]), ("Inbox", ["Inbox"])):

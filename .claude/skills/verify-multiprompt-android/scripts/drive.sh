@@ -32,7 +32,7 @@ dump_ui() {
     local attempt output
     rm -f "$EVIDENCE/current.xml"
     for attempt in 1 2 3; do
-        output=$(timeout 30s adb exec-out sh -c 'rm -f /sdcard/verify-ui.xml; uiautomator dump /sdcard/verify-ui.xml >/dev/null 2>&1; cat /sdcard/verify-ui.xml 2>/dev/null' 2>/dev/null) || return 1
+        output=$(timeout 30s adb exec-out sh -c 'rm -f /sdcard/verify-ui.xml; uiautomator dump /sdcard/verify-ui.xml >/dev/null 2>&1; cat /sdcard/verify-ui.xml 2>/dev/null; exit 0' 2>/dev/null) || return 1
         if [[ "$output" != *"<hierarchy"* ]]; then
             printf 'UI dump attempt %s returned no hierarchy\n' "$attempt" >&2
             continue
