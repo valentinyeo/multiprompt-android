@@ -118,6 +118,14 @@ def advance_queue():
         reader.message_store_request(dict(op='message_dispatch', message_protocol=1, provider='claude', sid=SID, tmux='verify-session'))
 
 
+def fail_messages():
+    if reader is None:
+        return
+    with closing(reader.message_store_db('verify-session')) as db, db:
+        db.execute("UPDATE shared_messages SET deadline=1 WHERE provider='claude' AND sid=? AND state IN ('queued','sent')", (SID,))
+        reader.message_expire(db, 'claude', SID)
+
+
 redraw()
 while True:
     advance_queue()
@@ -148,9 +156,7 @@ while True:
             elif event in ('marker:BEFORE_CONSUMPTION_MARKER', 'marker:UNCERTAIN_MARKER_1', 'marker:UNCERTAIN_MARKER_2'):
                 reply(event.partition(':')[2])
             elif event == 'fail-messages' and reader is not None:
-                with closing(reader.message_store_db('verify-session')) as db, db:
-                    db.execute("UPDATE shared_messages SET deadline=1 WHERE provider='claude' AND sid=? AND state IN ('queued','sent')", (SID,))
-                reader.message_poll('verify-session', 'claude', SID)
+                fail_messages()
             elif event == 'clear-transcript':
                 replacement = TRANSCRIPT.with_name(SID + '.replacement')
                 replacement.write_text(''.join(json.dumps(row) + '\n' for row in (
