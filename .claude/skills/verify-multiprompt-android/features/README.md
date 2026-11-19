@@ -112,6 +112,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `inbox.folder-bar`. Runner: `verify.yml` (debug). Priority evidence: `folder-bar-reopened.json` (1800 characters), `folder-bar-middle-reopened.json` (1400 characters), `folder-bar-all.json` (1400 characters), `folder-bar-proof.txt` (200 characters).
 - [Chats that compacted, fresh-started or resumed](chat-shapes.md): A compacted, a resumed and a fresh-started chat each show the transcript of their live Claude session, never the stale pre-compaction one. SOFT-2715.
   - Outcomes: `chat.shapes`. Runner: `verify.yml` (debug). Priority evidence: `compacted-chat.json` (700 characters), `compacted-chat-proof.txt` (700 characters), `resumed-chat.json` (700 characters), `resumed-chat-proof.txt` (700 characters), `fresh-chat.json` (700 characters), `fresh-chat-proof.txt` (700 characters), `pre-425-reader.txt` (1500 characters), `seed-counts.json` (3000 characters).
+- [Crash report for every app exit](crash-report.md): signs in through the local account fixture, plants uncaught exception, native crash, system kill and ANR exits, relaunches and requires one uploaded crash report per exit with a summary naming it.
+  - Outcomes: `crash-report.exits`. Runner: `verify.yml` (debug). Priority evidence: `crash-reports-received.txt` (1200 characters), `crash-exit-summaries.json` (300 characters), `crash-exits.txt` (300 characters).
 
 ## Initial coverage gaps
 

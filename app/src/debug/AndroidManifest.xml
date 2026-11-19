@@ -5,5 +5,15 @@
             android:name=".DebugCrashActivity"
             android:exported="true"
             android:permission="android.permission.DUMP" />
+        <receiver
+            android:name=".DebugExitReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="dev.multiprompt.companion.debug.ANR" />
+                <action android:name="dev.multiprompt.companion.debug.NATIVE" />
+                <action android:name="dev.multiprompt.companion.debug.THROW" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
