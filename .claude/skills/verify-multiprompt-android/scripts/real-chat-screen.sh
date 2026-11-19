@@ -53,8 +53,7 @@ real_chat_screen() {
     stale_first=$(real_chat_marker stale_first)
     neighbour=$(real_chat_marker neighbour)
     real_chat_cache_seed
-    adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity" > /dev/null
-    wait_for_text Inbox
+    relaunch_app Inbox
     tap_text All
     wait_for_text Inbox
     tap_text "$real_session"
