@@ -148,7 +148,7 @@ echo "$*" >> "$ANDROID_HOME/calls"
             self.assertIn('ANDROID_IMAGE_READY', result.stdout)
             self.assertFalse((path / 'calls').exists())
 
-    def run_packages(self, cached, already=None):
+    def run_packages(self, cached, already=None, extra_env=None):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)
             script = path / 'packages.sh'
@@ -184,10 +184,20 @@ done
             if cached:
                 debs.mkdir(parents=True)
                 (debs / 'gdb.deb').write_text('deb')
-            env = dict(os.environ, HOME=tmp, PROOF_STATE=str(state), PROOF_CALLS=str(calls), PATH=f'{path}:{os.environ["PATH"]}')
+            env = dict(os.environ, HOME=tmp, PROOF_STATE=str(state), PROOF_CALLS=str(calls), PATH=f'{path}:{os.environ["PATH"]}', **(extra_env or {}))
             result = subprocess.run(['bash', str(script), 'gdb', 'libpulse0'], env=env, capture_output=True, text=True)
             leftovers = sorted(item.name for item in debs.glob('*')) if debs.exists() else []
             return result, calls.read_text(), (path / 'state').read_text(), leftovers
+
+    def test_deb_cache_directory_can_be_shared_with_a_second_job_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shared = Path(tmp) / 'recording-debs'
+            shared.mkdir()
+            (shared / 'ffmpeg.deb').write_text('deb')
+            result, calls, _, _ = self.run_packages(cached=False, extra_env={'ANDROID_PROOF_DEB_CACHE': str(shared)})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('ANDROID_PROOF_PACKAGES_FROM_CACHE', result.stdout)
+            self.assertNotIn('apt-get', calls)
 
     def test_cached_emulator_packages_install_without_apt(self):
         result, calls, state, _ = self.run_packages(cached=True)

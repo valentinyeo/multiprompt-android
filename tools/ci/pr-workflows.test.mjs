@@ -71,6 +71,20 @@ test('base proof is cached by source and harness, without skipping head or the r
   assert.match(release, /VERIFY_FEATURE: robot-faces\.md/);
 });
 
+test('journey packages come from the runner cache instead of the Ubuntu mirror', () => {
+  const workflow = read('.github/workflows/verify.yml');
+  const step = workflow.split('      - name: Prepare shell and chat recording\n')[1].split('      - name:')[0];
+  assert.match(step, /ANDROID_PROOF_DEB_CACHE="\$HOME\/\.cache\/recording-debs"/);
+  assert.match(step, /bash \.github\/actions\/android-proof\/packages\.sh ffmpeg tesseract-ocr/);
+  assert.match(step, /ffmpeg -version/);
+  assert.doesNotMatch(workflow, /apt-get install -y ffmpeg/);
+  const cache = workflow.split('      - name: Cache shell and chat recording packages\n')[1].split('      - name:')[0];
+  assert.match(cache, /path: ~\/\.cache\/recording-debs/);
+  assert.match(cache, /key: recording-debs-\$\{\{ runner\.os \}\}-\$\{\{ steps\.recording-image\.outputs\.image \}\}/);
+  const action = read('.github/actions/android-proof/packages.sh');
+  assert.match(action, /cache="\$\{ANDROID_PROOF_DEB_CACHE:-\$HOME\/\.cache\/android-proof\/debs\}"/);
+});
+
 test('secret-scan runs once per PR head, plus main pushes and periodic full-history scans', () => {
   const workflow = read('.github/workflows/gitleaks.yml');
   const events = workflow.split('\non:\n')[1].split('\npermissions:')[0];

@@ -3,7 +3,7 @@ set -euo pipefail
 : "${HOME:?}"
 packages=("$@")
 test "${#packages[@]}" -gt 0
-cache="$HOME/.cache/android-proof/debs"
+cache="${ANDROID_PROOF_DEB_CACHE:-$HOME/.cache/android-proof/debs}"
 installed_count() {
   dpkg-query -W -f='${Status}\n' "${packages[@]}" 2>/dev/null | grep -c '^install ok installed$' || true
 }
