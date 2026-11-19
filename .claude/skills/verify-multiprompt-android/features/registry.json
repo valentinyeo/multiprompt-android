@@ -1101,9 +1101,9 @@
         "crash-report.exits"
       ],
       "evidence": {
-        "crash-reports-received.txt": 1200,
-        "crash-exit-summaries.json": 300,
-        "crash-exits.txt": 300
+        "crash-reports-received.txt": 3200,
+        "crash-exit-summaries.json": 600,
+        "crash-exits.txt": 1600
       }
     }
   },
