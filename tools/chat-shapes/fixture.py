@@ -191,7 +191,8 @@ def main(argv):
     parser.add_argument('--home', default=None)
     arguments = parser.parse_args(argv[1:])
     home = Path(arguments.home or os.environ.get('HOME') or Path.home())
-    print(json.dumps(COMMANDS[arguments.command](home) if arguments.command != 'plan' else plan(), indent=2))
+    payload = plan() if arguments.command == 'plan' else COMMANDS[arguments.command](home)
+    print(json.dumps(payload, indent=2))
     return 0
 
 
