@@ -2,11 +2,12 @@
 : "${FIXTURE:?}"
 : "${EVIDENCE:?}"
 RECORDER_STOP_SECONDS="${RECORDER_STOP_SECONDS:-60}"
+RECORDER_LIMIT_SECONDS="${RECORDER_LIMIT_SECONDS:-780}"
 RECORDER_REMOTE=/sdcard/release-journey.mp4
 
 recorder_start() {
     local attempt pid
-    adb shell "screenrecord --time-limit 0 --bit-rate 2000000 $RECORDER_REMOTE & echo \$!; wait" > "$FIXTURE/recorder.pid" 2> "$EVIDENCE/recording.log" &
+    timeout "$RECORDER_LIMIT_SECONDS" adb shell "screenrecord --time-limit 0 --bit-rate 2000000 $RECORDER_REMOTE & echo \$!; wait" > "$FIXTURE/recorder.pid" 2> "$EVIDENCE/recording.log" &
     RECORDER_CLIENT=$!
     RECORDER_DEVICE=
     for attempt in {1..30}; do
