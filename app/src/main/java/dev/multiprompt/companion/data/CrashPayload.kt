@@ -7,10 +7,12 @@ object CrashPayload {
     private const val MAX_TRACE_CHARS = 16000
 
     fun summary(report: CrashReport): String {
-        val lines = CrashTrace.safeLines(source(report))
-        return (lines.firstOrNull(CrashTrace::isHeader)
-            ?: CrashTrace.safeMessage(report.summary)
-            ?: FALLBACK_SUMMARY).take(MAX_SUMMARY_CHARS)
+        val header = CrashTrace.safeLines(source(report)).firstOrNull(CrashTrace::isHeader)
+            ?: return (CrashTrace.safeMessage(report.summary) ?: FALLBACK_SUMMARY).take(MAX_SUMMARY_CHARS)
+        val type = CrashTrace.headerType(header) ?: return header.take(MAX_SUMMARY_CHARS)
+        if (header != type) return header.take(MAX_SUMMARY_CHARS)
+        val message = CrashTrace.safeMessage(report.summary)?.takeUnless { it == type }
+        return (message?.let { "$type: $it" } ?: type).take(MAX_SUMMARY_CHARS)
     }
 
     fun stackTrace(report: CrashReport): String {

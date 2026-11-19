@@ -14,6 +14,9 @@ object CrashTrace {
 
     fun isHeader(line: String): Boolean = header.matches(line.trim())
 
+    fun headerType(line: String): String? =
+        header.matchEntire(line.trim())?.let { it.groupValues[1] + it.groupValues[2] }
+
     fun safeLine(raw: String): String? {
         val line = raw.trim()
         if (frame.matches(line)) return line
