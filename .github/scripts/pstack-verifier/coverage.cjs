@@ -21,6 +21,17 @@ function changedRecipes(diff, files = []) {
   return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`));
 }
 
+function pathOutcomes(diff, files = []) {
+  const paths = [...changedPaths(diff, files)];
+  return Object.entries(registry.outcomes)
+    .filter(([, outcome]) => (outcome.paths ?? []).some(pattern => paths.some(file => new RegExp(pattern).test(file))))
+    .map(([id]) => id);
+}
+
+function recipeOutcomes(diff, files = []) {
+  return changedRecipes(diff, files).flatMap(name => registry.journeys[name].outcomes);
+}
+
 function changedJourneys(diff, files = []) {
   const paths = changedPaths(diff, files);
   return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`)
@@ -38,16 +49,20 @@ function changedProduct(diff) {
   });
 }
 
-function changedOutcomes(diff) {
+function changedOutcomes(diff, files = []) {
   const changed = changedProduct(diff).join('\n');
-  return Object.entries(registry.outcomes).filter(([, outcome]) => outcome.match.some(pattern => new RegExp(pattern).test(changed))).map(([id]) => id);
+  return [...new Set([
+    ...Object.entries(registry.outcomes).filter(([, outcome]) => outcome.match.some(pattern => new RegExp(pattern).test(changed))).map(([id]) => id),
+    ...pathOutcomes(diff, files),
+    ...recipeOutcomes(diff, files),
+  ])];
 }
 
-function planChange(diff, reported) {
+function planChange(diff, reported, files = []) {
   if (!Array.isArray(reported) || reported.some(id => typeof id !== 'string' || !registry.outcomes[id])) {
     throw new Error(`FEATURE_UNMAPPED: unregistered changed_outcomes ${JSON.stringify(reported)}; report exact outcome IDs from features/registry.json, or register the missing outcome and its journey.`);
   }
-  const outcomes = [...new Set([...changedOutcomes(diff), ...reported])];
+  const outcomes = [...new Set([...changedOutcomes(diff, files), ...reported])];
   return { product: changedProduct(diff).length > 0, outcomes };
 }
 
@@ -112,6 +127,10 @@ function validateRegistry(value = registry, oldGaps = baseline) {
     for (const pattern of outcome.match ?? []) {
       try { new RegExp(pattern); } catch { errors.push(`Invalid source matcher for ${id}`); }
     }
+    if (outcome.paths && (!Array.isArray(outcome.paths) || outcome.paths.some(pattern => typeof pattern !== 'string'))) errors.push(`Invalid path matcher for ${id}`);
+    for (const pattern of outcome.paths ?? []) {
+      try { new RegExp(pattern); } catch { errors.push(`Invalid path matcher for ${id}`); }
+    }
     const journey = value.journeys[outcome.journey];
     if (outcome.journey && !journey?.outcomes.includes(id)) errors.push(`Outcome ${id} must be owned by its journey`);
     if (!journey || !['debug', 'signed'].includes(journey.runner.kind)) gaps.push(id);
@@ -150,7 +169,7 @@ function renderWorkflow(source) {
   return source.replace(/^      VERIFY_FEATURE: .*$/m, `      VERIFY_FEATURE: \${{ inputs.driver_feature || inputs.feature || '${registry.smoke}' }}`).replace(/(      feature:\n        description:[^\n]+\n        required: true\n        type: choice\n        options:\n)(?:          - [^\n]+\n)+/, `$1${options}\n`);
 }
 
-module.exports = { registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, changedRecipes, changedJourneys, changedProduct, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors, renderIndex, renderWorkflow };
+module.exports = { registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, changedRecipes, changedJourneys, changedProduct, pathOutcomes, recipeOutcomes, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors, renderIndex, renderWorkflow };
 
 if (require.main === module) {
   if (process.argv[2] === 'journey') {

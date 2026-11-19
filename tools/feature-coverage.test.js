@@ -88,6 +88,26 @@ test('only product additions and removals identify outcomes, not test code or pa
   assert.ok(gate.changedOutcomes(productDiff('ui/Example.kt', 'nothing').replace('-old', '-ChatFind')).includes('chat-search.open'));
 });
 
+test('shared reader paths and edited recipes map to outcomes by rule, not by content or guess', () => {
+  const diff = (files, text = 'def live_session(): pass') => files.map(file => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`).join('');
+  const readerFiles = [
+    'app/src/main/assets/chat_history_reader.py',
+    'app/src/main/assets/chat_history_reader.sha',
+    'tools/vendor/chat-reader/tools/version-stamp.mjs',
+    'tools/sync-chat-reader.sh',
+  ];
+  assert.deepEqual(gate.pathOutcomes(diff(readerFiles)), ['codex.transcript', 'reader.host-restart']);
+  assert.deepEqual(gate.changedOutcomes(diff(readerFiles)), ['codex.transcript', 'reader.host-restart']);
+  assert.deepEqual(gate.pathOutcomes(diff(['app/src/main/assets/other.py'])), []);
+  const recipe = diff([`${gate.REGISTRY_PATH}/snippets.md`], 'Drive the registered journey');
+  assert.deepEqual(gate.recipeOutcomes(recipe), gate.registry.journeys['snippets.md'].outcomes);
+  assert.deepEqual(gate.changedOutcomes(recipe), gate.registry.journeys['snippets.md'].outcomes);
+  assert.deepEqual(gate.changedOutcomes(productDiff('java/dev/multiprompt/companion/ui/BrandNewThing.kt', 'brandNewThing()')), []);
+  assert.deepEqual(gate.planChange(diff(readerFiles), []).outcomes, ['codex.transcript', 'reader.host-restart']);
+  assert.equal(gate.planChange(diff(readerFiles), []).product, true);
+  assert.equal(gate.planChange(diff(['tools/vendor/chat-reader/tools/version-stamp.mjs']), []).product, false);
+});
+
 test('native-skills smoke does not cover /clear and name-first ranking', () => {
   const plan = gate.planChange(productDiff('skills/NativeSkills.kt', '"/clear"'), []);
   assert.ok(plan.outcomes.includes('claude.clear-ranking'));
