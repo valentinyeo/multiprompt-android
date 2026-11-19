@@ -64,6 +64,7 @@ elif [[ "${VERIFY_FEATURE:-}" == reader-long-pane.md ]]; then
     fixture_session=live-long-pane-2840
     sudo install -m 755 tools/long-pane/fixture.py /home/verifyssh/long-pane-fixture.py
     sudo -u verifyssh env HOME=/home/verifyssh python3 -B /home/verifyssh/long-pane-fixture.py seed > "$EVIDENCE/long-pane-seed.json"
+    sudo -u verifyssh tmux start-server
     sudo -u verifyssh tmux set-option -g history-limit 8000
     sudo -u verifyssh tmux new-session -d -s live-long-pane-2840 -x 98 -y 40 'cat /home/verifyssh/long-pane-2840.txt; exec sleep infinity'
     sudo -u verifyssh tmux set-window-option -t =live-long-pane-2840: automatic-rename off
