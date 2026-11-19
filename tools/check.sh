@@ -54,6 +54,8 @@ source_checks() {
   python3 -B tools/long-chat/check.test.py
   python3 -B tools/chat-shapes/chat-shapes.test.py
   python3 -B tools/chat-shapes/live_probe.test.py
+  python3 -B tools/real-chat/real-chat.test.py
+  python3 -B tools/real-chat/phone-cache.test.py
   python3 -B tools/app-name/drive.test.py
   python3 -B tools/app-name/select_run.test.py
   node .github/scripts/pstack-verifier/coverage.cjs check

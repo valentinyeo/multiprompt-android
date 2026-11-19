@@ -5,6 +5,8 @@ description: Verify multiprompt Android's Jetpack Compose mobile UI on GitHub's 
 
 # Verify multiprompt Android
 
+pstack: 0.15.44
+
 Read [the feature index](features/README.md), then the selected recipe. Everything that builds or runs the app happens on GitHub, never on the local server. No local Gradle, Java, emulator or Actions imitation.
 
 ## The phone CLI
@@ -15,7 +17,7 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 |---|---|
 | `mpa doctor --expected-version "$EXPECTED_VERSION"` | Read-only proof that this device is worth driving. |
 | `mpa launch [--force-stop] [--wait-text Inbox]` | Start the app. |
-| `mpa seed` | 40 inbox sessions and the long chat on the runner fixture. |
+| `mpa seed` | 40 inbox sessions, the long chat, the real-size restarted chat and the three chat shapes on the runner fixture. |
 | `mpa tap text verify-session` | Resolve an enabled label through `journey_action`, scroll it into view, tap it. |
 | `mpa read` | The UI tree as JSON. `--select` answers one selector; `--wait-text` and `--wait-absent` poll. Modes include `visible` (one row, fully on screen, `--extra enabled` for an actionable one, `--before` to prove a scroll revealed it), `current` (a `Current: ` row that must be disabled), `draft` (the composer text with every menu closed), `desc-absent` and `--inside LABEL` to scope any selector to one row. |
 | `mpa fill 'Message verify-session' /cl` | Tap the field, clear it, type the value, read it back, dismiss the keyboard. A literal `%s` becomes a space. |
@@ -128,7 +130,9 @@ Poll GitHub at most once a minute. If dispatch says the workflow must exist on t
 
 The job uses JDK 17, Android SDK, Gradle 9.5.1 and `assembleDebug`. SDK/emulator downloads have three bounded attempts before emulator launch; `sdk-install.txt` retains each attempt, and an exhausted download fails the job rather than skipping the journey. It starts a fresh API 35 (minSdk 26, targetSdk 36) x86_64/google_apis emulator with KVM and animations disabled, installs the debug APK and starts `dev.multiprompt.companion.debug/dev.multiprompt.companion.MainActivity`. Ready means `DOCTOR READY` in the job log, not just an emulator process. Each run has its own emulator, runner, keypair, SSH daemon and tmux server; never drive another run's device.
 
-The ephemeral SSH server is the runner at `10.0.2.2:2222`, user `verifyssh`, target `verify-session`; normal debug jobs seed 40 additional inbox sessions, `cl-long-chat` with 1,882 transcript rows (>18 MiB) and the compacted, fresh-started and resumed chat shapes once. Dedicated long-chat and signed pins proofs retain their own fixtures. Both user and host keys are generated in the job. Password authentication is disabled. The console prints `VERIFY_READY_528` and records input, empty Enter and Interrupt in a receipt file. This is a real SSH/tmux boundary, not a mock or an app setter.
+The ephemeral SSH server is the runner at `10.0.2.2:2222`, user `verifyssh`, target `verify-session`; normal debug jobs seed 40 additional inbox sessions, `cl-long-chat` with 1,882 transcript rows (>18 MiB), the compacted, fresh-started and resumed chat shapes once, and `live-real-2781` once. Dedicated long-chat and signed pins proofs retain their own fixtures. Both user and host keys are generated in the job. Password authentication is disabled. The console prints `VERIFY_READY_528` and records input, empty Enter and Interrupt in a receipt file. This is a real SSH/tmux boundary, not a mock or an app setter.
+
+`live-real-2781` is the shared real-size chat: `tools/real-chat/fixture.py` writes a synthetic Claude transcript of about 3 MB and roughly 4,000 rows, 70% of them tool and tool_result rows with large detail fields, with assistant replies interleaved. It restarts three times (three `init` events, two handover files, three session ids), keeps accepted and delivered dispatch events, and leaves two stale transcripts and a neighbouring chat in the same project folder. Its text is synthetic only. `mpa seed` creates the tmux session and its `@mp_host_sid`, and `seed-counts.json` records the chat id, the transcript bytes and rows, the markers and the older cached position.
 
 ## Doctor
 
@@ -165,6 +169,12 @@ The reaction fixture consumes the prompt and its trailing delivery marker as one
 
 For changes to connection ownership, dispatch `chat-codex.md` and cover `reader.lifecycle`. Its SSH observer counts actual history queries and snapshot captures for Hax and Claude while visible, backgrounded, resumed and switched away. A missing positive control or extra hidden request fails. Retain the raw host log, count files, resumed XML and the receipt after closing the second reader. JVM tests cover multiple observers of the same session and silent reconnects; they do not replace the phone journey.
 
+## Real-size chat proof
+
+Every chat journey listed in `scripts/real-chat-screen.sh` runs the same shared step before its own body: `real-chat-screen.sh` seeds an older phone cache position from the app's own restored cache file, relaunches the app, opens `live-real-2781` from Inbox, and asserts on the rendered UI dump. It requires the newest assistant reply and the newest row after open, forbids the stale pre-restart reply and the neighbouring chat, requires a user row, an assistant reply and the next user row in that top-to-bottom order after scrolling back, and requires the newest reply again after returning to newest. Each check keeps a numbered PNG/XML pair and `real-chat-screen.txt`.
+
+A server frame, a reader reply or a host receipt never counts as chat screen proof: the assertion is the phone's own text. On a signed package the cache seed is skipped and recorded as `REAL_CHAT_CACHE_SKIPPED`, because `run-as` needs a debuggable app; the rendered checks still run. A journey that cannot show the newest assistant reply fails as a product assertion and must not be weakened.
+
 ## Evidence
 Normal debug journeys check `seed-counts.json` against live tmux names and transcript bytes/rows before any action; missing, undersized or mismatched seeds fail setup. `sessions.md` records a runtime-selected reader and its exact one-result search in `seed-search.xml`; it does not assert that all 45 rows render. Find targets by exact name rather than assuming a single row.
 
@@ -200,10 +210,11 @@ All helpers are executable. These commands are **GitHub-job-only**, with workflo
 .claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"
 .claude/skills/verify-multiprompt-android/scripts/drive.sh signed-out-sync.md
 .claude/skills/verify-multiprompt-android/scripts/drive.sh session-reader.md
+sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/real-chat-phone-cache.py prepare --prefs "$EVIDENCE/hosts-prefs.xml" --fixture /home/verifyssh/real-chat-fixture.py --home /home/verifyssh --out-dir /home/verifyssh/real-chat-cache-2781 --session live-real-2781
 python3 -u .claude/skills/verify-multiprompt-android/scripts/console.py /home/verifyssh/receipts.txt
 ```
 
-`drive.sh <feature>.md` still runs the boot, doctor, host seed and evidence trap for the journeys that have not moved to `mpa` yet. Every other invocation above is an `mpa` subcommand; `ui.py`, `doctor.sh`, `seed.sh` and `cleanup.sh` remain only as wrappers for those journeys.
+`drive.sh <feature>.md` still runs the boot, doctor, host seed and evidence trap for the journeys that have not moved to `mpa` yet. Every other invocation above is an `mpa` subcommand; `ui.py`, `doctor.sh`, `seed.sh` and `cleanup.sh` remain only as wrappers for those journeys. `real-chat-screen.sh` is sourced by `drive.sh`, not run directly; it owns the chat journeys' real-size screen step.
 
 Fixture setup starts `console.py` inside tmux as the disposable fixture user; do not run a second copy. Ordinary driver invocations need a fresh emulator. The break-it replay alone reuses its normal journey's boot after replacing the disposable fixture, clearing app data and reinstalling the identical APK with its original permission grants.
 

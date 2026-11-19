@@ -25,6 +25,7 @@ def load(name, path):
 seed = load('verify_seed', ROOT / 'tools/verify-seed.py')
 long_chat = load('long_chat', ROOT / 'tools/long-chat/fixture.py')
 chat_shapes = load('chat_shapes', ROOT / 'tools/chat-shapes/fixture.py')
+real_chat = load('real_chat', ROOT / 'tools/real-chat/fixture.py')
 
 
 class VerifySeedTest(unittest.TestCase):
@@ -38,8 +39,11 @@ class VerifySeedTest(unittest.TestCase):
                                               rows=1882, sid=long_chat.SID, latest=long_chat.LATEST)))
         shutil.copyfile(ROOT / 'tools/chat-shapes/fixture.py', self.home / 'chat-shapes-fixture.py')
         self.manifest = chat_shapes.create(self.home)
+        shutil.copyfile(ROOT / 'tools/real-chat/fixture.py', self.home / 'real-chat-fixture.py')
+        self.real_manifest = real_chat.create(self.home)
         self.sids = {item['session']: item['sid'] for item in self.manifest['shapes']}
-        self.names = ['verify-session', 'cl-long-chat'] + seed.BULK_NAMES + sorted(self.sids)
+        self.sids[self.real_manifest['session']] = self.real_manifest['chat']
+        self.names = ['verify-session', 'cl-long-chat', self.real_manifest['session']] + seed.BULK_NAMES + sorted(item['session'] for item in self.manifest['shapes'])
 
         real = subprocess.check_output
 
@@ -59,12 +63,19 @@ class VerifySeedTest(unittest.TestCase):
 
     def test_records_measured_counts_and_rechecks_the_evidence(self):
         counts = seed.check(self.home, self.evidence)
-        self.assertEqual(45, counts['sessions'])
+        self.assertEqual(46, counts['sessions'])
         self.assertEqual(40, counts['bulk_sessions'])
         self.assertEqual(sorted(self.names), counts['session_names'])
         self.assertGreater(counts['transcript']['bytes'], 18 * 1024 * 1024)
         self.assertEqual(1882, counts['transcript']['rows'])
         self.assertEqual(str(self.transcript), counts['transcript']['path'])
+        self.assertEqual('live-real-2781', counts['real_chat']['session'])
+        self.assertEqual(real_chat.CHAT, counts['real_chat']['chat'])
+        self.assertEqual(real_chat.LIVE, counts['real_chat']['live'])
+        self.assertGreaterEqual(counts['real_chat']['bytes'], real_chat.MIN_BYTES)
+        self.assertGreaterEqual(counts['real_chat']['rows'], real_chat.MIN_ROWS)
+        self.assertEqual(real_chat.REPLY_NEWEST, counts['real_chat']['markers']['reply_newest'])
+        self.assertEqual([real_chat.FIRST, real_chat.SECOND, real_chat.LIVE], counts['real_chat']['init_sessions'])
 
     def test_rejects_tiny_inbox_and_missing_named_seed(self):
         self.names[:] = ['verify-session']
@@ -154,7 +165,7 @@ class VerifySeedTest(unittest.TestCase):
         command = command.replace('env HOME=', 'env PATH=' + shlex.quote(str(binary) + os.pathsep + os.environ['PATH']) + ' HOME=')
         result = subprocess.run(['bash', '-euc', command], env=dict(os.environ, EVIDENCE=str(private)), capture_output=True, text=True)
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual(45, json.loads(result.stdout)['sessions'])
+        self.assertEqual(46, json.loads(result.stdout)['sessions'])
 
     def test_shared_seed_starts_real_sessions_and_a_discoverable_long_chat(self):
         self.tmux.stop()
@@ -168,6 +179,7 @@ class VerifySeedTest(unittest.TestCase):
         (self.home / 'console.py').write_bytes((SCRIPTS / 'console.py').read_bytes())
         (self.home / 'long-chat-fixture.py').write_bytes((ROOT / 'tools/long-chat/fixture.py').read_bytes())
         (self.home / 'chat-shapes-fixture.py').write_bytes((ROOT / 'tools/chat-shapes/fixture.py').read_bytes())
+        (self.home / 'real-chat-fixture.py').write_bytes((ROOT / 'tools/real-chat/fixture.py').read_bytes())
         (self.home / 'long-chat-bin').mkdir()
         (self.home / 'long-chat-bin/claude').symlink_to(sys.executable)
         self.source.unlink()
@@ -184,13 +196,17 @@ class VerifySeedTest(unittest.TestCase):
                 self.evidence.write_text(recorded)
                 counts = json.loads(subprocess.check_output(command + ['check', str(self.evidence)], text=True))
                 self.assertEqual(json.loads(recorded), counts)
-                self.assertEqual(45, counts['sessions'])
+                self.assertEqual(46, counts['sessions'])
                 self.assertEqual(40, len((self.home / 'pins-names.txt').read_text().splitlines()))
                 for name in seed.BULK_NAMES:
                     self.assertEqual(name, subprocess.check_output(['tmux', 'display-message', '-p', '-t', f'={name}:', '#{window_name}'], text=True).strip())
                     self.assertEqual('off', subprocess.check_output(['tmux', 'show-window-options', '-t', f'={name}:', '-v', 'automatic-rename'], text=True).strip())
                 self.assertEqual('cl-long-chat|claude', subprocess.check_output(['tmux', 'display-message', '-p', '-t', '=cl-long-chat:', '#{window_name}|#{pane_current_command}'], text=True).strip())
                 self.assertEqual({'compacted', 'fresh', 'resumed'}, {item['shape'] for item in counts['shapes']})
+                self.assertEqual('live-real-2781', counts['real_chat']['session'])
+                self.assertEqual(real_chat.CHAT, subprocess.check_output(['tmux', 'show-options', '-t', counts['real_chat']['session'], '-v', '@mp_host_sid'], text=True).strip())
+                self.assertEqual('sleep', subprocess.check_output(['tmux', 'display-message', '-p', '-t', '=live-real-2781:', '#{pane_current_command}'], text=True).strip())
+                self.assertEqual(Path(counts['real_chat']['transcript']), real_chat.paths(self.home)['live'])
                 for item in counts['shapes']:
                     target = '=' + item['session'] + ':'
                     self.assertEqual('sleep', subprocess.check_output(['tmux', 'display-message', '-p', '-t', target, '#{pane_current_command}'], text=True).strip())
