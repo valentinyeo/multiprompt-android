@@ -260,7 +260,7 @@ if [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
         tmux has-session -t verify-keep
     '
 fi
-if [[ "${VERIFY_FEATURE:-}" == device-approval.md || "${VERIFY_FEATURE:-}" == screencast-account.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == device-approval.md || "${VERIFY_FEATURE:-}" == screencast-account.md || "${VERIFY_FEATURE:-}" == crash-report.md ]]; then
     for name in pending-device denied-device; do
         ssh-keygen -q -t ed25519 -N '' -C "$name" -f "$FIXTURE/$name"
         ssh-keygen -lf "$FIXTURE/$name.pub" -E sha256 | awk '{print $2}' > "$EVIDENCE/$name-fingerprint.txt"

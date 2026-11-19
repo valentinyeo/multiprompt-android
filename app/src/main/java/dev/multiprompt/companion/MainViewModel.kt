@@ -495,6 +495,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun uploadCrashReport() {
         viewModelScope.launch(Dispatchers.IO) {
+            crashReportStore.awaitExitCollection()
             crashReportStore.loadPending().forEach { report ->
                 syncAuth.uploadCrashReport(report, crashReportStore::markUploaded)
             }

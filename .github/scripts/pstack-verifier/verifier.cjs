@@ -24,6 +24,7 @@ const BODY_CHARS = 6_000;
 const PER_SIDE_CHARS = 20_000;
 const TRANSCRIPT_TAIL_CHARS = 2_500;
 const SMALL_FILE_BYTES = 1_500;
+const EXIT_LINES_CHARS = 1_200;
 const SIDES = ['parent', 'head'];
 const RESULT_FILE = 'side-result.json';
 const SOURCE_FILE = 'app-source-sha.txt';
@@ -511,6 +512,9 @@ function journeyEvidence(directory, feature) {
       .filter(line => /^\++ (?:tap_text|tap_desc|fill |set_composer|adb shell input|\S*\/mpa (?:doctor|launch|seed|tap|read|fill|key|screenshot|proof|cleanup)\b)/.test(line))
       .filter(line => !/^\++ adb shell input text (?:\S|'.'|"."|%s)$/.test(line));
     append(`--- driver-transcript.txt (user actions)\n${actions.slice(-60).join('\n').slice(-TRANSCRIPT_TAIL_CHARS)}`);
+    const exits = fs.readFileSync(path.join(directory, 'driver-transcript.txt'), 'utf8').split('\n')
+      .filter(line => /^\++ (?:timeout \d+s )?adb shell am (?:start|force-stop|kill|broadcast)\b/.test(line));
+    if (exits.length) append(`--- driver-transcript.txt (process exits)\n${exits.join('\n').slice(-EXIT_LINES_CHARS)}`);
   }
   const xml = files.filter(file => file.endsWith('.xml') && !priority.includes(file)).slice(-4);
   for (const file of xml) take(file, 2_500);

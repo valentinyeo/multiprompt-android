@@ -481,6 +481,21 @@ test('migrated CLI journeys show their mpa actions in the user-action summary', 
   }
 });
 
+test('process exit plants stay citable under a tail of dump noise', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-exit-actions-'));
+  try {
+    const plant = '++ timeout 90s adb shell am start -n dev.multiprompt.companion.debug/dev.multiprompt.companion.DebugCrashActivity --es exit anr';
+    fs.writeFileSync(path.join(directory, 'driver-transcript.txt'),
+      `${plant}\n${'+ uiautomator dump\n'}${'<node text="" />'.repeat(4000)}\nFINAL_NOISE\n`);
+    const text = verifier.journeyEvidence(directory, 'crash-report.md');
+    assert.ok(text.includes('--- driver-transcript.txt (process exits)'));
+    assert.ok(text.includes(plant));
+    assert.ok(text.length <= 20_000, `Evidence exceeded its budget: ${text.length}`);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('identity evidence retains complete independent receipt JSON bodies', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-identity-proof-'));
   try {

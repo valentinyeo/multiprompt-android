@@ -72,11 +72,11 @@ class CrashReportUploadTest {
             "-----BEGIN OPENSSH PRIVATE KEY-----", "a".repeat(43), "r".repeat(43))
         val privateText = secrets.joinToString("\n")
         upload(report.copy(threadName = privateText, summary = privateText,
-            stackTrace = "java.lang.RuntimeException: $privateText\n" +
+            stackTrace = "java.lang.RuntimeException: \"$privateText\n" +
                 "\tat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)\n" +
-                "Caused by: java.io.IOException: $privateText\n" +
-                "\tat secret.host.example.command(private-session:123)\n" +
-                "Suppressed: java.lang.IllegalStateException: $privateText",
+                "Caused by: java.io.IOException: \"$privateText\n" +
+                "\tat dev.multiprompt.companion.MainViewModel.load(MainViewModel.kt:7)\n" +
+                "Suppressed: java.lang.IllegalStateException: \"$privateText",
             uploadStackTrace = "java.lang.RuntimeException\nat dev.multiprompt.companion.MainViewModel.test(MainViewModel.kt:42)\nCaused by: java.io.IOException\nSuppressed: java.lang.IllegalStateException"))
         val sent = body!!.toString()
         val unsafeBody = JSONObject().put("summary", privateText).put("stack_trace", privateText).toString()
@@ -91,24 +91,26 @@ class CrashReportUploadTest {
         assertTrue(body!!.getString("stack_trace").contains("MainViewModel.kt:42"))
     }
 
-    @Test fun legacyTraceUsesSameAllowlistWithoutUploadingExceptionMessages() {
+    @Test fun legacyTraceKeepsAllowlistedMessagesAndDropsTheRest() {
         signIn()
         val trace = """
-            java.lang.IllegalStateException: secret message host.example
+            java.lang.IllegalStateException: Can't represent a size of 300000 in Constraints
                 at dev.multiprompt.companion.MainViewModel.load(MainViewModel.kt:42)
                 at private.host.example.load(private-session:123)
-            Caused by: java.io.IOException: token abc
+            Caused by: java.io.IOException: secret message with "quotes" and |pipes|
                 at java.io.InputStream.read(InputStream.java:100)
         """.trimIndent()
         for (uploadTrace in listOf("", " \n\t")) {
             upload(report.copy(stackTrace = trace, uploadStackTrace = uploadTrace))
-            assertEquals("java.lang.IllegalStateException", body!!.getString("summary"))
-            assertEquals("java.lang.IllegalStateException\n" +
+            assertEquals("java.lang.IllegalStateException: Can't represent a size of 300000 in Constraints",
+                body!!.getString("summary"))
+            assertEquals("java.lang.IllegalStateException: Can't represent a size of 300000 in Constraints\n" +
                 "at dev.multiprompt.companion.MainViewModel.load(MainViewModel.kt:42)\n" +
+                "at private.host.example.load(private-session:123)\n" +
                 "Caused by: java.io.IOException\n" +
                 "at java.io.InputStream.read(InputStream.java:100)", body!!.getString("stack_trace"))
             val sent = body!!.toString()
-            for (secret in listOf("secret", "host.example", "token abc", "private-session")) {
+            for (secret in listOf("secret message", "with \"quotes\"", "|pipes|")) {
                 assertTrue("positive control: $secret", trace.contains(secret))
                 assertFalse(secret, sent.contains(secret))
             }
@@ -118,7 +120,8 @@ class CrashReportUploadTest {
     @Test fun unsafeOrEmptyTraceHasNonemptySafeFallbackAndBoundedUtf8Body() {
         signIn()
         for (trace in listOf("", "🔑\"\n".repeat(16000), "private session contents")) {
-            upload(report.copy(stackTrace = trace, uploadStackTrace = trace, appVersion = "😀".repeat(65), androidVersion = "\"\n".repeat(65)))
+            upload(report.copy(stackTrace = trace, uploadStackTrace = trace, summary = "private \"session\" contents",
+                appVersion = "😀".repeat(65), androidVersion = "\"\n".repeat(65)))
             assertEquals("No safe stack frames available", body!!.getString("stack_trace"))
             assertEquals("Android application crash", body!!.getString("summary"))
             assertTrue(body!!.getString("app_version").length <= 64)
