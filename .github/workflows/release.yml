@@ -53,6 +53,7 @@ jobs:
         timeout-minutes: 10
         with:
           gradle-version: "9.5.1"
+          cache-read-only: true
 
       - name: Resolve version
         timeout-minutes: 2
