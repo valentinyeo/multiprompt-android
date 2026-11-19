@@ -51,6 +51,7 @@ source_checks() {
   python3 -B tools/emulator.test.py
   python3 -B tools/startup-time/report.test.py
   python3 -B tools/long-chat/check.test.py
+  python3 -B tools/chat-shapes/chat-shapes.test.py
   python3 -B tools/app-name/drive.test.py
   python3 -B tools/app-name/select_run.test.py
   node .github/scripts/pstack-verifier/coverage.cjs check

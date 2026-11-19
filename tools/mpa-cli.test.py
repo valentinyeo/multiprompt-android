@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -56,6 +57,7 @@ class MpaCliTest(unittest.TestCase):
         for path in (self.evidence, self.fixture, self.home):
             path.mkdir()
         (self.home / 'console.py').write_text('')
+        shutil.copyfile(ROOT / 'tools/chat-shapes/fixture.py', self.home / 'chat-shapes-fixture.py')
         self.screen = self.root / 'screen.xml'
         self.screen.write_text(SCREEN)
         self.menu = self.root / 'menu.xml'
@@ -137,6 +139,7 @@ class MpaCliTest(unittest.TestCase):
         payload = self.payload('seed', '--dry-run', env=env)
         self.assertTrue(payload['dry_run'])
         self.assertEqual(40, payload['rows'])
+        self.assertEqual(['live-compacted-2715', 'live-fresh-2715', 'live-resumed-2715'], payload['shapes'])
         self.assertFalse(marker.exists())
         self.assertFalse((self.home / 'pins-names.txt').exists())
 

@@ -1555,6 +1555,9 @@ PYORACLE
     stale_routing_probe
     exit 0
 fi
+if [[ "$feature" == chat-shapes.md ]]; then
+    source "$scripts/chat-shapes-drive.sh"
+fi
 if [[ "$feature" == sessions.md ]]; then
     shot seed-deep-before
     setup_failure=1
