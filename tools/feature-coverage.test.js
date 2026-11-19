@@ -88,6 +88,26 @@ test('only product additions and removals identify outcomes, not test code or pa
   assert.ok(gate.changedOutcomes(productDiff('ui/Example.kt', 'nothing').replace('-old', '-ChatFind')).includes('chat-search.open'));
 });
 
+test('shared reader paths and edited recipes map to outcomes by rule, not by content or guess', () => {
+  const diff = (files, text = 'def live_session(): pass') => files.map(file => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`).join('');
+  const readerFiles = [
+    'app/src/main/assets/chat_history_reader.py',
+    'app/src/main/assets/chat_history_reader.sha',
+    'tools/vendor/chat-reader/tools/version-stamp.mjs',
+    'tools/sync-chat-reader.sh',
+  ];
+  assert.deepEqual(gate.pathOutcomes(diff(readerFiles)), ['codex.transcript', 'reader.host-restart']);
+  assert.deepEqual(gate.changedOutcomes(diff(readerFiles)), ['codex.transcript', 'reader.host-restart']);
+  assert.deepEqual(gate.pathOutcomes(diff(['app/src/main/assets/other.py'])), []);
+  const recipe = diff([`${gate.REGISTRY_PATH}/snippets.md`], 'Drive the registered journey');
+  assert.deepEqual(gate.recipeOutcomes(recipe), gate.registry.journeys['snippets.md'].outcomes);
+  assert.deepEqual(gate.changedOutcomes(recipe), gate.registry.journeys['snippets.md'].outcomes);
+  assert.deepEqual(gate.changedOutcomes(productDiff('java/dev/multiprompt/companion/ui/BrandNewThing.kt', 'brandNewThing()')), []);
+  assert.deepEqual(gate.planChange(diff(readerFiles), []).outcomes, ['codex.transcript', 'reader.host-restart']);
+  assert.equal(gate.planChange(diff(readerFiles), []).product, true);
+  assert.equal(gate.planChange(diff(['tools/vendor/chat-reader/tools/version-stamp.mjs']), []).product, false);
+});
+
 test('native-skills smoke does not cover /clear and name-first ranking', () => {
   const plan = gate.planChange(productDiff('skills/NativeSkills.kt', '"/clear"'), []);
   assert.ok(plan.outcomes.includes('claude.clear-ranking'));
@@ -284,12 +304,12 @@ for (const journey of ['chat-search.md', 'sessions.md']) test(`the real picker s
       assert.equal(selected[0], journey, values);
       assert.ok(selected.length <= verifier.MAX_JOURNEYS);
       assert.match(values, /^smoke=no$/m);
-      assert.match(values, /^changed_outcomes=\[\]$/m);
+      assert.deepEqual(JSON.parse(values.match(/^changed_outcomes=(.+)$/m)[1]), gate.registry.journeys[journey].outcomes);
     }
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('the real picker corrects outcome IDs once but never retries explicit unmapped behavior', () => {
+test('the real picker corrects outcome IDs once and keeps the code-mapped outcomes', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'outcome-pick-'));
   try {
     mockPickerGithub(path.join(directory, 'gh'));
@@ -297,31 +317,83 @@ test('the real picker corrects outcome IDs once but never retries explicit unmap
     fs.writeFileSync(diff, productDiff('assets/chat_history_reader.py', 'hosted_claude_transcript_sid'));
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `let calls=0;global.fetch=async(url,options)=>{require('node:fs').appendFileSync(process.env.REQUEST_FILE,options.body+'\\n');const id=calls++===0?process.env.FIRST_OUTCOME:'reader.host-restart';return {status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:['host-restart.md'],changed_outcomes:[id],change_kind:'bug',reason:'Follow the live native Claude transcript.'})}}]})}};`);
-    for (const first of ['host-restart.md', 'unmapped']) {
-      const output = path.join(directory, `output-${first}`);
-      const request = path.join(directory, `request-${first}`);
-      const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
-        cwd: root, encoding: 'utf8', env: {
-          ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
-          DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
-          FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request, FIRST_OUTCOME: first,
-        },
-      });
-      const requests = fs.readFileSync(request, 'utf8').trim().split('\n').map(JSON.parse);
-      assert.match(run.stderr, new RegExp(`FEATURE_UNMAPPED.*${first}`));
-      assert.match(run.stderr, /Follow the live native Claude transcript/);
-      if (first === 'unmapped') {
-        assert.equal(run.status, 1);
-        assert.equal(requests.length, 1);
-        assert.equal(fs.existsSync(output), false);
-      } else {
-        assert.equal(run.status, 0, run.stderr);
-        assert.equal(requests.length, 2);
-        assert.match(requests[1].messages[1].content, /Your previous answer was invalid: FEATURE_UNMAPPED/);
-        assert.match(requests[1].messages[1].content, /report \["unmapped"\]/);
-        assert.match(fs.readFileSync(output, 'utf8'), /^changed_outcomes=\["reader.host-restart"\]$/m);
-      }
-    }
+    const output = path.join(directory, 'output');
+    const request = path.join(directory, 'request');
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+      cwd: root, encoding: 'utf8', env: {
+        ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
+        DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
+        FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request, FIRST_OUTCOME: 'host-restart.md',
+      },
+    });
+    const requests = fs.readFileSync(request, 'utf8').trim().split('\n').map(JSON.parse);
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(requests.length, 2);
+    assert.match(run.stderr, /FEATURE_UNMAPPED.*host-restart\.md/);
+    assert.match(run.stderr, /Follow the live native Claude transcript/);
+    assert.match(requests[1].messages[1].content, /Your previous answer was invalid: FEATURE_UNMAPPED/);
+    assert.match(requests[1].messages[1].content, /report \["unmapped"\]/);
+    assert.match(fs.readFileSync(output, 'utf8'), /^changed_outcomes=\["reader.host-restart","codex.transcript"\]$/m);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker maps the PR #425 shared-reader files by rule and survives an unmapped answer', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'shared-reader-pick-'));
+  try {
+    mockPickerGithub(path.join(directory, 'gh'));
+    const diff = path.join(directory, 'change.diff');
+    const files = [
+      'app/src/main/assets/chat_history_reader.py',
+      'app/src/main/assets/chat_history_reader.sha',
+      'tools/sync-chat-reader.sh',
+      'tools/check-canonical-chat-reader.sh',
+      'tools/vendor/chat-reader/SHA256SUMS',
+      'tools/vendor/chat-reader/tools/version-stamp.mjs',
+      'tools/pstack-verifier.test.js',
+    ];
+    fs.writeFileSync(diff, files.map(file => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+def live_session(): pass\n`).join(''));
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch=async(url,options)=>{require('node:fs').appendFileSync(process.env.REQUEST_FILE,options.body+'\\n');return {status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:['host-restart.md'],changed_outcomes:['reader.host-restart','unmapped'],change_kind:'bug',reason:'Shared chat reader change.'})}}]})}};`);
+    const output = path.join(directory, 'output');
+    const request = path.join(directory, 'request');
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+      cwd: root, encoding: 'utf8', env: {
+        ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
+        DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
+        FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request,
+      },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.equal(fs.readFileSync(request, 'utf8').trim().split('\n').length, 1);
+    const values = fs.readFileSync(output, 'utf8');
+    assert.deepEqual(JSON.parse(values.match(/^changed_outcomes=(.+)$/m)[1]), ['codex.transcript', 'reader.host-restart']);
+    assert.deepEqual(JSON.parse(values.match(/^features=(.+)$/m)[1]), ['chat-codex.md', 'host-restart.md']);
+    assert.match(run.stderr, /the model also answered unmapped; the 2 code-mapped outcome\(s\) stand/);
+    assert.doesNotMatch(values, /unmapped/);
+  } finally { fs.rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('the real picker still fails a genuinely unmapped product file', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'unmapped-product-pick-'));
+  try {
+    mockPickerGithub(path.join(directory, 'gh'));
+    const diff = path.join(directory, 'change.diff');
+    fs.writeFileSync(diff, productDiff('java/dev/multiprompt/companion/ui/BrandNewThing.kt', 'brandNewThing()'));
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, `global.fetch=async(url,options)=>{require('node:fs').appendFileSync(process.env.REQUEST_FILE,options.body+'\\n');return {status:200,ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({features:[],changed_outcomes:['unmapped'],change_kind:'product',reason:'No registered outcome covers BrandNewThing.'})}}]})}};`);
+    const output = path.join(directory, 'output');
+    const request = path.join(directory, 'request');
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
+      cwd: root, encoding: 'utf8', env: {
+        ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
+        DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '449', EVENT_HEAD_SHA: sha,
+        FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request,
+      },
+    });
+    assert.equal(run.status, 1);
+    assert.equal(fs.readFileSync(request, 'utf8').trim().split('\n').length, 1);
+    assert.match(run.stderr, /FEATURE_UNMAPPED.*unmapped.*No registered outcome covers BrandNewThing/s);
+    assert.equal(fs.existsSync(output), false);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 

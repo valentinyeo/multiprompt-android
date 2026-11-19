@@ -89,18 +89,34 @@ test('the publication hash gate rejects changed APK bytes and missing proof', ()
 
 test('recording spans the journey and requires a retained readable mp4', () => {
   const script = readFileSync(path.join(__dirname, 'release-proof.sh'), 'utf8');
+  const recorder = readFileSync(path.join(__dirname, 'release-recorder.sh'), 'utf8');
+  assert.match(script, /source tools\/release-recorder\.sh/);
   assert.match(script, /adb install -r -g "\$VERIFY_APK"/);
   assert.match(script, /adb shell pm path "\$VERIFY_PACKAGE"/);
-  assert.match(script, /sha256sum "\$FIXTURE\/installed.apk"/);
+  assert.match(script, /sha256sum "\$FIXTURE\/installed\.apk"/);
   assert.match(script, /test "\$installed_sha" = "\$candidate_sha"/);
-  assert.match(script, /screenrecord --time-limit 0/);
+  assert.match(recorder, /screenrecord --time-limit 0/);
   assert.match(script, /trap finish EXIT/);
-  assert.match(script, /adb shell kill -0 "\$recorder_pid" \|\| code=1/);
-  assert.match(script, /adb shell kill -2 "\$recorder_pid"/);
-  assert.match(script, /adb pull \/sdcard\/release-journey.mp4 "\$EVIDENCE\/release-journey.mp4" \|\| code=1/);
-  assert.match(script, /ffprobe[^\n]*"\$EVIDENCE\/release-journey.mp4"/);
-  assert.match(script, /scripts\/drive.sh "\$VERIFY_FEATURE"/);
+  assert.match(recorder, /adb shell kill -0 "\$RECORDER_DEVICE"/);
+  assert.match(recorder, /adb shell kill -2 "\$RECORDER_DEVICE"/);
+  assert.match(recorder, /adb pull "\$RECORDER_REMOTE" "\$EVIDENCE\/release-journey\.mp4"/);
+  assert.match(script, /ffprobe[^\n]*"\$EVIDENCE\/release-journey\.mp4"/);
+  assert.match(script, /scripts\/drive\.sh "\$VERIFY_FEATURE"/);
   assert.match(script, /exit "\$code"/);
-  assert.match(script, /if \[\[ "\$code" == 0 \]\]; then[\s\S]*recorded-apk-sha256.txt/);
-  assert.ok(script.indexOf('screenrecord --time-limit 0') < script.indexOf('scripts/drive.sh'));
+  assert.match(script, /if \[\[ "\$code" == 0 \]\]; then[\s\S]*recorded-apk-sha256\.txt/);
+  assert.ok(recorder.indexOf('screenrecord --time-limit 0') < script.indexOf('scripts/drive.sh'));
+});
+
+test('recorder shutdown cannot wait forever on a wedged emulator', () => {
+  const script = readFileSync(path.join(__dirname, 'release-proof.sh'), 'utf8');
+  const recorder = readFileSync(path.join(__dirname, 'release-recorder.sh'), 'utf8');
+  const stop = recorder.split('recorder_stop() {')[1].split('\n}')[0];
+  assert.match(stop, /sleep "\$RECORDER_STOP_SECONDS"/);
+  assert.match(stop, /kill -9 "\$RECORDER_CLIENT"/);
+  assert.match(stop, /wait "\$RECORDER_CLIENT" \|\| code=1/);
+  assert.doesNotMatch(recorder, /^ *wait "?\$\{?recorder_client"?$/m);
+  for (const call of ['adb get-serialno', 'adb install', 'adb shell pm path', 'adb pull "$installed_path"']) {
+    const line = script.split('\n').find(value => value.includes(call));
+    assert.match(line, /timeout [0-9]+ adb /, `${call} needs a bound`);
+  }
 });

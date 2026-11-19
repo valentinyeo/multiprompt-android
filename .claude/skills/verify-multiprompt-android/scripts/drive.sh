@@ -32,13 +32,12 @@ dump_ui() {
     local attempt output
     rm -f "$EVIDENCE/current.xml"
     for attempt in 1 2 3; do
-        timeout 20s adb shell rm -f /sdcard/verify-ui.xml || return 1
-        output=$(timeout 20s adb shell uiautomator dump /sdcard/verify-ui.xml 2>&1) || return 1
-        if [[ "$output" == *"null root node"* ]]; then
-            printf '%s\n' "$output" >&2
+        output=$(timeout 30s adb exec-out sh -c 'rm -f /sdcard/verify-ui.xml; uiautomator dump /sdcard/verify-ui.xml >/dev/null 2>&1; cat /sdcard/verify-ui.xml 2>/dev/null; exit 0' 2>/dev/null) || return 1
+        if [[ "$output" != *"<hierarchy"* ]]; then
+            printf 'UI dump attempt %s returned no hierarchy\n' "$attempt" >&2
             continue
         fi
-        timeout 20s adb pull /sdcard/verify-ui.xml "$EVIDENCE/current.xml" >/dev/null || return 1
+        printf '%s\n' "$output" > "$EVIDENCE/current.xml"
         return 0
     done
     return 1
@@ -231,7 +230,9 @@ wait_for_text() {
     return 1
 }
 clear_field() {
-    select_node focused-field '' >/dev/null || return
+    if [[ "${2:-}" != focus-proven ]]; then
+        select_node focused-field '' >/dev/null || return
+    fi
     adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_A || return
     adb shell input keyevent KEYCODE_DEL || return
     dump_ui || return
@@ -244,7 +245,7 @@ fill() {
     local value=${2//%s/ } index character
     tap_node field "$1" || return
     select_node focused-field "$1" >/dev/null || return
-    clear_field "$1" || return
+    clear_field "$1" focus-proven || return
     for ((index=0; index<${#value}; index++)); do
         character=${value:index:1}
         if [[ "$character" == ' ' ]]; then character=%s; fi
