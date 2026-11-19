@@ -3,9 +3,10 @@ import datetime
 import json
 import os
 from pathlib import Path
+import queue
 import re
-import select
 import sys
+import threading
 import uuid
 
 BUBBLE = "REPLY_BUBBLE_418"
@@ -51,28 +52,40 @@ def record(home, line):
         output.write(line)
 
 
+def pump(home, transcript, arriving, quiet=1.0):
+    pending = []
+    while True:
+        try:
+            line = arriving.get(timeout=quiet)
+        except queue.Empty:
+            if "".join(pending).strip():
+                submit(transcript, pending)
+            pending = []
+            continue
+        if line is None:
+            return
+        record(home, line)
+        pending.append(line.rstrip("\r\n"))
+        if MARKER.fullmatch(pending[-1]):
+            submit(transcript, pending)
+            pending = []
+
+
 def main():
     if os.environ.get("GITHUB_ACTIONS") != "true" or Path.home() != Path("/home/verifyssh") or os.geteuid() == 0:
         raise SystemExit("message reply requires the hosted SSH fixture")
     home = Path.home()
     transcript = write_transcript(home)
     print("Claude Code\nREPLY_READY_418\nReady\n❯ ", flush=True)
-    pending = []
-    while True:
-        ready, _, _ = select.select([sys.stdin], [], [], 1.0)
-        if not ready:
-            if "".join(pending).strip():
-                submit(transcript, pending)
-            pending = []
-            continue
-        line = sys.stdin.readline()
-        if not line:
-            break
-        record(home, line)
-        pending.append(line.rstrip("\n"))
-        if MARKER.fullmatch(pending[-1]):
-            submit(transcript, pending)
-            pending = []
+    arriving = queue.Queue()
+
+    def console_reader():
+        for line in sys.stdin:
+            arriving.put(line)
+        arriving.put(None)
+
+    threading.Thread(target=console_reader, daemon=True).start()
+    pump(home, transcript, arriving)
 
 
 if __name__ == "__main__":

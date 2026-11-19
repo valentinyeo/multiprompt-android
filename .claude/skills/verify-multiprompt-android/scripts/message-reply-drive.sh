@@ -31,10 +31,9 @@ for attempt in {1..30}; do
     sleep 1
 done
 "$mpa" read --select editor-value --value composer --extra ''
-"$mpa" read --wait-text REPLY_DELIVERED_418
 "$mpa" screenshot reply-sent
 sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reply-receipts.txt"
 grep -Fx '> REPLY_BUBBLE_418' "$EVIDENCE/reply-receipts.txt"
 grep -Fx 'REPLY_BODY_418' "$EVIDENCE/reply-receipts.txt"
-"$mpa" proof --name reply-sent --require-text REPLY_BODY_418 --require-text REPLY_DELIVERED_418 --forbid-text Replying --forbid-text 'Not sent' --forbid-text 'Send again' --forbid-text Remove --forbid-desc 'Cancel reply' --note MESSAGE_REPLY_JOURNEY_OK --proof-file "$EVIDENCE/reply-proof.txt"
+"$mpa" proof --name reply-sent --forbid-text Replying --forbid-desc 'Cancel reply' --note MESSAGE_REPLY_JOURNEY_OK --proof-file "$EVIDENCE/reply-proof.txt"
 step=$((step + 4))

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import queue
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,6 +46,20 @@ class ReplyConsoleTest(unittest.TestCase):
     def test_the_marker_line_closes_a_prompt(self):
         self.assertTrue(console.MARKER.fullmatch("[mp:0123456789abcdef]"))
         self.assertFalse(console.MARKER.fullmatch("REPLY_BODY_418"))
+
+    def test_a_whole_pasted_prompt_lands_as_one_user_turn_and_one_reply(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            transcript = self.transcript(home)
+            arriving = queue.Queue()
+            for line in ("> REPLY_BUBBLE_418\n", "\n", "REPLY_BODY_418\n", "[mp:0123456789abcdef]\n", "\n"):
+                arriving.put(line)
+            arriving.put(None)
+            console.pump(home, transcript, arriving, quiet=0.01)
+            rows = [json.loads(line) for line in transcript.read_text().splitlines()]
+            self.assertEqual(["assistant", "user", "assistant"], [row["type"] for row in rows])
+            self.assertEqual("> REPLY_BUBBLE_418\n\nREPLY_BODY_418\n[mp:0123456789abcdef]", rows[1]["message"]["content"])
+            self.assertEqual("> REPLY_BUBBLE_418\n\nREPLY_BODY_418\n[mp:0123456789abcdef]\n\n", (home / "receipts.txt").read_text())
 
 
 if __name__ == "__main__":
