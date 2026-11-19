@@ -17,19 +17,21 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 | `mpa launch [--force-stop] [--wait-text Inbox]` | Start the app. |
 | `mpa seed` | 40 inbox sessions and the long chat on the runner fixture. |
 | `mpa tap text verify-session` | Resolve an enabled label through `journey_action`, scroll it into view, tap it. |
-| `mpa read` | The UI tree as JSON. `--select` answers one selector; `--wait-text` and `--wait-absent` poll. |
+| `mpa read` | The UI tree as JSON. `--select` answers one selector; `--wait-text` and `--wait-absent` poll. Modes include `visible` (one row, fully on screen, `--extra enabled` for an actionable one, `--before` to prove a scroll revealed it), `current` (a `Current: ` row that must be disabled), `draft` (the composer text with every menu closed), `desc-absent` and `--inside LABEL` to scope any selector to one row. |
 | `mpa fill 'Message verify-session' /cl` | Tap the field, clear it, type the value, read it back, dismiss the keyboard. A literal `%s` becomes a space. |
 | `mpa hold text REPLY_BUBBLE_418` | Scroll a reachable label into view, then press and hold its center for 800 ms. |
 | `mpa screenshot reader-sync` | Numbered PNG/XML pair in `$EVIDENCE`. |
 | `mpa proof --name reader-sync --require-text 'Sign in to sync'` | Assert text and content descriptions, write `reader-sync.json` and a proof file. `--order A --order B` requires each row exactly once, fully on screen, in that top-to-bottom order. |
 | `mpa key back` | One keyevent. |
+| `mpa swipe [--inside LABEL] [--axis vertical] [--direction forward]` | Scroll the one visible container, or the container holding LABEL, by a fifth of its size. `--dry-run` prints the swipe. |
+| `mpa terminal --step ready` | Read the fixture pane and assert the terminal fallback's shell: ready prompt, typed echo, real sleep, Ctrl+C, history or tab completion. Runner only. |
 | `mpa cleanup --fixture "$FIXTURE"` | Stop the recorded PIDs, copy logs, keep the evidence. |
 
 `--xml PATH` replays a captured dump instead of dumping the phone, which is how the CLI's own tests run without a device. A failure prints `{"ok": false, "error": "...", "message": "...", "next": "..."}` and exits 1; `next` names the command to run instead. `ui.py`, `doctor.sh`, `seed.sh` and `cleanup.sh` are thin wrappers over the same core, so a journey that has not moved yet keeps working.
 
-`tools/mpa-cli.test.py` covers argument parsing, the JSON shape, `--dry-run` side effects and the error messages. It runs in `tools/check.sh source`.
+`tools/mpa-cli.test.py` covers argument parsing, the JSON shape, `--dry-run` side effects, the selector modes and the error messages. It runs in `tools/check.sh source`.
 
-Four journeys have moved end to end: `signed-out-sync.md`, `clear-ranking.md`, `message-reply.md` and `claude-remote-control.md` run only `mpa` commands for the phone. Every other journey still uses the `drive.sh` helpers below; migrate one journey per pull request. Host-side fixtures, receipts and tmux captures stay where they are: `mpa` drives the phone, not the host. Remaining loose drivers to fold in: `drive.sh` and its 2,670-line journey body, `fixture.sh`, and the per-journey `*-drive.sh`, `*-console.py`, `*-fixture.py` and `*-proof.py` scripts in [scripts](scripts).
+Four journeys have moved end to end: `signed-out-sync.md`, `clear-ranking.md`, `message-reply.md` and `claude-remote-control.md` run only `mpa` commands for the phone. Six more phone checks now call only the CLI: the favorites dot, copy chat ID, inbox draft label, composer Stop/Send slot, native menu rows and the terminal shell steps. Every other journey still uses the `drive.sh` helpers below; migrate one journey per pull request. Host-side fixtures, receipts and tmux captures stay where they are: `mpa` drives the phone, not the host. Remaining loose drivers to fold in: `drive.sh` and its journey body, `fixture.sh`, and the per-journey `*-drive.sh`, `*-console.py`, `*-fixture.py` and `*-proof.py` scripts in [scripts](scripts).
 
 ## Choose proof for the change
 

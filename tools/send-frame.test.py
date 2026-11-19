@@ -19,7 +19,7 @@ class SendFrameCaptureTest(unittest.TestCase):
         segment = driver[start:end]
         with tempfile.TemporaryDirectory() as directory:
             evidence = Path(directory)
-            (evidence / 'input.xml').write_text('<hierarchy><node class="android.widget.EditText" text="" bounds="[0,60][100,100]"/><node class="android.widget.ProgressBar" bounds="[70,70][90,90]"/><node class="android.widget.TextView" text="VERIFY_SENT_528"/></hierarchy>')
+            (evidence / 'input.xml').write_text('<hierarchy><node package="dev.multiprompt.companion.debug" class="android.widget.EditText" text="" bounds="[0,60][100,100]"/><node package="dev.multiprompt.companion.debug" class="android.widget.ProgressBar" bounds="[70,70][90,90]"/><node package="dev.multiprompt.companion.debug" class="android.widget.TextView" text="VERIFY_SENT_528"/></hierarchy>')
             Image.new('RGB', (100, 100), (20, 20, 20)).save(evidence / 'input.png')
             (evidence / 'device-log.txt').write_text(f'I SendTiming: message_added +5ms\nI SendTiming: box_cleared_frame +{milliseconds}ms\n')
             adb = evidence / 'adb'
@@ -42,9 +42,11 @@ class SendFrameCaptureTest(unittest.TestCase):
             '''))
             adb.chmod(0o700)
             env = dict(os.environ, EVIDENCE=str(evidence), scripts=str(SCRIPTS), PATH=f'{evidence}{os.pathsep}{os.environ["PATH"]}')
+            timing = driver[driver.index('send_timing() {'):driver.index('\n}\n', driver.index('send_timing() {')) + 3]
             harness = '''set -euo pipefail
                 step=0
                 tap_desc() { :; }
+            ''' + timing + '''
                 shot() {
                     if ! test -f "$EVIDENCE/frame-observed"; then
                         printf 'Screenshot started before composer draw receipt\\n' >&2

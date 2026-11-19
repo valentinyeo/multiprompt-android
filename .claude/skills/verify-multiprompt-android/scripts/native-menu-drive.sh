@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 menu_state() {
-    local label=$1 mode=$2 value=$3
+    local label=$1 mode=$2 value=$3 xml before=${4:-}
     shot "native-menu-$label"
-    python3 tools/menu-controls/ui.py \
-        "$EVIDENCE/$(printf '%02d' "$step")-native-menu-$label.xml" \
-        "$EVIDENCE/$(printf '%02d' "$step")-native-menu-$label.png" \
-        "$mode" "$value" "${4:-}" | tee -a "$EVIDENCE/native-menu-state.txt"
+    xml="$EVIDENCE/$(printf '%02d' "$step")-native-menu-$label.xml"
+    case "$mode" in
+        visible)
+            python3 "$scripts/mpa" read --xml "$xml" --select visible --value "$value" --extra enabled
+            ;;
+        reply)
+            python3 "$scripts/mpa" read --xml "$xml" --select visible --value "$value"
+            ;;
+        draft)
+            python3 "$scripts/mpa" read --xml "$xml" --select draft --value "$value"
+            ;;
+        current)
+            python3 "$scripts/mpa" read --xml "$xml" --select current --value "$value" --extra disabled
+            ;;
+        scroll)
+            python3 "$scripts/mpa" read --xml "$xml" --select visible --value "$value" --extra enabled --before "$before"
+            ;;
+    esac | tee -a "$EVIDENCE/native-menu-state.txt"
 }
 open_model_menu() {
     tap_desc 'Session actions'
@@ -35,18 +49,16 @@ menu_command() {
     adb shell input keyevent KEYCODE_BACK
 }
 menu_scroll() {
-    local name=$1 target=$2 before attempt x1 y1 x2 y2
+    local name=$1 target=$2 before attempt
     shot "native-menu-$name-before-scroll"
     before="$EVIDENCE/$(printf '%02d' "$step")-native-menu-$name-before-scroll.xml"
     for attempt in {1..8}; do
         dump_ui
-        read -r x1 y1 x2 y2 < <(python3 tools/menu-controls/ui.py "$EVIDENCE/current.xml" swipe)
-        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+        python3 "$scripts/mpa" swipe --xml "$EVIDENCE/current.xml"
         shot "native-menu-$name-scroll-$attempt"
-        if python3 tools/menu-controls/ui.py \
-            "$EVIDENCE/$(printf '%02d' "$step")-native-menu-$name-scroll-$attempt.xml" \
-            "$EVIDENCE/$(printf '%02d' "$step")-native-menu-$name-scroll-$attempt.png" \
-            scroll "$target" "$before" >> "$EVIDENCE/native-menu-state.txt"; then return; fi
+        if python3 "$scripts/mpa" read \
+            --xml "$EVIDENCE/$(printf '%02d' "$step")-native-menu-$name-scroll-$attempt.xml" \
+            --select visible --value "$target" --extra enabled --before "$before" >> "$EVIDENCE/native-menu-state.txt"; then return; fi
     done
     return 1
 }
