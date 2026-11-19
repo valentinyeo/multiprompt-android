@@ -506,7 +506,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/recording-debs
-          key: recording-debs-${{ runner.os }}-${{ steps.recording-image.outputs.image }}-ffmpeg-tesseract-v1
+          key: recording-debs-${{ runner.os }}-${{ steps.recording-image.outputs.image }}-ffmpeg-tesseract-v2
       - name: Prepare shell and chat recording
         id: recording-tools
         continue-on-error: ${{ inputs.side == 'parent' }}
