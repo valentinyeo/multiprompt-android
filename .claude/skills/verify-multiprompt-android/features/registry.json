@@ -1358,11 +1358,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "mpa tap text 'AI usage'"
+          "quote": "tap_text 'AI usage'"
         },
         "result": {
           "file": "ai-usage-open.json",
-          "quote": "\"values\":[\"Claude\",\"37.5%\",\"BEHIND\",\"WEEK 37.5% | 5H 12.5% | EMPTY IN 42H\""
+          "quote": "\"week\": \"37.5%\""
         },
         "sideEffect": {
           "file": "ai-usage-receipts.txt",
@@ -1511,11 +1511,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap_text Reply"
+          "quote": "mpa hold text REPLY_BUBBLE_418"
         },
         "result": {
           "file": "reply-open.json",
-          "quote": "\"cancel\": \"Cancel reply\""
+          "quote": "\"value\":\"Replying\""
         },
         "sideEffect": {
           "file": "reply-receipts.txt",

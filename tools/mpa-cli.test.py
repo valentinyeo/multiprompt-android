@@ -222,7 +222,7 @@ class MpaCliTest(unittest.TestCase):
 
     def test_the_migrated_journeys_drive_only_through_the_cli(self):
         helper = re.compile(r'(?m)^\s*(shot|tap_text|tap_desc|wait_for_text|wait_for_absence|dump_ui|select_node|relaunch_app)\b')
-        for name in ('ai-usage-drive.sh', 'clear-ranking-drive.sh', 'remote-control-drive.sh'):
+        for name in ('clear-ranking-drive.sh', 'message-reply-drive.sh', 'remote-control-drive.sh'):
             with self.subTest(journey=name):
                 source = (SCRIPTS / name).read_text()
                 self.assertNotIn('scripts/ui.py', source)
@@ -497,6 +497,8 @@ def window(body):
 
 
 CHAT = text('Native session skills are ready.', 1200) + desc('Session actions', 80) + desc('Send prompt', 1400)
+REPLY_CHAT = text('REPLY_BUBBLE_418', 600, clickable=True) + desc('Session actions', 80) + desc('Send prompt', 1400)
+REPLY_BAR = text('Replying', 1500) + desc('Cancel reply', 120, left=700, right=820)
 PICKER = ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,600][1080,1200]">'
           + text('/clear', 620, clickable=True) + text('/client', 720, clickable=True) + text('/aaa-paper', 820, clickable=True)
           + text('Start a new session with empty context', 920) + '</node>')
@@ -512,6 +514,12 @@ def xml_for(data):
     screen = data["screen"]
     if screen == "inbox":
         return window(text('Inbox', 80) + desc('Robot verify-session', 200, left=0, right=1080) + desc('Session list actions', 80))
+    if mode == "reply":
+        if screen == "menu":
+            return window(REPLY_CHAT + text('Reply', 900, clickable=True))
+        if screen == "replying":
+            return window(REPLY_CHAT + REPLY_BAR + composer(data))
+        return window(REPLY_CHAT + composer(data))
     if mode == "usage":
         if screen == "menu":
             return window(text('Inbox', 80) + desc('Session list actions', 80) + text('AI usage', 300, clickable=True) + text('Refresh', 420, clickable=True))
@@ -555,9 +563,9 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
             data["focused"] = True
         elif "Send prompt" in descs:
             data["screen"] = "sent"
-            data["text"] = ""
             with receipts.open("a") as stream:
-                stream.write("VERIFY_RECEIVED:/clear\\n")
+                stream.write("VERIFY_RECEIVED:/clear\\n" if mode == "ranking" else "> REPLY_BUBBLE_418\\n" + data["text"] + "\\n")
+            data["text"] = ""
         elif "/clear" in texts:
             data["text"] = "/clear "
             data["screen"] = "selected"
@@ -565,9 +573,19 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
             data["screen"] = "sheet"
             with receipts.open("a") as stream:
                 stream.write(json.dumps({"command": "cat ~/.local/state/token-ladder/status.json", "exitCode": 0, "stdout": json.dumps({"ts": 1, "accounts": [{"provider": "claude", "week": {"used": 37.5}}, {"provider": "codex", "week": {"used": 62.5}}]})}) + "\\n")
+        elif "Reply" in texts:
+            data["screen"] = "replying"
+        elif "Cancel reply" in descs:
+            data["screen"] = "chat"
         elif "Robot verify-session" in descs:
-            data["screen"] = "ready"
+            data["screen"] = "chat" if mode == "reply" else "ready"
         elif "Session list actions" in descs:
+            data["screen"] = "menu"
+        save(data)
+        sys.exit(0)
+    if args[2] == "swipe":
+        texts, descs, classes = containing((int(args[3]), int(args[4])))
+        if "REPLY_BUBBLE_418" in texts and data["screen"] == "chat":
             data["screen"] = "menu"
         save(data)
         sys.exit(0)
@@ -632,18 +650,20 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         script = f'set -euo pipefail\nscripts={SCRIPTS}\nstep=0\nsource {SCRIPTS / name}\nprintf "%s" "$step"'
         return subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
 
-    def test_the_ai_usage_journey_runs_end_to_end_through_the_cli(self):
-        result = self.run_journey('ai-usage-drive.sh', 'usage')
+    def test_the_message_reply_journey_runs_end_to_end_through_the_cli(self):
+        result = self.run_journey('message-reply-drive.sh', 'reply')
         self.assertEqual(0, result.returncode, result.stderr + result.stdout)
-        self.assertEqual('3', result.stdout.splitlines()[-1])
-        opened = json.loads((self.evidence / 'ai-usage-open.json').read_text())
+        self.assertEqual('4', result.stdout.splitlines()[-1])
+        opened = json.loads((self.evidence / 'reply-open.json').read_text())
         self.assertTrue(opened['passed'])
-        order = [check for check in opened['checks'] if check['kind'] == 'order']
-        self.assertEqual(1, len(order))
-        self.assertEqual(['Claude', '37.5%', 'BEHIND', 'WEEK 37.5% | 5H 12.5% | EMPTY IN 42H', 'Codex', '62.5%', 'AHEAD', 'WEEK 62.5% | 5H 25% | EMPTY IN 18H'], order[0]['values'])
-        self.assertTrue(json.loads((self.evidence / 'ai-usage-closed.json').read_text())['passed'])
-        self.assertEqual('AI_USAGE_OPEN_NUMBERS_CLOSE_OK', (self.evidence / 'ai-usage-proof.txt').read_text().splitlines()[0])
-        for name in ('01-ai-usage-menu.xml', '02-ai-usage-open.xml', '03-ai-usage-closed.xml'):
+        self.assertEqual(['present', 'present', 'present'], [check['kind'] for check in opened['checks']])
+        self.assertEqual(['Replying', 'REPLY_BUBBLE_418', 'Cancel reply'], [check['value'] for check in opened['checks']])
+        cancelled = json.loads((self.evidence / 'reply-cancelled.json').read_text())
+        self.assertTrue(cancelled['passed'])
+        self.assertEqual('MESSAGE_REPLY_JOURNEY_OK', (self.evidence / 'reply-proof.txt').read_text().splitlines()[0])
+        self.assertEqual(['> REPLY_BUBBLE_418', 'REPLY_BODY_418'], (self.evidence / 'reply-receipts.txt').read_text().splitlines()[:2])
+        self.assertRegex(self.log.read_text(), r'shell input swipe 540 640 540 640 800')
+        for name in ('01-reply-menu.xml', '02-reply-open.xml', '03-reply-cancelled.xml', '04-reply-sent.xml'):
             self.assertTrue((self.evidence / name).is_file(), name)
 
     def test_the_clear_ranking_journey_runs_end_to_end_through_the_cli(self):

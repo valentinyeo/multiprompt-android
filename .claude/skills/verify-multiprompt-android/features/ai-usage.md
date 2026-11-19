@@ -8,7 +8,7 @@ The independent SSH host writes its real `~/.local/state/token-ladder/status.jso
 
 ## Journey
 
-Every step drives the phone through `mpa`, saves a numbered PNG/XML pair, and checks the captured text before continuing.
+Every step saves a numbered PNG/XML pair and checks the captured text before continuing.
 
 1. From the inbox, open **Session list actions**. Require **AI usage** and **Refresh**. Capture `ai-usage-menu`. Require no usage read before opening the view.
 2. Tap **AI usage**. Require **Claude** with `37.5%` weekly and `12.5%` five-hour usage, and **Codex** with `62.5%` weekly and `25%` five-hour usage. Capture `ai-usage-open`. Match each provider's headline, weekly detail, five-hour detail, pace, and forecast to the independent host receipt. Require both complete blocks on screen.
@@ -16,7 +16,7 @@ Every step drives the phone through `mpa`, saves a numbered PNG/XML pair, and ch
 
 ## Evidence
 
-`mpa proof` reads the captured XML. `--order` requires every headline, weekly detail, pace word and forecast exactly once, fully on screen and in top-to-bottom order, so swapped provider values, incorrect numbers and off-screen blocks fail. `--forbid-text` rejects the loading, stale, empty and error states and an unclosed sheet. The journey then checks the raw host receipt itself: every recorded read is the expected status command with exit status 0, every read returned the same snapshot, and that snapshot carries both providers and the numbers on screen. `ai-usage-menu.json`, `ai-usage-open.json`, and `ai-usage-closed.json` are the CLI proof records for each step. `ai-usage-proof.txt` appears only after the complete journey passes.
+`tools/ai-usage/ui.py` reads the captured XML and screenshot dimensions. It rejects swapped provider values, incorrect numbers, off-screen blocks, missing host receipts, and an unclosed sheet. `ai-usage-menu.json`, `ai-usage-open.json`, and `ai-usage-closed.json` link the screenshot and XML for each step. `ai-usage-proof.txt` appears only after the complete journey passes.
 
 The registry removes `ai.usage` from the missing-coverage baseline. It schedules this journey for AI usage product changes and edits to this recipe, even when the model omits it. Inspect the PNGs, JSON, raw host receipts, and `driver-transcript.txt` in the retained head artifact at the exact APK source SHA after cleanup.
 

@@ -492,16 +492,21 @@ def screenshot(name):
     return {"ok": True, "command": "screenshot", "name": name, "step": index, "xml": str(xml), "png": str(png), "next_step": index + 1}
 
 
-def proof(name, note, proof_file, required, forbidden, order_values, xml_path, dry_run):
+def proof(name, note, proof_file, required, forbidden, required_desc, forbidden_desc, order_values, xml_path, dry_run):
     directory = artifacts_dir()
     current = Path(xml_path) if xml_path else dump_ui()
     root = load_tree(current)
     texts = screen_texts(root)
+    descriptions = [node.get("content-desc") or "" for node in root.iter("node")]
     checks = []
     for value in required:
         checks.append({"kind": "present", "value": value, "passed": any(value in text for text in texts)})
     for value in forbidden:
         checks.append({"kind": "absent", "value": value, "passed": not any(value in text for text in texts)})
+    for value in required_desc:
+        checks.append({"kind": "present", "value": value, "passed": any(value in description for description in descriptions)})
+    for value in forbidden_desc:
+        checks.append({"kind": "absent", "value": value, "passed": not any(value in description for description in descriptions)})
     if order_values:
         try:
             screen_order(root, order_values)
@@ -638,12 +643,28 @@ def read_screen(args):
             found = any(value in text for text in screen_texts(load_tree(path)))
             return path if (found if args.wait_text else not found) else None
 
-        path = wait_for(current, check, args.timeout, f"{'text' if args.wait_text else 'absence of'} {value!r}")
+        timeout = args.timeout if args.timeout is not None else 30
+        path = wait_for(current, check, timeout, f"{'text' if args.wait_text else 'absence of'} {value!r}")
         root = load_tree(path)
     else:
         path = Path(args.xml) if args.xml else dump_ui()
         root = load_tree(path)
         if args.select:
+            if args.timeout:
+                def current_select():
+                    return Path(args.xml) if args.xml else dump_ui()
+
+                def check(path):
+                    sample = load_tree(path)
+                    try:
+                        found = resolve(sample, args.select, args.value, tuple(args.extra))
+                    except MpaError:
+                        return None
+                    return path, found
+
+                path, payload = wait_for(current_select, check, args.timeout, f"{args.select}: {args.value!r}")
+                payload.update({"ok": True, "command": "read", "xml": str(path)})
+                return payload
             payload = resolve(root, args.select, args.value, tuple(args.extra))
             payload.update({"ok": True, "command": "read", "xml": str(path)})
             return payload
@@ -653,6 +674,17 @@ def read_screen(args):
         Path(args.out).write_text(json.dumps(payload, separators=(",", ":")) + "\n")
         payload["out"] = args.out
     return payload
+
+
+def hold(mode, value, xml_path, dry_run):
+    planned = tap(mode, value, xml_path, dry_run=True)
+    if planned.get("action") != "tap":
+        raise MpaError("HOLD_NOT_REACHABLE", f"Could not reveal {value!r} for a long press", "Run `mpa read` and confirm the label is inside the active window, then retry `mpa hold`.")
+    x, y = planned["point"]
+    if dry_run:
+        return {"ok": True, "command": "hold", "dry_run": True, "mode": planned["mode"], "value": planned["value"], "point": [x, y], "commands": [ADB + f" shell input swipe {x} {y} {x} {y} 800"]}
+    adb("shell", "input", "swipe", x, y, x, y, 800)
+    return {"ok": True, "command": "hold", "dry_run": False, "mode": planned["mode"], "value": planned["value"], "point": [x, y]}
 
 
 def key(name, dry_run):
@@ -684,6 +716,7 @@ def build_parser():
   mpa read --wait-text 'Message verify-session'
   mpa read --select desc --value 'Session actions'
   mpa fill 'Message verify-session' /cl
+  mpa hold text REPLY_BUBBLE_418
   mpa screenshot reader-sync
   mpa proof --name reader-sync --require-text 'Sign in to sync'
   mpa cleanup --fixture "$FIXTURE"
@@ -715,12 +748,12 @@ Commands that need a device run only on a GitHub runner, never on the local serv
 
     read_parser = commands.add_parser("read", formatter_class=argparse.RawDescriptionHelpFormatter, help="Print the UI tree as JSON, or query one selector.", description="Print every node's text, description, bounds and state as JSON. With --select it answers one selector and returns its node and tap point. --wait-text and --wait-absent poll until the screen matches.", epilog="Examples:\n  mpa read\n  mpa read --select desc --value 'Session actions'\n  mpa read --wait-text 'Message verify-session'\n  mpa read --wait-absent 'Sign in to sync' --timeout 60")
     read_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone.")
-    read_parser.add_argument("--select", choices=SELECTOR_MODES, help="Answer one selector instead of printing the whole tree.")
+    read_parser.add_argument("--select", choices=SELECTOR_MODES, help="Answer one selector instead of printing the whole tree. With --timeout it polls until the selector matches.")
     read_parser.add_argument("--value", default="", help="Selector value for --select.")
     read_parser.add_argument("--extra", nargs="*", default=[], help="Selector extras, for example the expected field value or scroll direction.")
     read_parser.add_argument("--wait-text", help="Poll until some text contains this value.")
     read_parser.add_argument("--wait-absent", help="Poll until no text contains this value.")
-    read_parser.add_argument("--timeout", type=float, default=30, help="Seconds to keep polling (default: 30).")
+    read_parser.add_argument("--timeout", type=float, help="Seconds to keep polling (default: 30 for --wait-text and --wait-absent; --select never polls unless you pass it).")
     read_parser.add_argument("--out", help="Also write the JSON tree to this path.")
 
     screenshot_parser = commands.add_parser("screenshot", formatter_class=argparse.RawDescriptionHelpFormatter, help="Keep a numbered PNG/XML pair in the evidence directory.", description="Dump the UI and screencap the phone into EVIDENCE, numbered after the files already there.", epilog="Examples:\n  mpa screenshot reader-sync")
@@ -732,6 +765,8 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     proof_parser.add_argument("--proof-file", help="Proof file to write with --note (default: NAME-proof.txt in EVIDENCE).")
     proof_parser.add_argument("--require-text", action="append", default=[], help="Text that must appear. Repeatable.")
     proof_parser.add_argument("--forbid-text", action="append", default=[], help="Text that must not appear. Repeatable.")
+    proof_parser.add_argument("--require-desc", action="append", default=[], help="Content description that must appear. Repeatable.")
+    proof_parser.add_argument("--forbid-desc", action="append", default=[], help="Content description that must not appear. Repeatable.")
     proof_parser.add_argument("--order", action="append", default=[], help="Text that must appear exactly once, fully on screen, in this top-to-bottom order. Repeatable.")
     proof_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone.")
     proof_parser.add_argument("--dry-run", action="store_true", help="Check without writing evidence files.")
@@ -741,6 +776,12 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     fill_parser.add_argument("value", help="Exact text to type. A literal %s becomes a space.")
     fill_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone (for replay and tests).")
     fill_parser.add_argument("--dry-run", action="store_true", help="Resolve the field and print the planned commands without touching the phone.")
+
+    hold_parser = commands.add_parser("hold", formatter_class=argparse.RawDescriptionHelpFormatter, help="Long-press a reachable label.", description="Resolve an enabled label in the active window, scroll it into view, then press and hold its center for 800 ms. Use it for long-press menus.", epilog="Examples:\n  mpa hold text REPLY_BUBBLE_418\n  mpa hold text REPLY_BUBBLE_418 --dry-run --xml screen.xml")
+    hold_parser.add_argument("mode", choices=["text", "desc", "field", "text-containing"], help="How to find the control.")
+    hold_parser.add_argument("value", help="Label, description or field placeholder to press and hold.")
+    hold_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone (for replay and tests).")
+    hold_parser.add_argument("--dry-run", action="store_true", help="Resolve and print the planned long press without touching the phone.")
 
     cleanup_parser = commands.add_parser("cleanup", formatter_class=argparse.RawDescriptionHelpFormatter, help="Stop the fixture processes and keep the evidence.", description="Copy fixture logs into EVIDENCE, stop only the tmux and sshd PIDs recorded by fixture setup, and remove generated keys. Never kills by process name and never deletes evidence.", epilog="Examples:\n  mpa cleanup --fixture \"$FIXTURE\"")
     cleanup_parser.add_argument("--fixture", default=os.environ.get("FIXTURE"), help="Fixture directory holding the recorded PIDs and logs (default: $FIXTURE).")
@@ -774,9 +815,11 @@ def main(argv=None):
         elif args.command == "screenshot":
             payload = screenshot(args.name)
         elif args.command == "proof":
-            payload = proof(args.name, args.note, args.proof_file, args.require_text, args.forbid_text, args.order, args.xml, args.dry_run)
+            payload = proof(args.name, args.note, args.proof_file, args.require_text, args.forbid_text, args.require_desc, args.forbid_desc, args.order, args.xml, args.dry_run)
         elif args.command == "fill":
             payload = fill(args.field, args.value, args.xml, args.dry_run)
+        elif args.command == "hold":
+            payload = hold(args.mode, args.value, args.xml, args.dry_run)
         elif args.command == "cleanup":
             payload = cleanup(args.fixture, args.dry_run)
         elif args.command == "key":
