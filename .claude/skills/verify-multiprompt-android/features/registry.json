@@ -1083,6 +1083,32 @@
         "pre-425-reader.txt": 1500,
         "seed-counts.json": 3000
       }
+    },
+    "reader-long-pane.md": {
+      "name": "A long terminal pane in the reader",
+      "description": "A 2950-line terminal pane opens in the reader and shows its newest output after a force-stop relaunch, without a measure-time crash. SOFT-2840.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/reader-long-pane-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "reader.long-pane"
+      ],
+      "evidence": {
+        "long-pane-seed.json": 400,
+        "long-pane-capture-seeded.txt": 700,
+        "long-pane-reader.json": 400,
+        "long-pane-reader-proof.txt": 200,
+        "long-pane-reopened.json": 400,
+        "logcat-reader.txt": 600,
+        "logcat-reopened.txt": 600
+      }
     }
   },
   "outcomes": {
@@ -1735,6 +1761,24 @@
         "result": {
           "file": "compacted-chat.json",
           "quote": "COMPACTED_AFTER_2715"
+        }
+      }
+    },
+    "reader.long-pane": {
+      "description": "A long terminal pane renders its newest output in the legacy reader instead of measuring thousands of blocks in one scrolling column.",
+      "journey": "reader-long-pane.md",
+      "sideEffect": false,
+      "match": [
+        "readerPaneBlocks|ReaderPaneBlocks|READER_PANE_BLOCKS"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap text live-long-pane-2840"
+        },
+        "result": {
+          "file": "long-pane-reader.json",
+          "quote": "LONG_PANE_TAIL_2840"
         }
       }
     }
