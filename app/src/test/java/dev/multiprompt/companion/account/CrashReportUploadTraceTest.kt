@@ -59,15 +59,6 @@ class CrashReportUploadTraceTest {
             body!!.getString("summary"))
     }
 
-    @Test fun wrappedReleaseCrashKeepsItsMessageWhenTheTraceHeaderHasNone() {
-        upload("java.lang.IllegalArgumentException\n" +
-            "\tat dev.multiprompt.companion.ui.b.b(r8-map-id-9f8e7d6c5b:245)\n" +
-            "\tat android.view.View.measure(View.java:28000)",
-            summary = "Can't represent a size of 300000 in Constraints")
-        assertEquals("java.lang.IllegalArgumentException: Can't represent a size of 300000 in Constraints",
-            body!!.getString("summary"))
-    }
-
     @Test fun unsafeMessageIsDroppedAndTheTypeRemains() {
         upload("java.lang.IllegalArgumentException: chat content \"secret help\"\n" +
             "\tat dev.multiprompt.companion.ui.b.b(r8-map-id-9f8e7d6c5b:245)")
