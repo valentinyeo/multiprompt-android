@@ -286,12 +286,7 @@ class JourneyCommandTest(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.evidence = self.root / 'evidence'
         self.evidence.mkdir()
-        self.env = environment(EVIDENCE=str(self.evidence), HOME=str(self.home_path()), GITHUB_ACTIONS='true', ADB=str(self.root / 'no-adb'))
-
-    def home_path(self):
-        path = self.root / 'home'
-        path.mkdir(exist_ok=True)
-        return path
+        self.env = {**os.environ, 'EVIDENCE': str(self.evidence), 'GITHUB_ACTIONS': 'true', 'ADB': str(self.root / 'no-adb')}
 
     def run_cli(self, *args, env=None):
         return subprocess.run([sys.executable, '-B', str(MPA), *args], capture_output=True, text=True, env=env or self.env)
