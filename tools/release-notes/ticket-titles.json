@@ -141,5 +141,6 @@
   "IGSH-2706": "Inbox folder bar: selected folder hidden and pills cut off",
   "IGSH-2722": "PR checker blocks shared chat reader changes: 46 journeys over cap",
   "IGSH-2730": "Chat cancel phone test fails on main and blocks every chat PR",
+  "IGSH-2734": "Release can hang for an hour while filming its proof",
   "IGSH-2748": "PR checker randomly refuses the chat fix as unmapped"
 }
