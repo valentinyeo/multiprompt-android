@@ -470,10 +470,14 @@ class ChatHistoryConnection(
                                         replica = built
                                         hostCarry = page.sid to built
                                     }
-                                    if (next.clearedAt > 0 && !sweepCleared(page.sid, cycleGeneration, next.clearedAt, requireNotNull(replica),
-                                            clearedBy > 0, messageScope, exchange) { ++requestId }) {
-                                        replica = null
-                                        continue@poll
+                                    if (next.clearedAt > 0) {
+                                        val swept = sweepCleared(page.sid, cycleGeneration, next.clearedAt, requireNotNull(replica),
+                                            clearedBy > 0, messageScope, exchange) { ++requestId }
+                                        if (swept == null) {
+                                            replica = null
+                                            continue@poll
+                                        }
+                                        replica = swept
                                     }
                                     for (entry in pending(page.sid).filter { it.operation == "submit" && it.id !in checked }) {
                                         requestId++
@@ -716,7 +720,7 @@ class ChatHistoryConnection(
     }
 
     private suspend fun sweepCleared(sid: String, observed: Long, clearedAt: Double, replica: MessageReplica, forgetSubmits: Boolean,
-        wire: MessageProtocol.Scope, exchange: suspend (String) -> String, nextId: () -> Long): Boolean {
+        wire: MessageProtocol.Scope, exchange: suspend (String) -> String, nextId: () -> Long): MessageReplica? {
         val clearable = replica.messages.values.filter { row ->
             row.created < clearedAt - ChatHistory.CLOCK_SLACK && row.id !in sweptRows &&
                 row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED)
@@ -728,17 +732,20 @@ class ChatHistoryConnection(
                 true
             } ?: false
         }
-        if (!journaled) return false
+        if (!journaled) return null
+        var swept = replica
         for (row in clearable) {
-            if (generation != observed || !owns(sid)) return false
+            if (generation != observed || !owns(sid)) return null
             val id = nextId()
             val response = exchange(MessageProtocol.request(id, wire, "message_dismiss",
                 JSONObject().put("message_id", row.id).put("text", row.text)))
             sweptRows.add(row.id)
             if (MessageProtocol.rejectedMutation(response, id)) continue
-            MessageProtocol.mutation(response, id, wire, row.id, row.text)
+            val updated = MessageProtocol.mutation(response, id, wire, row.id, row.text).row ?: continue
+            if (updated.epoch != swept.epoch) return null
+            swept = swept.copy(messages = swept.messages + (updated.id to updated))
         }
-        return true
+        return swept
     }
 
     private suspend fun performAction(command: Command.Action, replica: MessageReplica, wire: MessageProtocol.Scope,
