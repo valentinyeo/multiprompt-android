@@ -11,13 +11,13 @@ Dispatch `verify.yml` with `feature=reader-long-pane.md` on a fresh GitHub-hoste
 `fixture.sh` starts `live-long-pane-2840` on the fixture host before the app launches. `tools/long-pane/fixture.py` writes a 2952-line pane, 1475 cycles of
 
 ```
-⏺ behind=24 age=24m tag=v0.1.24
-behind=24 age=24m tag=v0.1.24
+❯ check the release watch at tag v0.1.24
+the release watch still trails the newest tag by 25 minutes
 ```
 
 followed by a divider and the tail marker `LONG_PANE_TAIL_2840`. The pane keeps tmux history of 8000 lines, so `capture-pane -S -5000` returns all of it. `long-pane-seed.json` records the fixture's own line, byte and cycle counts; `long-pane-capture-seeded.txt` is the host's own capture, and the driver fails unless it holds 2950 lines or more, ends with the tail marker and is not in alternate-screen mode.
 
-The alternating lines are what the reader splitter does with agent output: a status line starting with `⏺` becomes an activity block, an assignment line becomes a code block, and each one is a separate `ReaderCollapsibleBlock` card.
+The alternating lines are what the reader splitter does with agent output: a prompt line becomes a `USER_PROMPT` bubble, the following sentence becomes a `PROSE` bubble, and the clean view renders both, so the reader composes 2950 separate bubbles in one scrolling column.
 
 ## Journey
 

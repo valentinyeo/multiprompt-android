@@ -14,8 +14,8 @@ MIN_LINES = 2950
 def pane_text(cycles=CYCLES):
     lines = []
     for index in range(1, cycles + 1):
-        lines.append(f'⏺ behind={index} age={index}m tag=v0.1.{index}')
-        lines.append(f'behind={index} age={index}m tag=v0.1.{index}')
+        lines.append(f'❯ check the release watch at tag v0.1.{index}')
+        lines.append(f'the release watch still trails the newest tag by {index % 60 + 1} minutes')
     lines.extend([DIVIDER, TAIL])
     return '\n'.join(lines) + '\n'
 
