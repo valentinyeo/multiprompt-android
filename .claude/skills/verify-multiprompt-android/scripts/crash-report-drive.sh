@@ -51,8 +51,9 @@ wait_report() {
 plant() {
     local action=$1 needle=$2 label=$3
     printf 'PLANT %s\n' "$label" | tee -a "$shared_report"
-    timeout 90s adb shell am broadcast -a "$action" > /dev/null 2>&1 || true
-    wait_dead
+    timeout 90s adb shell am broadcast -n "$package/dev.multiprompt.companion.DebugExitReceiver" -a "$action" \
+        > "$EVIDENCE/broadcast-$(printf '%s' "$label" | tr ' ' -).txt" 2>&1 || true
+    wait_dead || true
     if ! wait_report "$needle"; then
         printf 'PRODUCT_ASSERTION_FAILED %s: no crash report with summary %s reached the account service\n' "$label" "$needle" >&2
         sudo cat "$receipts" >&2 2>/dev/null || true
