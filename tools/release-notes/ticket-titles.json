@@ -1,4 +1,5 @@
 {
+  "IGSH-2754": "One phone test CLI replaces 34 loose test scripts",
   "IGSH-2757": "PR checker judges a change with the same AI that wrote it",
   "IGSH-2752": "A required check blocks feature PRs until phone testing is right",
   "IGSH-2681": "Android reader misses replies after the chat server restarts",
@@ -139,5 +140,6 @@
   "IGSH-2714": "PR checks give a verdict in about 20 minutes",
   "IGSH-2706": "Inbox folder bar: selected folder hidden and pills cut off",
   "IGSH-2722": "PR checker blocks shared chat reader changes: 46 journeys over cap",
-  "IGSH-2730": "Chat cancel phone test fails on main and blocks every chat PR"
+  "IGSH-2730": "Chat cancel phone test fails on main and blocks every chat PR",
+  "IGSH-2748": "PR checker randomly refuses the chat fix as unmapped"
 }

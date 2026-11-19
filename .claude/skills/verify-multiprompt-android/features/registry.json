@@ -1090,6 +1090,12 @@
       "sideEffect": true,
       "match": [
         "codex"
+      ],
+      "paths": [
+        "^app/src/main/assets/chat_history_reader\\.py$",
+        "^app/src/main/assets/chat_history_reader\\.sha$",
+        "^tools/vendor/chat-reader/",
+        "^tools/sync-chat-reader\\.sh$"
       ]
     },
     "chat-queued.journey": {
@@ -1645,6 +1651,12 @@
         "reader/ChatHistoryConnection\\.kt",
         "reader/ChatHistoryProtocol\\.kt",
         "hosted_claude_transcript_sid|native_session=event"
+      ],
+      "paths": [
+        "^app/src/main/assets/chat_history_reader\\.py$",
+        "^app/src/main/assets/chat_history_reader\\.sha$",
+        "^tools/vendor/chat-reader/",
+        "^tools/sync-chat-reader\\.sh$"
       ],
       "citations": {
         "action": {

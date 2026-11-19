@@ -25,7 +25,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | Rule | Enforced by |
 |---|---|
 | Every PR builds, unit-tests and lints without unrelated phone jobs | `test.yml` runs build and `tools/check.sh source/unit/m3/lint`; `tools/ci/pr-workflows.test.mjs` checks workflow ownership |
-| Every PR gets one independent verdict, including tooling-only changes. At most three touched journeys run, with edited repro recipes first; remaining guards are named as deferred to nightly `android-full` | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js`; tooling retains hosted parent/head rule proof |
+| Every PR gets one independent verdict, including tooling-only changes. At most three touched journeys run, with edited repro recipes first; remaining guards are named as deferred to nightly `android-full`. Code maps registry recipes and the shared chat reader paths to outcomes before the picker model adds guards | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js`; tooling retains hosted parent/head rule proof |
 | The judge is a model family no PR author used. Each PR body names every author with `Author model: <family>/<model>`; a missing, unknown or all-families-used author list fails | `authorFamilies` and `chooseJudge` in `verifier.cjs`, `tools/pstack-verifier.test.js` |
 | Reuse base proof only for the same source SHA, journey and unchanged driver inputs | `parent-cache.cjs`, retained base artifacts and `tools/parent-cache.test.js` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
