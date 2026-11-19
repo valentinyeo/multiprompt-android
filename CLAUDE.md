@@ -18,6 +18,8 @@ Start time with and without the baseline profile: dispatch `startup-time.yml` (`
 
 Emulator scroll-under proof: `tools/top-fade-proof.sh`. GitHub runs it in `top-fade.yml`. Dispatch with `release_smoke=true` to verify the published APK.
 
+The shared emulator action installs the two packages it needs (`gdb` for the crash tracer, `libpulse0` for audio) from the runner cache, and only falls back to a package download when that cache is empty, so a slow mirror cannot add minutes to every journey job. `tools/emulator.test.py` proves the cache-first order, the empty-cache fallback and the install assertion.
+
 Requires JDK 17 and Android SDK 36. Before every push run the focused source checks. Run `tools/check.sh` on GitHub, never local Gradle. On every PR and main push, `test.yml` runs its `source`, `unit`, `m3` and `lint` phases plus the debug build. Historical mutations and phone regressions run in `android-full.yml` nightly.
 
 | Rule | Enforced by |
