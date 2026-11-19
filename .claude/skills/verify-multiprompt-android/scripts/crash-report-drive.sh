@@ -2,6 +2,7 @@
 set -euo pipefail
 
 package=${VERIFY_PACKAGE:-dev.multiprompt.companion.debug}
+activity="$package/dev.multiprompt.companion.DebugCrashActivity"
 receipts=/home/verifyssh/crash-reports.jsonl
 shared_report="$EVIDENCE/crash-exits.txt"
 : > "$shared_report"
@@ -49,48 +50,69 @@ wait_report() {
 }
 
 plant() {
-    local action=$1 needle=$2 label=$3
-    printf 'PLANT %s\n' "$label" | tee -a "$shared_report"
-    timeout 90s adb shell am broadcast -n "$package/dev.multiprompt.companion.DebugExitReceiver" -a "$action" \
-        > "$EVIDENCE/broadcast-$(printf '%s' "$label" | tr ' ' -).txt" 2>&1 || true
-    wait_dead || true
+    local exit=$1 label=$2 settle=$3
+    adb shell am force-stop "$package"
+    {
+        printf 'PLANT %s\n' "$label"
+        timeout 90s adb shell am start -n "$activity" --es exit "$exit" 2>&1 | sed 's/^/  /' || true
+    } | tee -a "$shared_report"
+    sleep "$settle"
+}
+
+block_main_thread() {
+    local attempt
+    for attempt in $(seq 1 8); do
+        timeout 15s adb shell input keyevent KEYCODE_DPAD_DOWN || true
+        timeout 15s adb shell input keyevent KEYCODE_A || true
+        sleep 1
+    done
+}
+
+plant_and_wait() {
+    local exit=$1 label=$2 needle=$3
+    if [[ "$exit" == anr ]]; then
+        plant "$exit" "$label" 9
+        block_main_thread
+    else
+        plant "$exit" "$label" 4
+    fi
+    if ! wait_dead; then
+        printf 'PLANT_ALIVE %s: the app process was still alive after the plant\n' "$label" | tee -a "$shared_report"
+    fi
     if ! wait_report "$needle"; then
-        printf 'PRODUCT_ASSERTION_FAILED %s: no crash report with summary %s reached the account service\n' "$label" "$needle" >&2
-        sudo cat "$receipts" >&2 2>/dev/null || true
-        return 1
+        printf 'MISSING %s: no crash report with summary starting %s reached the account service\n' "$label" "$needle" | tee -a "$shared_report"
+        missing="$missing $exit"
+        return 0
     fi
     received "$needle" | tee -a "$shared_report"
 }
 
-plant dev.multiprompt.companion.debug.THROW 'IGSH-2840 crash' 'uncaught exception'
-plant dev.multiprompt.companion.debug.NATIVE 'Native crash' 'native crash'
-launch
-adb shell input keyevent KEYCODE_HOME
-adb shell am kill "$package" || true
-wait_dead
-if ! wait_report 'Signaled exit'; then
-    printf 'PRODUCT_ASSERTION_FAILED signaled process death: no crash report with summary Signaled exit reached the account service\n' >&2
-    sudo cat "$receipts" >&2 2>/dev/null || true
-    exit 1
-fi
-received 'Signaled exit' | tee -a "$shared_report"
-plant dev.multiprompt.companion.debug.ANR 'ANR' 'application not responding'
+missing=""
+plant_and_wait uncaught 'uncaught exception' 'java.lang.IllegalStateException: IGSH-2840 crash'
+plant_and_wait native 'native crash' 'Native crash'
+plant_and_wait kill 'system kill' 'Signaled exit'
+plant_and_wait anr 'application not responding' 'ANR'
 
-sudo cat "$receipts" > "$EVIDENCE/crash-reports-received.txt"
-python3 - "$EVIDENCE" <<'PYTHON'
+sudo cat "$receipts" > "$EVIDENCE/crash-reports-received.txt" 2>/dev/null || : > "$EVIDENCE/crash-reports-received.txt"
+
+python3 - "$EVIDENCE" "$missing" <<'PYTHON'
 import json
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+missing = sys.argv[2].split()
 reports = [json.loads(line) for line in (root / 'crash-reports-received.txt').read_text().splitlines() if line.strip()]
 fields = {'id', 'captured_at', 'app_version', 'android_version', 'thread', 'summary', 'stack_trace'}
+needles = {'uncaught': 'java.lang.IllegalStateException: IGSH-2840 crash', 'native': 'Native crash',
+           'kill': 'Signaled exit', 'anr': 'ANR'}
+labels = {'uncaught': 'uncaught exception', 'native': 'native crash', 'kill': 'system kill',
+          'anr': 'application not responding'}
 summaries = {}
-for needle, label in (('IGSH-2840 crash', 'uncaught exception'), ('Native crash', 'native crash'),
-                      ('Signaled exit', 'signaled process death'), ('ANR', 'application not responding')):
-    matches = [report for report in reports if needle in report['summary']]
-    assert matches, (label, [report['summary'] for report in reports])
-    summaries[label] = matches[-1]['summary']
+for exit, needle in needles.items():
+    matches = [report for report in reports if report['summary'].startswith(needle)]
+    if matches:
+        summaries[labels[exit]] = matches[-1]['summary']
 for report in reports:
     assert set(report) == fields, sorted(report)
     assert report['id'] and report['thread'] in {'main', 'background'}, report
@@ -98,9 +120,13 @@ for report in reports:
     assert report['stack_trace'].strip(), report
     assert report['app_version'].strip() and report['android_version'].strip(), report
 (root / 'crash-exit-summaries.json').write_text(json.dumps(summaries, indent=2))
-print('EVERY_PLANTED_EXIT_ARRIVED_AT_THE_ACCOUNT_SERVICE')
+print('REPORTS RECEIVED:', [report['summary'] for report in reports])
 for label, summary in summaries.items():
     print(label, '->', summary)
+if missing:
+    print('MISSING_EXITS', ' '.join(labels[exit] for exit in missing))
+    sys.exit(1)
+print('EVERY_PLANTED_EXIT_ARRIVED_AT_THE_ACCOUNT_SERVICE')
 PYTHON
 
 shot crash-reports-received
