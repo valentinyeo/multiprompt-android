@@ -1,4 +1,5 @@
 {
+  "IGSH-2771": "Failed release cannot poison later releases",
   "IGSH-2760": "Phone tests stop before the emulator starts",
   "IGSH-2754": "One phone test CLI replaces 34 loose test scripts",
   "IGSH-2757": "PR checker judges a change with the same AI that wrote it",
