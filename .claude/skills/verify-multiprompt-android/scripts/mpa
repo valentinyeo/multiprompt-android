@@ -519,13 +519,13 @@ def proof(name, note, proof_file, required, forbidden, required_desc, forbidden_
         return {"ok": passed, "command": "proof", "dry_run": True, "record": record}
     output = directory / f"{name}.json"
     output.write_text(json.dumps(record, separators=(",", ":")) + "\n")
+    if not passed:
+        failed = ", ".join(check["value"] if "value" in check else ", ".join(check["values"]) for check in checks if not check["passed"])
+        raise MpaError("PROOF_FAILED", f"Screen does not prove {name}: {failed}", "Run `mpa screenshot NAME` and `mpa read` to inspect the screen, then fix the state before retrying.")
     if note:
         proof_path = Path(proof_file) if proof_file else directory / f"{name}-proof.txt"
         proof_path.parent.mkdir(parents=True, exist_ok=True)
         proof_path.write_text(note + "\n" + json.dumps(record, separators=(",", ":")) + "\n")
-    if not passed:
-        failed = ", ".join(check["value"] if "value" in check else ", ".join(check["values"]) for check in checks if not check["passed"])
-        raise MpaError("PROOF_FAILED", f"Screen does not prove {name}: {failed}", "Run `mpa screenshot NAME` and `mpa read` to inspect the screen, then fix the state before retrying.")
     return {"ok": True, "command": "proof", "dry_run": False, "record": record, "json": str(output), "message": note or "PROOF_OK"}
 
 

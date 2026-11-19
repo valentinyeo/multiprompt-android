@@ -220,6 +220,23 @@ class MpaCliTest(unittest.TestCase):
         self.assertIn('/ghost', record['checks'][0]['detail'])
         self.assertIn('mpa read', record['checks'][0]['detail'] + json.loads(result.stdout)['next'])
 
+    def test_the_reply_sent_proof_rejects_a_bubble_the_phone_marks_not_sent(self):
+        screen = self.root / 'not-sent.xml'
+        screen.write_text('<hierarchy rotation="0"><node class="android.widget.FrameLayout" package="dev.multiprompt.companion.debug" visible-to-user="true" bounds="[0,0][1080,1920]">'
+                          '<node text="REPLY_BODY_418" package="dev.multiprompt.companion.debug" bounds="[40,400][600,460]" class="android.widget.TextView" />'
+                          '<node text="REPLY_DELIVERED_418" package="dev.multiprompt.companion.debug" bounds="[40,500][600,560]" class="android.widget.TextView" />'
+                          '<node text="Not sent" package="dev.multiprompt.companion.debug" bounds="[40,600][600,660]" class="android.widget.TextView" />'
+                          '<node text="Send again" package="dev.multiprompt.companion.debug" bounds="[40,700][600,760]" class="android.widget.TextView" />'
+                          '</node></hierarchy>')
+        result = self.run_cli('proof', '--name', 'reply-sent', '--require-text', 'REPLY_BODY_418', '--require-text', 'REPLY_DELIVERED_418', '--forbid-text', 'Not sent', '--forbid-text', 'Send again', '--xml', str(screen))
+        self.assertEqual(1, result.returncode)
+        record = json.loads((self.evidence / 'reply-sent.json').read_text())
+        self.assertFalse(record['passed'])
+        self.assertEqual([{'kind': 'present', 'value': 'REPLY_BODY_418', 'passed': True},
+                          {'kind': 'present', 'value': 'REPLY_DELIVERED_418', 'passed': True},
+                          {'kind': 'absent', 'value': 'Not sent', 'passed': False},
+                          {'kind': 'absent', 'value': 'Send again', 'passed': False}], record['checks'])
+
     def test_the_migrated_journeys_drive_only_through_the_cli(self):
         helper = re.compile(r'(?m)^\s*(shot|tap_text|tap_desc|wait_for_text|wait_for_absence|dump_ui|select_node|relaunch_app)\b')
         for name in ('clear-ranking-drive.sh', 'message-reply-drive.sh', 'remote-control-drive.sh'):
@@ -519,6 +536,8 @@ def xml_for(data):
             return window(REPLY_CHAT + text('Reply', 900, clickable=True))
         if screen == "replying":
             return window(REPLY_CHAT + REPLY_BAR + composer(data))
+        if screen == "sent":
+            return window(REPLY_CHAT + text('REPLY_BODY_418', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data))
         return window(REPLY_CHAT + composer(data))
     if mode == "usage":
         if screen == "menu":
@@ -662,6 +681,10 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertTrue(cancelled['passed'])
         self.assertEqual('MESSAGE_REPLY_JOURNEY_OK', (self.evidence / 'reply-proof.txt').read_text().splitlines()[0])
         self.assertEqual(['> REPLY_BUBBLE_418', 'REPLY_BODY_418'], (self.evidence / 'reply-receipts.txt').read_text().splitlines()[:2])
+        sent = json.loads((self.evidence / 'reply-sent.json').read_text())
+        self.assertTrue(sent['passed'])
+        self.assertEqual(['present', 'present', 'absent', 'absent', 'absent', 'absent', 'absent'], [check['kind'] for check in sent['checks']])
+        self.assertEqual(['REPLY_BODY_418', 'REPLY_DELIVERED_418', 'Replying', 'Not sent', 'Send again', 'Remove', 'Cancel reply'], [check['value'] for check in sent['checks']])
         self.assertRegex(self.log.read_text(), r'shell input swipe 540 640 540 640 800')
         for name in ('01-reply-menu.xml', '02-reply-open.xml', '03-reply-cancelled.xml', '04-reply-sent.xml'):
             self.assertTrue((self.evidence / name).is_file(), name)

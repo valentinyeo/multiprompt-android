@@ -6,6 +6,7 @@ from pathlib import Path
 import queue
 import re
 import sys
+import termios
 import threading
 import uuid
 
@@ -45,6 +46,7 @@ def write_transcript(home):
 def submit(transcript, lines):
     append(transcript, "user", dict(role="user", content="\n".join(lines)))
     append(transcript, "assistant", dict(role="assistant", content=ACK, id="message-" + uuid.uuid4().hex, stop_reason="end_turn"))
+    return ACK
 
 
 def record(home, line):
@@ -52,14 +54,21 @@ def record(home, line):
         output.write(line)
 
 
+def redraw(shown):
+    print("\x1b[2J\x1b[HClaude Code\n" + "\n".join(shown) + "\n\n❯ \n" + "─" * 50, flush=True)
+
+
 def pump(home, transcript, arriving, quiet=1.0):
+    shown = ["REPLY_READY_418", "Ready"]
+    redraw(shown)
     pending = []
     while True:
         try:
             line = arriving.get(timeout=quiet)
         except queue.Empty:
             if "".join(pending).strip():
-                submit(transcript, pending)
+                shown.append(submit(transcript, pending))
+                redraw(shown)
             pending = []
             continue
         if line is None:
@@ -67,7 +76,8 @@ def pump(home, transcript, arriving, quiet=1.0):
         record(home, line)
         pending.append(line.rstrip("\r\n"))
         if MARKER.fullmatch(pending[-1]):
-            submit(transcript, pending)
+            shown.append(submit(transcript, pending))
+            redraw(shown)
             pending = []
 
 
@@ -76,7 +86,9 @@ def main():
         raise SystemExit("message reply requires the hosted SSH fixture")
     home = Path.home()
     transcript = write_transcript(home)
-    print("Claude Code\nREPLY_READY_418\nReady\n❯ ", flush=True)
+    attributes = termios.tcgetattr(sys.stdin)
+    attributes[3] &= ~termios.ECHO
+    termios.tcsetattr(sys.stdin, termios.TCSANOW, attributes)
     arriving = queue.Queue()
 
     def console_reader():
