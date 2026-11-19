@@ -2477,7 +2477,9 @@ if [[ "$feature" == chat-resync.md ]]; then
         cat "$EVIDENCE/resync-server-after.json" "$EVIDENCE/resync-server-error.txt" >&2
         exit 1
     fi
-    python3 "$scripts/mpa" toast --settled "$EVIDENCE/toast-settled.png" "${toast_shots[@]/#/--shot }" | tee "$EVIDENCE/toast-result.txt"
+    toast_args=()
+    for toast_shot in "${toast_shots[@]}"; do toast_args+=(--shot "$toast_shot"); done
+    python3 "$scripts/mpa" toast --settled "$EVIDENCE/toast-settled.png" "${toast_args[@]}" | tee "$EVIDENCE/toast-result.txt"
     resync_rows after
     shot resync-draft-after
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"

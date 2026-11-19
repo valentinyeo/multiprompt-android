@@ -447,6 +447,23 @@ class JourneyCommandTest(unittest.TestCase):
         scroll = self.payload('skill-pills', '--xml', str(picker_xml), '--scroll')
         self.assertEqual([200, 160, 200, 100], scroll['from'] + scroll['to'])
 
+    def test_the_toast_call_passes_one_argument_per_screenshot(self):
+        drive = (SCRIPTS / 'drive.sh').read_text()
+        start = drive.index('    toast_args=()')
+        end = drive.index('$EVIDENCE/toast-result.txt"', start) + len('$EVIDENCE/toast-result.txt"') + 1
+        snippet = drive[start:end]
+        fake = self.root / 'fake-bin'
+        fake.mkdir()
+        recorder = self.root / 'argv.json'
+        binary = fake / 'mpa'
+        binary.write_text('#!/usr/bin/env python3\nimport json,sys\nopen(' + repr(str(recorder)) + ',"w").write(json.dumps(sys.argv[1:]))\n')
+        binary.chmod(0o755)
+        harness = 'set -euo pipefail\nscripts=' + str(fake) + '\ntoast_shots=("a.png" "b.png")\n' + snippet
+        result = subprocess.run(['bash', '-c', harness], capture_output=True, text=True, env=self.env)
+        self.assertEqual(0, result.returncode, result.stderr)
+        argv = json.loads(recorder.read_text())
+        self.assertEqual(['toast', '--settled', str(self.evidence / 'toast-settled.png'), '--shot', 'a.png', '--shot', 'b.png'], argv)
+
     def test_the_folded_scripts_are_gone_and_their_callers_use_the_cli(self):
         for name in ('.claude/skills/verify-multiprompt-android/scripts/queued.py',
                      '.claude/skills/verify-multiprompt-android/scripts/reactions.py',
