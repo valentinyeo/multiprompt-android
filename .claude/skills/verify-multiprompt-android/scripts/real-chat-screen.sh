@@ -95,7 +95,7 @@ real_chat_screen() {
     tap_text All
 }
 
-real_chat_journeys=" ai-switch.md ai-usage.md chat-cancel.md chat-choices.md chat-codex.md chat-identity.md chat-queued.md chat-reactions.md chat-resync.md chat-search.md chat-shapes.md chat-shared.md chat-table.md chat-working.md claude-remote-control.md clear-ranking.md copy-chat-id.md host-restart.md message-reply.md native-skills.md reader-controls.md reader-version.md robot-faces.md session-drafts.md session-favorite-dot.md session-favorites.md session-gestures.md session-pins.md session-reader.md session-routing.md session-stop.md session-summaries.md sessions.md signed-out-sync.md skill-pills.md snippets.md terminal.md "
+real_chat_journeys=" ai-switch.md ai-usage.md chat-cancel.md chat-choices.md chat-codex.md chat-identity.md chat-queued.md chat-reactions.md chat-resync.md chat-search.md chat-shapes.md chat-shared.md chat-table.md chat-working.md claude-remote-control.md clear-ranking.md copy-chat-id.md folder-bar.md host-restart.md message-reply.md native-skills.md reader-controls.md reader-version.md robot-faces.md session-drafts.md session-favorite-dot.md session-favorites.md session-gestures.md session-pins.md session-reader.md session-routing.md session-stop.md session-summaries.md sessions.md signed-out-sync.md skill-pills.md snippets.md terminal.md "
 
 real_chat_step() {
     if [[ "$real_chat_journeys" != *" $feature "* ]]; then
