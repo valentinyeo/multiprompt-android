@@ -1105,6 +1105,7 @@
         "long-pane-capture-seeded.txt": 700,
         "long-pane-reader.json": 400,
         "long-pane-reader-proof.txt": 200,
+        "long-pane-earlier.json": 400,
         "long-pane-reopened.json": 400,
         "logcat-reader.txt": 600,
         "logcat-reopened.txt": 600
@@ -1774,11 +1775,11 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "tap text live-long-pane-2840"
+          "quote": "tap text 'Show earlier output'"
         },
         "result": {
-          "file": "long-pane-reader.json",
-          "quote": "LONG_PANE_TAIL_2840"
+          "file": "long-pane-earlier.json",
+          "quote": "check the release watch at tag v0.1.1280"
         }
       }
     }

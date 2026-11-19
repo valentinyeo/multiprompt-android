@@ -113,7 +113,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Chats that compacted, fresh-started or resumed](chat-shapes.md): A compacted, a resumed and a fresh-started chat each show the transcript of their live Claude session, never the stale pre-compaction one. SOFT-2715.
   - Outcomes: `chat.shapes`. Runner: `verify.yml` (debug). Priority evidence: `compacted-chat.json` (700 characters), `compacted-chat-proof.txt` (700 characters), `resumed-chat.json` (700 characters), `resumed-chat-proof.txt` (700 characters), `fresh-chat.json` (700 characters), `fresh-chat-proof.txt` (700 characters), `pre-425-reader.txt` (1500 characters), `seed-counts.json` (3000 characters).
 - [A long terminal pane in the reader](reader-long-pane.md): A 2950-line terminal pane opens in the reader and shows its newest output after a force-stop relaunch, without a measure-time crash. SOFT-2840.
-  - Outcomes: `reader.long-pane`. Runner: `verify.yml` (debug). Priority evidence: `long-pane-seed.json` (400 characters), `long-pane-capture-seeded.txt` (700 characters), `long-pane-reader.json` (400 characters), `long-pane-reader-proof.txt` (200 characters), `long-pane-reopened.json` (400 characters), `logcat-reader.txt` (600 characters), `logcat-reopened.txt` (600 characters).
+  - Outcomes: `reader.long-pane`. Runner: `verify.yml` (debug). Priority evidence: `long-pane-seed.json` (400 characters), `long-pane-capture-seeded.txt` (700 characters), `long-pane-reader.json` (400 characters), `long-pane-reader-proof.txt` (200 characters), `long-pane-earlier.json` (400 characters), `long-pane-reopened.json` (400 characters), `logcat-reader.txt` (600 characters), `logcat-reopened.txt` (600 characters).
 
 ## Initial coverage gaps
 

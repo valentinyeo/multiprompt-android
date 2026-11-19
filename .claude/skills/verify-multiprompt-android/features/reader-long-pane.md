@@ -24,7 +24,8 @@ The alternating lines are what the reader splitter does with agent output: a pro
 Every step keeps a numbered PNG/XML pair and a `long-pane-*.json` or `logcat-*.txt` result. A crash is a product failure: the driver reads logcat after each step and fails on `FATAL EXCEPTION` or `Can't represent a size`.
 
 1. Inbox lists `live-long-pane-2840`. Open it. Require the composer `Message live-long-pane-2840` and the newest output `LONG_PANE_TAIL_2840` on screen.
-2. Force-stop and relaunch. Require Inbox again, reopen the pane and require `LONG_PANE_TAIL_2840` again.
+2. Tap **Show earlier output**. Require a cycle the first screen did not render, `check the release watch at tag v0.1.1280`, so the earlier output stays reachable one page at a time.
+3. Force-stop and relaunch. Require Inbox again, reopen the pane and require `LONG_PANE_TAIL_2840` again.
 
 `long-pane-proof.txt` contains `LONG_PANE_READER_JOURNEY_OK` only after every step passes.
 

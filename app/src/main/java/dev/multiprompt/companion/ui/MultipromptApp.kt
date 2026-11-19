@@ -3796,7 +3796,7 @@ internal fun ReaderScreen(
         }
     }
     val statusLabel = "waiting for input".takeIf { reader.waitingForInput }
-    val searchVisibleBlocks = remember(transcript, reader.output, reader.status, session.agent, reader.sentPrompts, technicalMode) {
+    val readerPaneBlocks = remember(transcript, reader.output, reader.status, session.agent, reader.sentPrompts, technicalMode) {
         if (transcript != null) emptyList()
         else {
             val displayed = reader.output.ifBlank {
@@ -3810,6 +3810,11 @@ internal fun ReaderScreen(
             }
         }
     }
+    var readerPanePage by remember(connection) { mutableIntStateOf(1) }
+    val readerPaneWindow = remember(readerPaneBlocks, readerPanePage) {
+        dev.multiprompt.companion.ssh.ReaderPaneBlocks.window(readerPaneBlocks, readerPanePage)
+    }
+    val searchVisibleBlocks = readerPaneWindow.blocks
     val searchPieces = remember(transcript, searchVisibleBlocks) { fallbackFindPieces(transcript, searchVisibleBlocks) }
     val searchHits = if (!historyChat && searchOpen) ChatFind.find(searchPieces.map { it.text }, searchQuery) else emptyList()
     val findCount = if (historyChat) historyFindCount else searchHits.size
@@ -5007,6 +5012,12 @@ internal fun ReaderScreen(
                         "No recent output",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = transcriptFontSize,
+                    )
+                }
+                if (readerPaneWindow.hasEarlier) {
+                    KitSecondaryButton(
+                        text = "Show earlier output",
+                        onClick = { readerPanePage += 1 },
                     )
                 }
                 visibleReaderBlocks.forEachIndexed { index, block ->

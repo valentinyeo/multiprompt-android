@@ -33,6 +33,12 @@ long_pane_capture seeded
 "$mpa" proof --name long-pane-reader --require-text LONG_PANE_TAIL_2840 \
     --note LONG_PANE_READER_SHOWS_NEWEST_OUTPUT_2840 --proof-file "$EVIDENCE/long-pane-reader-proof.txt"
 long_pane_no_crash reader
+"$mpa" tap text 'Show earlier output'
+"$mpa" read --wait-text 'check the release watch at tag v0.1.128' --timeout 120
+"$mpa" screenshot long-pane-earlier
+"$mpa" proof --name long-pane-earlier --require-text 'check the release watch at tag v0.1.128' \
+    --note LONG_PANE_READER_REVEALS_EARLIER_OUTPUT_2840 --proof-file "$EVIDENCE/long-pane-earlier-proof.txt"
+long_pane_no_crash earlier
 "$mpa" key back
 "$mpa" read --wait-text Inbox
 "$mpa" launch --force-stop --wait-text Inbox
