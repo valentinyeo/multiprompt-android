@@ -1,0 +1,9 @@
+[Unit]
+Description=Check that every live chat loads its latest transcript
+
+[Service]
+Type=oneshot
+ExecStart=%h/projects/multiprompt-android/tools/chat-shapes/live_probe.py
+Nice=10
+StandardOutput=journal
+StandardError=journal
