@@ -87,6 +87,33 @@ class LiveProbeTest(unittest.TestCase):
         self.assertEqual({result['reason'] for result in report['results'] if result['status'] == 'mismatch'},
                          {'older_session', 'missing_transcript'})
 
+    def test_phone_cache_keeps_the_newest_rows_and_reports_an_oversized_one(self):
+        row = lambda offset, role: {'role': role, 'text': 'x' * 1024, 'offset': offset, 'end': offset + 1024}
+        rows = [row(index * 1024, 'assistant') for index in range(3000)]
+        page = dict(sid='sid', inode=1, base=0, end=len(rows) * 1024, mode='tail', oldest=0,
+                    probe='0' * 64, mtime=1)
+        cached, kept = live_probe.cache_position(page, rows)
+        self.assertLess(len(kept), len(rows))
+        self.assertEqual(kept[-1], rows[-1])
+        self.assertEqual(cached['start'], kept[0]['offset'])
+        self.assertEqual(cached['offset'], page['end'])
+        huge = [row(0, 'assistant')]
+        huge[0]['text'] = 'x' * (live_probe.CACHE_BYTES + 4096)
+        huge[0]['end'] = len(huge[0]['text'])
+        overflowing, empty = live_probe.cache_position(page, huge)
+        self.assertEqual(empty, [])
+        self.assertEqual(overflowing['start'], page['end'])
+
+    def test_a_frame_with_only_user_rows_is_a_mismatch(self):
+        page = dict(sid='sid', inode=1, base=0, end=2048, mode='tail', oldest=0, probe='0' * 64,
+                    mtime=1, path=None)
+        rows = [{'role': 'user', 'text': 'hi', 'offset': 0, 'end': 1024},
+                {'role': 'user', 'text': 'again', 'offset': 1024, 'end': 2048}]
+        self.assertEqual('frame_without_assistant_rows', live_probe.cache_verdict(None, {}, page, rows))
+        missing = [{'role': 'assistant', 'text': 'one', 'offset': 0, 'end': 1024},
+                   {'role': 'assistant', 'text': 'two'}]
+        self.assertEqual('frame_row_without_offsets', live_probe.cache_verdict(None, {}, page, missing))
+
     def test_daily_timer_unit_runs_the_probe(self):
         service = (HERE / 'multiprompt-chat-probe.service').read_text()
         timer = (HERE / 'multiprompt-chat-probe.timer').read_text()

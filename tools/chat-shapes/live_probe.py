@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from datetime import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,8 @@ MIRROR_LAG_LIMIT = 3600
 LOG_WINDOW = 262144
 TAIL_WINDOW = 262144
 INIT_SESSIONS = 8
+CACHE_BYTES = 2 * 1024 * 1024
+STALE_SHARES = (0.5, 0.9)
 
 
 def moment_of(value):
@@ -129,36 +132,144 @@ def loaded_session(agent, path, paths):
 def query_for(chat):
     return dict(id=1, provider=chat['provider'], codex=chat['provider'] == 'codex', sid=chat['sid'],
                 tmux=chat['name'], cwd=chat['cwd'], follow=False, offset=0, before=0, cached_sid='',
-                inode=0, mtime=0, probe='', start=0)
+                inode=0, mtime=0, probe='', start=0, no_jump=True, source_offsets=True)
 
 
-def phone_view(reader, chat):
+def frame_view(reader, chat, cached=None):
     query = query_for(chat)
-    try:
-        resolved = reader['resolve_response_path'](dict(query))
-        wire = reader['response'](dict(query), None, False, resolved)
-    except Exception as error:
-        return dict(kind='error', session=None, path=None, rows=0, detail=type(error).__name__)
+    if cached:
+        query.update(cached)
+    resolved = reader['resolve_response_path'](dict(query))
     _agent, session, path, _delegated = resolved
-    view = dict(kind='none', session=session or None, path=None, rows=0, detail=None)
-    if path is not None:
-        view['path'] = str(path)
-        view['kind'] = 'mirror' if str(path).endswith(MIRROR_SUFFIX) else 'transcript'
-    rows = 0
+    wire = reader['response'](dict(query), None, False, resolved)
+    header = wire.splitlines()[0].split('\t') if wire else []
+    page = None
+    if len(header) == 15 and header[3] == 'ok':
+        page = dict(sid=header[4], base=int(header[5]), end=int(header[6]), inode=int(header[7]),
+                    mode=header[13], oldest=int(header[14]), probe=header[12], mtime=int(header[11]),
+                    path=str(path) if path is not None else None)
+    rows = []
     for line in wire.splitlines()[1:]:
         try:
             row = json.loads(line)
         except ValueError:
             continue
-        if row.get('role') in ('user', 'assistant'):
-            rows += 1
-    view['rows'] = rows
+        if isinstance(row, dict) and row.get('role') in ('user', 'assistant'):
+            rows.append(row)
+    return dict(session=session, path=path, page=page, rows=rows)
+
+
+def boundary_probe(path, offset):
+    try:
+        with Path(path).open('rb') as source:
+            source.seek(max(0, offset - 64))
+            return hashlib.sha256(source.read(min(offset, 64))).hexdigest()
+    except OSError:
+        return None
+
+
+def cache_position(page, rows):
+    kept = []
+    used = 0
+    for row in reversed(rows):
+        size = len(json.dumps(row, separators=(',', ':'))) + 1
+        if used + size + 1024 > CACHE_BYTES:
+            break
+        kept.insert(0, row)
+        used += size
+    start = page['oldest'] if len(kept) == len(rows) else (kept[0]['offset'] if kept else page['end'])
+    cached = dict(cached_sid=page['sid'], inode=page['inode'], offset=page['end'], mtime=page['mtime'],
+                  probe=page['probe'], start=start)
+    return cached, kept
+
+
+def cache_verdict(reader, chat, page, rows):
+    if page is None or page['mode'] == 'older':
+        return None
+    if page['mode'] == 'delta' and not rows:
+        return None
+    if any(not isinstance(row.get('offset'), int) or not isinstance(row.get('end'), int) for row in rows):
+        return 'frame_row_without_offsets'
+    if not any(row['role'] == 'assistant' for row in rows):
+        return 'frame_without_assistant_rows'
+    cached, kept = cache_position(page, rows)
+    try:
+        again = frame_view(reader, chat, cached)
+    except Exception as error:
+        return 'cache_' + type(error).__name__
+    page2 = again['page']
+    if page2 is None:
+        return 'cache_frame_header'
+    if page2['mode'] == 'delta' and (page2['base'] != cached['offset'] or page2['oldest'] != cached['start']):
+        return 'cache_delta_position'
+    fresh = again['rows']
+    for row in fresh:
+        if not (page2['base'] <= row['offset'] and row['end'] <= page2['end'] and row['end'] > row['offset']):
+            return 'cache_row_outside_page'
+    merged = list(fresh) if page2['mode'] == 'tail' else kept + fresh
+    if not any(row['role'] == 'assistant' for row in merged):
+        return 'cache_dropped_assistant_rows'
+    newest = max(rows, key=lambda row: (row['offset'], row['role'] == 'assistant'))
+    if newest['role'] == 'assistant' and newest['offset'] not in {row['offset'] for row in merged}:
+        return 'cache_dropped_newest_assistant'
+    return None
+
+
+def stale_cache_verdict(reader, chat, page, rows):
+    if page is None or page['mode'] == 'older' or len(rows) < 8 or not page.get('path'):
+        return None
+    for share in STALE_SHARES:
+        index = int(len(rows) * share)
+        if index <= 0 or index >= len(rows):
+            continue
+        row = rows[index]
+        if not isinstance(row.get('offset'), int):
+            continue
+        cached = dict(cached_sid=page['sid'], inode=page['inode'], offset=row['offset'], mtime=0,
+                      probe=boundary_probe(page['path'], row['offset']), start=rows[0]['offset'])
+        try:
+            again = frame_view(reader, chat, cached)
+        except Exception as error:
+            return 'stale_cache_' + type(error).__name__
+        page2 = again['page']
+        if page2 is None:
+            return 'stale_cache_frame_header'
+        if page2['mode'] == 'delta' and (page2['base'] != cached['offset'] or page2['oldest'] != cached['start']):
+            return 'stale_cache_delta_position'
+        fresh = again['rows']
+        for fresh_row in fresh:
+            if not (page2['base'] <= fresh_row['offset'] and fresh_row['end'] <= page2['end'] and fresh_row['end'] > fresh_row['offset']):
+                return 'stale_cache_row_outside_page'
+        merged = list(fresh) if page2['mode'] == 'tail' else rows[:index + 1] + fresh
+        if not any(fresh_row['role'] == 'assistant' for fresh_row in merged):
+            return 'stale_cache_dropped_assistant_rows'
+        newest = max(rows, key=lambda fresh_row: (fresh_row['offset'], fresh_row['role'] == 'assistant'))
+        if newest['role'] == 'assistant' and newest['offset'] not in {fresh_row['offset'] for fresh_row in merged}:
+            return 'stale_cache_dropped_newest_assistant'
+    return None
+
+
+def phone_view(reader, chat):
+    try:
+        frame = frame_view(reader, chat)
+    except Exception as error:
+        return dict(kind='error', session=None, path=None, rows=0, detail=type(error).__name__)
+    session, path, rows = frame['session'], frame['path'], frame['rows']
+    view = dict(kind='none', session=session or None, path=None, rows=0, detail=None)
+    if path is not None:
+        view['path'] = str(path)
+        view['kind'] = 'mirror' if str(path).endswith(MIRROR_SUFFIX) else 'transcript'
+    view['rows'] = len(rows)
+    view['assistant'] = sum(1 for row in rows if row.get('role') == 'assistant')
+    view['cache'] = stale_cache_verdict(reader, chat, frame['page'], rows) or cache_verdict(reader, chat, frame['page'], rows)
     return view
 
 
 def judge(view, latest, state):
     if view['kind'] == 'error':
         return 'mismatch', 'reader_error'
+    if view.get('cache'):
+        return 'mismatch', view['cache']
     if view['kind'] == 'transcript':
         if latest is None:
             return 'skip', 'latest_transcript_unknown'
