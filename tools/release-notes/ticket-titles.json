@@ -1,4 +1,5 @@
 {
+  "IGSH-2969": "Android: message to a busy chat shows Not sent with no reason",
   "IGSH-2974": "Android repo passes the pstack check",
   "IGSH-2972": "App screen edits stop failing the control list check",
   "IGSH-2968": "Android: chat list pills at the bottom spread too far apart",
@@ -161,5 +162,7 @@
   "IGSH-2967": "Phone tests stop failing on missing Kotlin build files",
   "IGSH-2962": "Android: new versions take 21 minutes to reach the phone",
   "IGSH-2976": "A Maven Central hiccup no longer fails a phone test",
-  "IGSH-2959": "Android: prompt boxes in chat are cut off and cannot be copied"
+  "IGSH-2959": "Android: prompt boxes in chat are cut off and cannot be copied",
+  "IGSH-2982": "Unit tests stop downloading Android files on their own",
+  "IGSH-2993": "A Google download hiccup no longer fails every library"
 }
