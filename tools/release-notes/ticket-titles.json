@@ -162,5 +162,6 @@
   "IGSH-2962": "Android: new versions take 21 minutes to reach the phone",
   "IGSH-2976": "A Maven Central hiccup no longer fails a phone test",
   "IGSH-2959": "Android: prompt boxes in chat are cut off and cannot be copied",
-  "IGSH-2982": "Unit tests stop downloading Android files on their own"
+  "IGSH-2982": "Unit tests stop downloading Android files on their own",
+  "IGSH-2993": "A Google download hiccup no longer fails every library"
 }
