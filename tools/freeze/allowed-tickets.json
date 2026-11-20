@@ -1,6 +1,6 @@
 {
-  "frozen": true,
-  "reason": "Valentin froze feature work until phone testing meets the checklist (IGSH-2570)",
+  "frozen": false,
+  "reason": "Freeze lifted 2026-11-20: verification gates run within a PR time limit instead of blocking feature work (IGSH-2570, IGSH-2884)",
   "allowed": [
     "IGSH-2681",
     "IGSH-2682",
