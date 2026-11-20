@@ -153,5 +153,6 @@
   "IGSH-2840": "App crashes on Valentin's phone after update 0.1.609",
   "IGSH-2906": "Coverage-growth rules stop blocking Android PRs",
   "IGSH-2960": "Android PR checks work when the AI picker is out of credit",
+  "IGSH-2907": "Tests already broken on main become tickets, not PR blocks",
   "IGSH-2761": "AI usage sheet cuts off the Codex block below the navigation bar"
 }
