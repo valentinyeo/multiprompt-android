@@ -54,7 +54,8 @@ class ComposerLongDraftTest {
     private val skill = "/review-native"
     private val longDraft = "Checking when it resets. We need instructions for this, " +
         "this never used to happen. We had a very good setup for this in place, " +
-        "but since using the new stack this has broken down. $skill"
+        "but since using the new stack this has broken down. $skill keeps the draft " +
+        "long enough to scroll inside the message box."
 
     @Before fun setup() {
         f = SessionActivityFixture()
@@ -154,19 +155,27 @@ class ComposerLongDraftTest {
 
         val bitmap = save(compose.onNode(hasSetTextAction()), "composer-field")
         val surface = Kit.Surface.toArgb()
+        val textRight = (micBounds.left - fieldBounds.left).toInt() - 4
+        var pillRows = 0
+        var pillPixels = 0
         for (y in 0 until bitmap.height) {
             var pill = 0
             var pillMin = bitmap.width
             var pillMax = 0
-            for (x in 0 until bitmap.width) {
+            for (x in 0 until textRight.coerceIn(1, bitmap.width)) {
                 if (near(bitmap.getPixel(x, y), surface, 8)) {
                     pill++
                     pillMin = minOf(pillMin, x)
                     pillMax = maxOf(pillMax, x)
                 }
             }
-            if (pill > 20) println("COMPOSER_ROW y=$y pill=$pill pillX=$pillMin..$pillMax")
+            if (pill > 20) {
+                pillRows++
+                pillPixels += pill
+                println("COMPOSER_ROW y=$y pill=$pill pillX=$pillMin..$pillMax")
+            }
         }
+        println("COMPOSER_PILL rows=$pillRows pixels=$pillPixels textRight=$textRight")
 
         assertTrue(
             "the + button sits inside the composer row: attach=$attachBounds row=$barBounds",
@@ -188,6 +197,10 @@ class ComposerLongDraftTest {
                 kotlin.math.abs(sendBounds.bottom - fieldBounds.bottom) <= 4f,
         )
         assertTrue(
+            "a scrolled draft draws no skill pill over the text: rows=$pillRows pixels=$pillPixels",
+            pillPixels == 0,
+        )
+        assertTrue(
             "the composer row reaches the bottom of the screen: row=$barBounds root=$rootBounds",
             barBounds.bottom >= rootBounds.bottom - (2 * ReaderControlSpacing.value).toFloat(),
         )
@@ -197,5 +210,24 @@ class ComposerLongDraftTest {
         )
         val draftTexts = descendants(bar).flatMap { texts(it) }
         assertEquals("the composer row shows only the draft, no hint", listOf(longDraft), draftTexts)
+    }
+
+    @Test fun aDraftThatFitsStillDrawsTheSkillPill() {
+        val fits = "keep $skill in view"
+        render()
+        compose.onNode(hasSetTextAction()).performTextInput(fits)
+        compose.waitForIdle()
+
+        val field = node(compose.onNode(hasSetTextAction()))
+        val layout = textLayout(field)
+        assertTrue("the draft must fit to keep its pill: lines=${layout.lineCount}", !layout.didExceedMaxLines)
+
+        val bitmap = save(compose.onNode(hasSetTextAction()), "composer-pill")
+        val surface = Kit.Surface.toArgb()
+        val pillPixels = (0 until bitmap.height).sumOf { y ->
+            (0 until bitmap.width).count { x -> near(bitmap.getPixel(x, y), surface, 8) }
+        }
+        println("COMPOSER_FITTING_PILL pixels=$pillPixels")
+        assertTrue("a draft that fits keeps its skill pill: pixels=$pillPixels", pillPixels > 200)
     }
 }

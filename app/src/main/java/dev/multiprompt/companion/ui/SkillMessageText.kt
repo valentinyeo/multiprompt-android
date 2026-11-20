@@ -47,7 +47,7 @@ internal class SkillPillText(private val spans: List<SkillSpan>) : VisualTransfo
 
 @Composable
 internal fun Modifier.skillPills(spans: List<SkillSpan>, layout: TextLayoutResult?): Modifier {
-    if (spans.isEmpty() || layout == null) return this
+    if (spans.isEmpty() || layout == null || layout.didExceedMaxLines) return this
     val padX = with(LocalDensity.current) { 2.dp.toPx() }
     val padY = with(LocalDensity.current) { 1.dp.toPx() }
     val stroke = with(LocalDensity.current) { Kit.OutlineWidth.toPx() }
