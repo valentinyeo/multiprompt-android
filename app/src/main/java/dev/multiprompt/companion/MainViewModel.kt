@@ -170,7 +170,7 @@ data class AppUiState(
 ) {
     val inboxSessions: List<TmuxSession> get() = AccountHostMap.withAccountSessions(sessions, accountLayout, accountHosts)
 
-    fun mentionChats(current: TmuxSession): List<MentionChat> = ChatMention.chats(sessions, current)
+    fun mentionChats(current: TmuxSession): List<MentionChat> = ChatMention.chats(inboxSessions, current)
     val showFrequentSplit: Boolean get() = accountLayout?.settings?.get("frequent") ?: true
     val showFavoritesSplit: Boolean get() = accountLayout?.settings?.get("favorites") ?: true
     val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
