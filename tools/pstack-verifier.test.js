@@ -1086,6 +1086,16 @@ test('docs/tooling skips Android but retains exact base and non-UI classificatio
   }
 });
 
+test('a pull request never schedules the break-it replay', () => {
+  const run = pickWithoutSecret([{ filename: 'README.md' }]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.doesNotMatch(run.output, /^break_it=/m);
+  assert.doesNotMatch(read('.github/scripts/pstack-verifier/verifier.cjs'), /BREAK_IT_TOOLS|break_it/);
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  assert.doesNotMatch(jobBlock(workflow, 'pick'), /break_it/);
+  assert.doesNotMatch(jobBlock(workflow, 'journeys'), /break_it/);
+});
+
 test('product changes still require the secret, even in drafts and dependabot PRs', () => {
   for (const options of [{}, { draft: true }, { login: 'dependabot[bot]' }]) {
     const run = pickWithoutSecret([{ filename: 'app/src/main/App.kt' }], options);

@@ -37,7 +37,6 @@ jobs:
       merge_base: ${{ steps.pick.outputs.merge_base }}
       changed_outcomes: ${{ steps.pick.outputs.changed_outcomes }}
       change_kind: ${{ steps.pick.outputs.change_kind }}
-      break_it: ${{ steps.pick.outputs.break_it }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -82,7 +81,6 @@ jobs:
       released_robots: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_robots }}
       release_choices: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].release_choices }}
       pins_scroll: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].pins_scroll }}
-      break_it: ${{ needs.pick.outputs.break_it == 'true' }}
       app_ref: ${{ needs.pick.outputs.head_sha }}
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
