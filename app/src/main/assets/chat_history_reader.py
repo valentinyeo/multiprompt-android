@@ -3357,9 +3357,13 @@ def host_handover(provider, sid):
     if provider != "claude":
         return dict(status="refused", reason="terminal_unsupported")
     result = host_stop(provider, sid)
-    host_write(host_paths(provider, sid)["owner"], dict(owner="terminal", at=time.time()))
-    host_log(provider, sid, "handover", dict(previous=result.get("status")))
-    return dict(status="handover", previous=result.get("status"))
+    handle = host_lock(provider, sid, wait=True)
+    try:
+        host_write(host_paths(provider, sid)["owner"], dict(owner="terminal", at=time.time()))
+        host_log(provider, sid, "handover", dict(previous=result.get("status")))
+        return dict(status="handover", previous=result.get("status"))
+    finally:
+        host_release(handle)
 
 
 def host_pane_agent(tmux, sid):
@@ -8167,7 +8171,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 131
+RUNTIME_GENERATION = 132
 
 if __name__ == '__main__':
     import base64 as _base64
