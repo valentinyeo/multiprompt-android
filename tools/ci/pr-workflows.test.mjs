@@ -61,9 +61,9 @@ test('PR journeys come only from touched registry outcomes; even tooling receive
   assert.match(workflow, /if: needs\.pick\.outputs\.features != '\[\]'/);
   const verifier = read('.github/scripts/pstack-verifier/verifier.cjs');
   assert.doesNotMatch(verifier, /features: \[SMOKE_JOURNEY\]/);
-  assert.match(verifier, /validateFeatures\(ranked\)/);
+  assert.match(verifier, /validateFeatures\(required\)/);
   assert.doesNotMatch(verifier, /\.\.\.\(picked\.smoke \? \[\] : picked\.features\)/);
-  assert.match(workflow, /PARENT_WORKFLOW_EXIT/);
+  assert.doesNotMatch(workflow, /PARENT_WORKFLOW_EXIT|verifier-tooling-proof|reuse\.cjs/);
 });
 
 test('base proof is cached by source and harness, without skipping head or the release gate', () => {
@@ -102,28 +102,4 @@ test('expensive periodic workflows cancel superseded runs without cancelling sib
     assert.ok(workflow.includes(`\nconcurrency:\n  group: ${name}-` + '${{ github.event.pull_request.number || github.ref }}\n  cancel-in-progress: true\n\njobs:\n'), name);
     assert.equal((workflow.match(/concurrency:/g) ?? []).length, 1, name);
   }
-});
-
-test('verdict reuse skips picking and driving only on a validated hit, retaining the required gate', () => {
-  const workflow = read('.github/workflows/pstack-verifier.yml');
-  const pick = workflow.split('\n  pick:\n')[1].split('\n  journeys:\n')[0];
-  assert.match(pick, /actions: read/);
-  assert.match(pick, /features: \$\{\{ steps.reuse.outputs.features \|\| steps.pick.outputs.features \}\}/);
-  assert.match(pick, /reused: \$\{\{ steps.reuse.outputs.reused \}\}/);
-  assert.match(pick, /run: node \.github\/scripts\/pstack-verifier\/reuse.cjs probe/);
-  for (const name of ['Choose the journeys that exercise this change', 'Compare workflow rules on the parent']) {
-    assert.ok(pick.includes(`- name: ${name}\n        if: steps.reuse.outputs.reused != 'true'`), name);
-  }
-  const gate = workflow.split('\n  pstack-verifier:\n')[1];
-  assert.match(gate, /name: pstack-verifier\n    needs: \[pick, journeys, parents\]\n    if: \$\{\{ always\(\) \}\}/);
-  assert.match(gate, /name: Require successful verification preparation\n        env:\n          PICK_RESULT: \$\{\{ needs.pick.result \}\}\n        run: test "\$PICK_RESULT" = success/);
-  assert.match(gate, /if: needs.pick.result == 'success' && needs.pick.outputs.reused == 'true'/);
-  assert.match(gate, /HEAD_SHA: \$\{\{ needs.pick.outputs.reuse_head \}\}/);
-  assert.match(gate, /run: node \.github\/scripts\/pstack-verifier\/reuse.cjs publish/);
-  assert.match(gate, /id: judge\n        if: needs.pick.outputs.reused != 'true'/);
-  assert.match(gate, /VERDICT: \$\{\{ steps.judge.outputs.verdict \}\}/);
-  assert.match(gate, /run: node \.github\/scripts\/pstack-verifier\/reuse.cjs save/);
-  assert.match(gate, /name: verifier-verdict\n.*path: \$\{\{ runner.temp \}\}\/verdict.json\n.*if-no-files-found: error/);
-  assert.match(gate, /if: always\(\) && needs.pick.outputs.reused != 'true'/);
-  for (const source of [pick, read('tools/check.sh')]) assert.match(source, /node --test .*tools\/verdict-reuse.test.js/);
 });

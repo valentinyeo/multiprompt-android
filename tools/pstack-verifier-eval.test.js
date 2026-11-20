@@ -46,8 +46,8 @@ test('every case uses the production prompt with no answer or label in its conte
         assert.equal(request.system, verifier.JUDGE_INSTRUCTIONS);
         assert.doesNotMatch(JSON.stringify(sample), /\b(?:eval|experiment|benchmark|candidate|arena|expected verdict|planted)\b/i);
         for (const name of Object.keys(expected)) assert.ok(!request.user.includes(name));
-        assert.match(request.user, /PARENT \(app before the change/);
         assert.match(request.user, /HEAD \(app after the change/);
+        assert.doesNotMatch(request.user, /PARENT/);
         assert.match(request.user, /side-result.json/);
         assert.ok(!fs.existsSync(path.join(request.cwd, 'expected.json')));
         return answer('FAIL');
@@ -58,12 +58,12 @@ test('every case uses the production prompt with no answer or label in its conte
   }
 });
 
-test('a missing structured citation turns a clean model PASS into a gate FAIL', async t => {
+test('a missing structured citation is a note and leaves the verdict to the journeys', async t => {
   const result = await reliability.runCase(read('aspen'), {
     ask: async () => answer('PASS'), output: path.join(scratch(t), 'aspen'),
   });
   assert.equal(result.rawVerdict, 'PASS');
-  assert.equal(result.verdict, 'FAIL');
+  assert.equal(result.verdict, 'PASS');
   assert.match(result.notes.join('\n'), /FEATURE_NOT_EXERCISED/);
 });
 
