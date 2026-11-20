@@ -33,8 +33,16 @@ class HostedChatFreshListTest {
     private fun clearPage(rows: List<ChatHistoryProtocol.Row>, inode: Long) =
         ChatHistoryProtocol.Page(hostSid, 0, 100, inode, false, 2_000_000_000L, probe, "tail", 0, rows)
 
-    private fun historyHeader(wireSid: String, base: Long = 0, end: Long = 100, inode: Long = 2, more: Int = 0) =
-        "@mp\t1\thistory\tok\t$wireSid\t$base\t$end\t$inode\t$more\tclaude\t$tmux\t1730000000000000000\t$probe\ttail\t0"
+    private fun historyHeader(
+        wireSid: String,
+        id: Long = 1,
+        base: Long = 0,
+        end: Long = 100,
+        inode: Long = 2,
+        more: Int = 0,
+        mode: String = "tail",
+        oldest: Long = 0,
+    ) = "@mp\t$id\thistory\tok\t$wireSid\t$base\t$end\t$inode\t$more\tclaude\t$tmux\t1730000000000000000\t$probe\t$mode\t$oldest"
 
     @Test
     fun interimRefreshKeepsHostSidWhenCachedRowStillCarriesNativeConversationId() {
@@ -109,7 +117,7 @@ class HostedChatFreshListTest {
     fun hostedHistoryDeltaPollStillValidatesCachedSidAgainstHostSid() {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, tmux, "/work", hostSid)
         val history = ChatHistory(sid = hostSid, inode = 2, offset = 100, mtime = 1_730_000_000_000_000_000L, probe = probe)
-        val wire = historyHeader(hostSid, base = 0, end = 120, inode = 2, more = 0) + "\n" +
+        val wire = historyHeader(hostSid, id = 2, base = 0, end = 120, inode = 2, more = 0, mode = "delta", oldest = 0) + "\n" +
             JSONObject().put("role", "user").put("text", "tail").put("id", "u2")
                 .put("timestamp", "").put("offset", 100).put("end", 120) +
             "\n${TranscriptProtocol.END}\n"
