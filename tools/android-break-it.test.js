@@ -237,14 +237,24 @@ test('a stressed replay is carried by its journey result, not by a second verdic
   assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'PASS');
 });
 
-test('tooling proof selects its complete adapter without dropping journeys for Android repairs', () => {
+test('break-it tooling changes never add a pull request journey', () => {
   const picked = { features: ['native-skills.md'], dropped: [], smoke: true };
   const diff = 'diff --git a/tools/android-break-it/drive.sh b/tools/android-break-it/drive.sh\n';
   const tooling = verifier.includeRequiredJourneys(picked, { product: false, outcomes: [] }, diff);
-  assert.deepEqual(tooling.features, ['ai-switch.md']);
+  assert.deepEqual(tooling.features, []);
   assert.equal(tooling.smoke, false);
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: ['claude.skills-model-effort'] }, diff).features, ['native-skills.md']);
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: [] }, diff).features, []);
+});
+
+test('the nightly android-full run schedules the break-it replay', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/android-full.yml'), 'utf8');
+  const start = workflow.indexOf('  nightly-journeys:');
+  assert.ok(start >= 0);
+  const end = workflow.indexOf('\n  baseline-profile:', start);
+  const job = workflow.slice(start, end < 0 ? undefined : end);
+  assert.match(job, /uses: \.\/\.github\/workflows\/verify\.yml/);
+  assert.match(job, /^ {6}break_it: true$/m);
 });
 
 test('the probe seed enables the same host history that the real reader resolves', () => {
