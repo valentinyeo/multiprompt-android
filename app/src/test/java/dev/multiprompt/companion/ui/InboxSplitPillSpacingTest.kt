@@ -25,7 +25,9 @@ class InboxSplitPillSpacingTest {
     private val state = mutableStateOf(AppUiState())
     private var density = 1f
 
-    private fun folders(count: Int) = (1..count).map { Workspace(id = "folder-$it", name = "Folder %02d".format(it), hostId = "h", remotePath = "/tmp") }
+    private fun folders(count: Int) = (1..count).map {
+        Workspace(id = "folder-$it", name = "Folder %02d".format(it), hostId = "h", remotePath = "/tmp")
+    }
 
     private fun render() {
         compose.setContent {
@@ -52,17 +54,18 @@ class InboxSplitPillSpacingTest {
 
     private fun dp(value: Int) = value * density
 
+    private fun screen() = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
+
     private fun left(label: String) = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.left
 
     private fun right(label: String) = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.right
 
     @Test fun pillsSitACloseGapFromTheLeftEdge() {
         render()
-        val screen = compose.onNodeWithText("All").fetchSemanticsNode().root!!.size.width.toFloat()
         assertEquals(Kit.ScreenEdge.value * density, left("All"), 1f)
         assertEquals(Kit.ControlGap.value * density, left("Favorites") - right("All"), 1f)
         assertEquals(Kit.ControlGap.value * density, left("Frequent") - right("Favorites"), 1f)
-        assertTrue("Bar must fit three pills on a phone", right("Frequent") <= screen - dp(12) + 1f)
+        assertTrue("Bar must fit three pills on a phone", right("Frequent") <= screen() - dp(12))
     }
 
     @Test fun overflowingBarKeepsTheFirstPillAtTheLeftInset() {
@@ -94,8 +97,7 @@ class InboxSplitPillSpacingTest {
     }
 
     private fun assertFullyVisible(label: String) {
-        val screen = compose.onNodeWithText(label).fetchSemanticsNode().root!!.size.width.toFloat()
         assertTrue("$label starts under the left edge", left(label) >= dp(12) - 1f)
-        assertTrue("$label runs under the right edge", right(label) <= screen - dp(12) + 1f)
+        assertTrue("$label runs under the right edge", right(label) <= screen() - dp(12) + 1f)
     }
 }
