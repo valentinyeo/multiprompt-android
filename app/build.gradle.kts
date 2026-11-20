@@ -115,14 +115,24 @@ android {
 val robolectricDepsDir = layout.buildDirectory.dir("robolectric-deps")
 
 configurations {
-    create("robolectricAndroidAll") {
+    create("robolectricAndroidAll28") {
+        isCanBeConsumed = false
+        isCanBeResolved = true
+    }
+    create("robolectricAndroidAll34") {
+        isCanBeConsumed = false
+        isCanBeResolved = true
+    }
+    create("robolectricAndroidAll35") {
         isCanBeConsumed = false
         isCanBeResolved = true
     }
 }
 
 val syncRobolectricAndroidAll = tasks.register<Sync>("syncRobolectricAndroidAll") {
-    from(configurations.named("robolectricAndroidAll"))
+    from(configurations.named("robolectricAndroidAll28"))
+    from(configurations.named("robolectricAndroidAll34"))
+    from(configurations.named("robolectricAndroidAll35"))
     into(robolectricDepsDir)
 }
 
@@ -177,7 +187,7 @@ dependencies {
     testImplementation(libs.json)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.robolectric)
-    add("robolectricAndroidAll", libs.robolectric.android.all.`28`)
-    add("robolectricAndroidAll", libs.robolectric.android.all.`34`)
-    add("robolectricAndroidAll", libs.robolectric.android.all.`35`)
+    add("robolectricAndroidAll28", libs.robolectric.android.all.`28`)
+    add("robolectricAndroidAll34", libs.robolectric.android.all.`34`)
+    add("robolectricAndroidAll35", libs.robolectric.android.all.`35`)
 }
