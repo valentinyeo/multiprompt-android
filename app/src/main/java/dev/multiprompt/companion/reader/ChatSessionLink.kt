@@ -31,7 +31,7 @@ object ChatSessionLink {
                 index = close + ticks
                 continue
             }
-            val brace = braceLinkAt(text, index)
+            val brace = braceLinkAt(text, index, names)
             if (brace != null) {
                 found += brace
                 index = brace.end
@@ -48,7 +48,7 @@ object ChatSessionLink {
         return found
     }
 
-    private fun braceLinkAt(text: String, pos: Int): SessionNameSpan? {
+    private fun braceLinkAt(text: String, pos: Int, names: List<Pair<String, String>>): SessionNameSpan? {
         if (pos >= text.length || !boundaryBefore(text, pos)) return null
         var at = pos
         if (text[at] == '@') {
@@ -68,9 +68,11 @@ object ChatSessionLink {
         }
         if (i >= text.length || text[i] != '{' || i == nameStart || wordBreak(text[i - 1])) return null
         val close = text.indexOf('}', i + 1).takeIf { it > i && it - i <= 65 } ?: return null
+        val label = text.substring(nameStart, i)
+        val session = names.firstOrNull { it.first == label } ?: return null
         val target = text.substring(i + 1, close)
-        if (!sessionId(target)) return null
-        return SessionNameSpan(nameStart, i, target)
+        if (!sessionId(target) || target != session.second) return null
+        return SessionNameSpan(nameStart, i, session.second)
     }
 
     private fun nameLinkAt(text: String, pos: Int, names: List<Pair<String, String>>): SessionNameSpan? {
