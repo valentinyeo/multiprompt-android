@@ -103,6 +103,15 @@ class ChatShapesTest(unittest.TestCase):
         self.assertTrue(result['red'], result['preFix'])
         self.assertTrue(result['green'], result['current'])
 
+    def test_code_block_journey_swipes_only_when_the_marker_is_still_missing(self):
+        source = (SCRIPTS / 'chat-shapes-drive.sh').read_text()
+        probe = 'if ! "$mpa" read --select contains --value CODE_BLOCK_2975_START --timeout 3 >/dev/null 2>&1; then'
+        swipe = '"$mpa" swipe --inside RESUMED_READY_2715 --axis vertical --direction forward'
+        self.assertIn(probe, source)
+        self.assertIn(swipe, source)
+        self.assertLess(source.index(probe), source.index(swipe))
+        self.assertNotIn('"$mpa" swipe --axis vertical --direction forward\n"$mpa" read --select contains --value CODE_BLOCK_2975_START', source)
+
     def test_seed_command_creates_the_shapes_as_supervised_live_chats(self):
         mpa = load('chat_shapes_mpa', SCRIPTS / 'mpa')
         shutil.copyfile(SCRIPTS / 'console.py', self.home / 'console.py')

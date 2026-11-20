@@ -8,7 +8,9 @@ product_checks=1
 "$mpa" screenshot resumed-chat
 "$mpa" proof --name resumed-chat --require-text RESUMED_READY_2715 --forbid-text RESUMED_NEIGHBOUR_2715 \
     --note RESUMED_CHAT_SHOWS_RESUMED_SESSION_2715 --proof-file "$EVIDENCE/resumed-chat-proof.txt"
-"$mpa" swipe --axis vertical --direction forward
+if ! "$mpa" read --select contains --value CODE_BLOCK_2975_START --timeout 3 >/dev/null 2>&1; then
+    "$mpa" swipe --inside RESUMED_READY_2715 --axis vertical --direction forward
+fi
 "$mpa" read --select contains --value CODE_BLOCK_2975_START --timeout 60
 "$mpa" screenshot code-block
 "$mpa" proof --name code-block --require-text CODE_BLOCK_2975_START \
