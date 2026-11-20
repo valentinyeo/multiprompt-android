@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.reader.ChatMention
+import dev.multiprompt.companion.reader.MentionChat
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.ssh.TmuxText
@@ -97,6 +98,8 @@ internal fun ChatHistoryView(
     findQuery: String = "",
     findIndex: Int = 0,
     onFindCount: (Int) -> Unit = {},
+    mentionChats: List<MentionChat> = emptyList(),
+    onSessionLink: ((String) -> Unit)? = null,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
@@ -218,6 +221,8 @@ internal fun ChatHistoryView(
             findQuery = findQuery,
             findIndex = findIndex,
             onFindCount = onFindCount,
+            mentionChats = mentionChats,
+            onSessionLink = onSessionLink,
         )
 
     }
@@ -260,6 +265,8 @@ internal fun ChatHistoryList(
     findQuery: String = "",
     findIndex: Int = 0,
     onFindCount: (Int) -> Unit = {},
+    mentionChats: List<MentionChat> = emptyList(),
+    onSessionLink: ((String) -> Unit)? = null,
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
@@ -396,6 +403,7 @@ internal fun ChatHistoryList(
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 val messageIndex = presentation.messages.lastIndex - index
                 HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
+                    mentionChats = mentionChats, onSessionLink = onSessionLink,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
@@ -441,6 +449,8 @@ private fun HistoryBubble(
     gate: ReplySwipeGate,
     onReply: (String, Boolean) -> Unit,
     skills: List<NativeSkill> = emptyList(),
+    mentionChats: List<MentionChat> = emptyList(),
+    onSessionLink: ((String) -> Unit)? = null,
     messageId: String = "",
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
@@ -527,6 +537,8 @@ private fun HistoryBubble(
                     imagePreviews = true,
                     matchHits = findHits,
                     activeHit = activeHit,
+                    mentionChats = mentionChats,
+                    onSessionLink = onSessionLink,
                 )
             }
         }
