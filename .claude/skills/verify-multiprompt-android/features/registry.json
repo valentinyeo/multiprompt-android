@@ -910,7 +910,7 @@
     },
     "message-reply.md": {
       "name": "Reply to a message",
-      "description": "Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.",
+      "description": "Long-press a Claude bubble, cancel the reply bar, send a quoted reply with a host receipt, then mention another chat by its real name and route the mention by tmux name.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -922,14 +922,18 @@
         ]
       },
       "outcomes": [
-        "legacy.igsh-418"
+        "legacy.igsh-418",
+        "chat.mentions"
       ],
       "evidence": {
         "reply-open.json": 400,
         "reply-cancelled.json": 200,
         "reply-sent.json": 200,
         "reply-receipts.txt": 800,
-        "reply-proof.txt": 80
+        "mention-list.json": 400,
+        "mention-sent.json": 400,
+        "mention-receipts.txt": 400,
+        "mention-session.txt": 80
       }
     },
     "settings-controls.md": {
@@ -1597,6 +1601,28 @@
         "sideEffect": {
           "file": "reply-receipts.txt",
           "quote": "> REPLY_BUBBLE_418"
+        }
+      }
+    },
+    "chat.mentions": {
+      "description": "Typing @ lists another chat under the real name the chat list shows, picking it inserts that name, and the sent text carries the tmux session so the desktop routes the mention to the right chat.",
+      "journey": "message-reply.md",
+      "sideEffect": true,
+      "match": [
+        "ChatMention|MentionChat|mentionChats"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa tap text 'Mention 2953'"
+        },
+        "result": {
+          "file": "mention-sent.json",
+          "quote": "@Mention 2953"
+        },
+        "sideEffect": {
+          "file": "mention-receipts.txt",
+          "quote": "@Mention 2953{live-cl_mention-2953}"
         }
       }
     },

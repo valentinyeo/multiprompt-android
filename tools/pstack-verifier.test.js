@@ -148,6 +148,42 @@ test('code-mapped outcomes decide, so an unmapped answer only blocks a genuinely
   assert.throws(() => verifier.parsePick(JSON.stringify({ features: [], changed_outcomes: ['unmapped', 'invented.outcome'], change_kind: 'product' }), { mapped: [], productSource: true }), /invented\.outcome/);
 });
 
+test('an exhausted AI picker falls back to the feature map instead of failing the check', async () => {
+  const codePlan = { outcomes: ['codex.transcript', 'reader.host-restart'], product: true };
+  const failures = [
+    () => { throw new Error('DeepSeek answered HTTP 402'); },
+    async () => { throw new Error('DeepSeek answered HTTP 402'); },
+    async () => { throw new Error('The repo secret DEEPSEEK_API_KEY is empty or missing. The AI picker and the DeepSeek judge cannot run without it.'); },
+    async () => 'not json',
+  ];
+  for (const ask of failures) {
+    const logged = [];
+    const picked = await verifier.pickWithFallback({ ask, codePlan, log: message => logged.push(message) });
+    assert.equal(logged.length, 1);
+    assert.match(logged[0], /^pstack-verifier pick: AI picker unavailable \(.+\); using the feature map\.$/);
+    assert.deepEqual(picked.features, []);
+    assert.deepEqual(picked.dropped, []);
+    assert.deepEqual(picked.changedOutcomes, codePlan.outcomes);
+    assert.equal(picked.changeKind, 'product');
+    assert.equal(picked.smoke, false);
+    assert.match(picked.reason, /AI picker unavailable; journeys chosen from the feature map\./);
+  }
+  const tooling = await verifier.pickWithFallback({ ask: failures[0], codePlan: { outcomes: [], product: false }, log: () => {} });
+  assert.equal(tooling.changeKind, 'tooling');
+});
+
+test('a working AI picker still decides, and a genuine unmapped product change still blocks', async () => {
+  const codePlan = { outcomes: ['reader.host-restart'], product: true };
+  const answer = JSON.stringify({ features: ['host-restart.md'], changed_outcomes: ['reader.host-restart'], change_kind: 'bug', reason: 'Shared chat reader change.' });
+  const picked = await verifier.pickWithFallback({ ask: async () => answer, codePlan, log: () => {} });
+  assert.deepEqual(picked.features, ['host-restart.md']);
+  assert.equal(picked.changeKind, 'bug');
+  assert.deepEqual(picked.changedOutcomes, ['reader.host-restart']);
+  assert.equal(picked.reason, 'Shared chat reader change.');
+  const unmapped = JSON.stringify({ features: [], changed_outcomes: ['unmapped'], change_kind: 'product', reason: 'No registered outcome covers BrandNewThing.' });
+  await assert.rejects(verifier.pickWithFallback({ ask: async () => unmapped, codePlan: { outcomes: [], product: true }, log: () => {} }), /FEATURE_UNMAPPED/);
+});
+
 test('the picker can classify a bug fix, and only fix or bug words count', () => {
   const picked = verifier.parsePick(JSON.stringify({ features: ['hosts.md'], changed_outcomes: [], change_kind: 'bug', reason: 'Send drops the draft.' }));
   assert.equal(picked.changeKind, 'bug');
@@ -559,11 +595,33 @@ test('DeepSeek is not retried on a client error, and gives up after one retry', 
   assert.equal(calls, 2);
 });
 
-test('the judge stops with a clear error when the secret is empty', () => {
-  const env = { PATH: process.env.PATH, DEEPSEEK_API_KEY: '', PICK_RESULT: 'success', PR_NUMBER: '1', REPO: 'a/b' };
-  const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], { env, encoding: 'utf8' });
-  assert.equal(run.status, 1);
-  assert.match(run.stderr, /DEEPSEEK_API_KEY is empty or missing/);
+test('the judge still returns a journey-only verdict when the secret is empty', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-judge-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'change.diff'), 'diff --git a/tools/x.sh b/tools/x.sh\n+echo\n');
+    fs.writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args.some(arg => arg.includes('/jobs?'))) console.log(JSON.stringify([{ jobs: [] }]));
+else if (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync('${path.join(directory, 'change.diff').replace(/\\/g, '\\\\')}', 'utf8'));
+else console.log(JSON.stringify({ number: 1, title: 'Tidy the checks', body: 'Author model: openai/gpt-6.1-sol', head: { sha: '${sha}' } }));
+`, { mode: 0o755 });
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        PATH: `${directory}:${process.env.PATH}`, DEEPSEEK_API_KEY: '', PICK_RESULT: 'success', REPO: 'a/b', PR_NUMBER: '1',
+        HEAD_SHA: sha, RUN_ID: '1', RUN_URL: runUrl, FEATURES: '[]', CHANGED_OUTCOMES: '[]', VERIFIER_DRY: '1',
+        COVERAGE_REPORT: path.join(directory, 'coverage.json'),
+      },
+    });
+    assert.equal(run.status, 0, run.stderr);
+    assert.match(run.stdout, /^pstack-verifier: PASS\+NOTES @ /m);
+    assert.match(run.stdout, /Judge unavailable: The repo secret DEEPSEEK_API_KEY is empty or missing/);
+    assert.match(run.stdout, /Only the journey results were checked\./);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('a picker that did not finish gives no verdict', () => {
@@ -1043,14 +1101,19 @@ test('only a complete docs/tooling file list gets a no-product result', () => {
   }
 });
 
-function pickWithoutSecret(files, { fork = false, draft = false, login = 'author', count = files.length } = {}) {
+function pickWithoutSecret(files, { fork = false, draft = false, login = 'author', count = files.length, diff = '', key = '', fetchStub = '' } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-pick-'));
   try {
     const pr = { state: 'open', draft, user: { login }, changed_files: count, head: { sha, repo: { full_name: fork ? 'fork/repo' : 'a/b' } }, base: { ref: 'main' } };
+    fs.writeFileSync(path.join(directory, 'diff.patch'), diff);
     fs.writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const args = process.argv.slice(2);
-if (args.at(-1) === 'repos/a/b/pulls/1') {
+if (args.includes('Accept: application/vnd.github.diff')) {
+  assert.deepEqual(args, ['api', 'repos/a/b/pulls/1', '-H', 'Accept: application/vnd.github.diff']);
+  process.stdout.write(fs.readFileSync('${path.join(directory, 'diff.patch').replace(/\\/g, '\\\\')}', 'utf8'));
+} else if (args.at(-1) === 'repos/a/b/pulls/1') {
   assert.deepEqual(args, ['api', 'repos/a/b/pulls/1']);
   console.log(${JSON.stringify(JSON.stringify(pr))});
 } else if (args.at(-1).includes('/compare/')) {
@@ -1060,9 +1123,11 @@ if (args.at(-1) === 'repos/a/b/pulls/1') {
   console.log(${JSON.stringify(JSON.stringify([files]))});
 }
 `, { mode: 0o755 });
+    const stub = path.join(directory, 'model.cjs');
+    fs.writeFileSync(stub, fetchStub);
     const output = path.join(directory, 'output');
     const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
-      env: { PATH: `${directory}:${process.env.PATH}`, REPO: 'a/b', PR_NUMBER: '1', EVENT_NAME: 'pull_request', EVENT_HEAD_SHA: sha, GITHUB_OUTPUT: output, DEEPSEEK_API_KEY: '' },
+      env: { PATH: `${directory}:${process.env.PATH}`, REPO: 'a/b', PR_NUMBER: '1', EVENT_NAME: 'pull_request', EVENT_HEAD_SHA: sha, GITHUB_OUTPUT: output, DEEPSEEK_API_KEY: key, NODE_OPTIONS: `--require=${stub}` },
       encoding: 'utf8',
     });
     return { ...run, output: fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '' };
@@ -1096,12 +1161,26 @@ test('a pull request never schedules the break-it replay', () => {
   assert.doesNotMatch(jobBlock(workflow, 'journeys'), /break_it/);
 });
 
-test('product changes still require the secret, even in drafts and dependabot PRs', () => {
-  for (const options of [{}, { draft: true }, { login: 'dependabot[bot]' }]) {
-    const run = pickWithoutSecret([{ filename: 'app/src/main/App.kt' }], options);
-    assert.equal(run.status, 1);
-    assert.match(run.stderr, /DEEPSEEK_API_KEY is empty or missing/);
+test('a product change is picked from the feature map when the AI picker has no credit', () => {
+  const file = 'app/src/main/assets/chat_history_reader.py';
+  const diff = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+hosted_claude_transcript_sid\n`;
+  const rejected = 'global.fetch = async () => ({ status: 402, ok: false });';
+  const offline = 'global.fetch = async () => { throw new Error("DeepSeek answered HTTP 402"); };';
+  const blocked = 'global.fetch = async () => ({ status: 200, ok: true, json: async () => ({ choices: [{ finish_reason: \'stop\', message: { content: \'not json\' } }] }) });';
+  const cases = [
+    { options: {}, key: '', fetchStub: rejected },
+    { options: { draft: true }, key: 'test-only', fetchStub: offline },
+    { options: { login: 'dependabot[bot]' }, key: 'test-only', fetchStub: blocked },
+  ];
+  for (const { options, key, fetchStub } of cases) {
+    const run = pickWithoutSecret([{ filename: file }], { ...options, diff, key, fetchStub });
+    assert.equal(run.status, 0, run.stderr);
     assert.doesNotMatch(run.output, /no_product_change=true/);
+    assert.match(run.output, /^change_kind=product$/m);
+    assert.deepEqual(JSON.parse(run.output.match(/^features=(.+)$/m)[1]), ['host-restart.md', 'chat-codex.md']);
+    assert.deepEqual(JSON.parse(run.output.match(/^changed_outcomes=(.+)$/m)[1]), ['reader.host-restart', 'codex.transcript']);
+    assert.match(run.output, /^reason=AI picker unavailable; journeys chosen from the feature map\.$/m);
+    assert.match(run.stderr, /pstack-verifier pick: AI picker unavailable \((?:DeepSeek answered HTTP 402|The repo secret DEEPSEEK_API_KEY is empty or missing\. The AI picker and the DeepSeek judge cannot run without it\.|the picker answer is not the expected JSON)\); using the feature map\./);
   }
   const fork = pickWithoutSecret([{ filename: 'app/src/main/App.kt' }], { fork: true });
   assert.equal(fork.status, 1);

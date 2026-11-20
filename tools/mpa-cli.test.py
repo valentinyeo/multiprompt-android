@@ -521,6 +521,12 @@ def window(body):
 
 CHAT = text('Native session skills are ready.', 1200) + desc('Session actions', 80) + desc('Send prompt', 1400)
 REPLY_CHAT = text('REPLY_BUBBLE_418', 600, clickable=True) + desc('Session actions', 80) + desc('Send prompt', 1400)
+MENTION = ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,1500][1080,1690]">'
+           + text('Mention 2953', 1560, clickable=True) + '</node>')
+
+
+def mention_open(data):
+    return mode == "reply" and data["text"].startswith("@") and " " not in data["text"]
 REPLY_BAR = text('Replying', 1500) + desc('Cancel reply', 120, left=700, right=820)
 PICKER = ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,600][1080,1200]">'
           + text('/clear', 620, clickable=True) + text('/client', 720, clickable=True) + text('/aaa-paper', 820, clickable=True)
@@ -542,9 +548,12 @@ def xml_for(data):
             return window(REPLY_CHAT + text('Reply', 900, clickable=True))
         if screen == "replying":
             return window(REPLY_CHAT + REPLY_BAR + composer(data))
+        if screen == "mention-sent":
+            return window(REPLY_CHAT + text('@Mention 2953', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data))
         if screen == "sent":
-            return window(REPLY_CHAT + text('REPLY_BODY_418', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data))
-        return window(REPLY_CHAT + composer(data))
+            return window(REPLY_CHAT + text('REPLY_BODY_418', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data)
+                          + (MENTION if mention_open(data) else ''))
+        return window(REPLY_CHAT + composer(data) + (MENTION if mention_open(data) else ''))
     if mode == "usage":
         if screen == "menu":
             return window(text('Inbox', 80) + desc('Session list actions', 80) + text('AI usage', 300, clickable=True) + text('Refresh', 420, clickable=True))
@@ -587,9 +596,15 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
         if "android.widget.EditText" in classes:
             data["focused"] = True
         elif "Send prompt" in descs:
-            data["screen"] = "sent"
+            mention = mode == "reply" and data["text"].startswith("@Mention 2953")
+            data["screen"] = "mention-sent" if mention else "sent"
             with receipts.open("a") as stream:
-                stream.write("VERIFY_RECEIVED:/clear\\n" if mode == "ranking" else "> REPLY_BUBBLE_418\\n" + data["text"] + "\\n")
+                if mode == "ranking":
+                    stream.write("VERIFY_RECEIVED:/clear\\n")
+                elif mention:
+                    stream.write("> REPLY_BUBBLE_418\\n@Mention 2953{live-cl_mention-2953}\\n")
+                else:
+                    stream.write("> REPLY_BUBBLE_418\\n" + data["text"] + "\\n")
             data["text"] = ""
         elif "/clear" in texts:
             data["text"] = "/clear "
@@ -600,6 +615,8 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
                 stream.write(json.dumps({"command": "cat ~/.local/state/token-ladder/status.json", "exitCode": 0, "stdout": json.dumps({"ts": 1, "accounts": [{"provider": "claude", "week": {"used": 37.5}}, {"provider": "codex", "week": {"used": 62.5}}]})}) + "\\n")
         elif "Reply" in texts:
             data["screen"] = "replying"
+        elif "Mention 2953" in texts:
+            data["text"] = "@Mention 2953 "
         elif "Cancel reply" in descs:
             data["screen"] = "chat"
         elif "Robot verify-session" in descs:
@@ -676,6 +693,7 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         return subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
 
     def test_the_message_reply_journey_runs_end_to_end_through_the_cli(self):
+        (self.evidence / 'mention-session.txt').write_text('live-cl_mention-2953|Mention 2953\n')
         result = self.run_journey('message-reply-drive.sh', 'reply')
         self.assertEqual(0, result.returncode, result.stderr + result.stdout)
         self.assertEqual('4', result.stdout.splitlines()[-1])
@@ -692,6 +710,16 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertEqual(['present', 'present', 'absent', 'absent', 'absent', 'absent', 'absent'], [check['kind'] for check in sent['checks']])
         self.assertEqual(['REPLY_BODY_418', 'REPLY_DELIVERED_418', 'Replying', 'Not sent', 'Send again', 'Remove', 'Cancel reply'], [check['value'] for check in sent['checks']])
         self.assertRegex(self.log.read_text(), r'shell input swipe 540 640 540 640 800')
+        mention_list = json.loads((self.evidence / 'mention-list.json').read_text())
+        self.assertTrue(mention_list['passed'])
+        self.assertEqual([{'kind': 'present', 'value': 'Mention 2953', 'passed': True}, {'kind': 'absent', 'value': 'live-cl_mention-2953', 'passed': True}], mention_list['checks'])
+        self.assertEqual('MENTION_LIST_NAMED_BY_CHAT', (self.evidence / 'mention-proof.txt').read_text().splitlines()[0])
+        self.assertEqual('@Mention 2953{live-cl_mention-2953}', (self.evidence / 'mention-receipts.txt').read_text().splitlines()[-1])
+        mention_sent = json.loads((self.evidence / 'mention-sent.json').read_text())
+        self.assertTrue(mention_sent['passed'])
+        self.assertEqual(['present', 'absent', 'absent'], [check['kind'] for check in mention_sent['checks']])
+        self.assertEqual(['@Mention 2953', 'live-cl_mention-2953', '{live-cl_mention-2953}'], [check['value'] for check in mention_sent['checks']])
+        self.assertEqual('MENTION_ROUTES_TO_SESSION', (self.evidence / 'mention-sent-proof.txt').read_text().splitlines()[0])
         for name in ('01-reply-menu.xml', '02-reply-open.xml', '03-reply-cancelled.xml', '04-reply-sent.xml'):
             self.assertTrue((self.evidence / name).is_file(), name)
 
