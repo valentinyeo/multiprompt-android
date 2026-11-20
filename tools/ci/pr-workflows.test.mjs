@@ -80,8 +80,8 @@ test('base proof is cached by source and harness, without skipping head or the r
   for (const step of [build, drive]) assert.match(step, /if:.*steps\.parent-cache\.outputs\.hit != 'true'/);
   assert.doesNotMatch(workflow, /^  (?:pull_request|push|schedule):/m);
   const release = read('.github/workflows/release.yml');
-  assert.match(release, /tools\/release-proof\.sh/);
-  assert.match(release, /VERIFY_FEATURE: robot-faces\.md/);
+  assert.match(release, /tools\/release-launch\.sh/);
+  assert.doesNotMatch(release, /tools\/release-proof\.sh/);
 });
 
 test('secret-scan runs once per PR head, plus main pushes and periodic full-history scans', () => {

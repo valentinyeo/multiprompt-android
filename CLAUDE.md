@@ -52,7 +52,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 ## Release and install
 
 - **Release:** merge the PR to `main`: `gh pr merge <n> --squash --delete-branch`. `release.yml` lints, tests, signs and republishes `android-latest`. Watch it: `gh run watch $(gh run list -w release.yml -L 1 --json databaseId -q ".[0].databaseId") --exit-status`. Trigger another release without a code change: `gh workflow run release.yml` (optionally add `-f version_name=0.2.0`).
-- **Release proof:** both channels wait for a recorded `robot-faces.md` journey on the signed release APK; `release-proof` retains the MP4, XML, SSH receipts and SHA-256, which must match the installed and published `android-latest` APK.
+- **Release gate:** both channels wait for `Launch signed M3 APK`, which installs the signed M3 build and checks that `MainActivity` resumes before anything is published.
 - **Prove it:** `node tools/release-status.mjs` passes only when the live `android-latest` manifest serves the local `origin/main` ref (`--commit <sha>` for another commit).
 - **Trust the download:** `node tools/verify-published.mjs android-m3-latest` (or `android-latest`) fetches the manifest, downloads that APK, and fails unless the size, sha256, package, version and Multi Bot label all match.
 - **Install:** the release app schedules an hourly background manifest check and notifies for a newer version: "multiprompt <version> is ready". Tap it to open Update, then tap "Download and update" to download, verify and install (Android may require install permission or confirmation). The Update screen also works directly. No adb or Play Store step. Debug builds (`./gradlew installDebug`, package suffix `.debug`) never receive release updates.
@@ -62,7 +62,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 - `main` targets exactly eight required checks in `tools/pr-checks.mjs`: `build`, `test`, `unit-tests`, `m3-unit-tests`, `lint`, `secret-scan`, `no-paid-ai`, `pstack-verifier`. The lead removes the ten named retired checks after this workflow PR merges. `node tools/branch-protection.mjs --check` accepts only the target checks and that known transition, reports remaining retired checks, and never writes settings. Updated base required; administrators cannot bypass. Never push directly.
 - Before merge: `node tools/pr-checks.mjs <PR> --wait`. Recheck once with `node tools/pr-checks.mjs <PR>`. Missing checks never pass. Failed checks and unexpected skips stop immediately. Only unused journey branches may skip. The verifier and cheap required checks must succeed. Ticket closure requires merged, complete-green proof.
 - One wait per PR; five-minute polls; thirty-minute maximum. Head/base changes stop the wait. Never use bare `gh pr checks --watch` or `gh-green` as complete-check proof.
-- Emergency regression: revert the bad change first through a PR with the same verifier and cheap checks. Restore service before attempting a forward fix. Never bypass the signed-APK release proof or branch protection.
+- Emergency regression: revert the bad change first through a PR with the same verifier and cheap checks. Restore service before attempting a forward fix. Never bypass the signed launch gate or branch protection.
 - Merge the checked head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`.
 - Never finish a task with changes parked in a branch, in the stash, or as untracked files. A task is done when its PR is merged and its branch deleted.
 
