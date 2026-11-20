@@ -1339,14 +1339,12 @@ internal fun SessionsScreen(
             frames++
         }
         val span = splitPillSpans[state.selectedWorkspaceId] ?: return@LaunchedEffect
-        val left = span.first
-        val right = span.second
         if (splitBarWidth[0] == 0) return@LaunchedEffect
         val scroll = splitScrollState.value
-        val visible = scroll + splitBarWidth[0]
+        val far = splitBarWidth[0] - 2 * splitRevealInset
         val target = when {
-            left < scroll + splitRevealInset -> left - splitRevealInset
-            right > visible - splitRevealInset -> right - splitBarWidth[0] + splitRevealInset
+            span.first < scroll -> span.first
+            span.second > scroll + far -> span.second - far
             else -> scroll.toFloat()
         }.toInt().coerceIn(0, splitScrollState.maxValue)
         if (target != scroll) splitScrollState.animateScrollTo(target)
