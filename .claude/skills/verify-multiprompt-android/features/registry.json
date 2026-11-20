@@ -192,10 +192,10 @@
         "shared-after-reset.json": 1000,
         "shared-codex-before-restart.json": 1000,
         "shared-codex-after-reset.json": 1000,
-        "05-shared-after-reset.xml": 3000,
-        "07-shared-codex-after-reset.xml": 3000,
-        "shared-terminal.txt": 1000,
-        "shared-result.txt": 500
+        "shared-link-recovered.xml": 2500,
+        "shared-phone.json": 1000,
+        "shared-link-recovery.txt": 500,
+        "shared-terminal.txt": 1000
       }
     },
     "chat-working.md": {
@@ -1646,6 +1646,20 @@
       "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",
       "journey": "chat-shared.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message verify-session' SHARED_PHONE_SYNTHETIC"
+        },
+        "result": {
+          "file": "shared-link-recovered.xml",
+          "quote": "text=\"SHARED_PHONE_SYNTHETIC\""
+        },
+        "sideEffect": {
+          "file": "shared-phone.json",
+          "quote": "\"state\": \"queued\", \"epoch\": 0, \"body\": \"SHARED_PHONE_SYNTHETIC\""
+        }
+      },
       "match": [
         "ConversationLoad|PendingPrompts|ChatHistoryConnection|WaitingForConnection"
       ]
@@ -1654,6 +1668,20 @@
       "description": "Each canonical phone message appears once and keeps its reply across transcript catchup, Fresh start and reconnect.",
       "journey": "chat-identity.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message verify-session' PHONE_AFTER_2532"
+        },
+        "result": {
+          "file": "projection-state-reconnect.json",
+          "quote": "\"visible\": [\"PHONE_BEFORE_2532\", \"REPLY_BEFORE_2532\", \"Fresh start\", \"PHONE_AFTER_2532\", \"REPLY_AFTER_2532\"]"
+        },
+        "sideEffect": {
+          "file": "projection-proof.txt",
+          "quote": "MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK phases=before,fresh,catchup,reconnect receipts=1,2,2,2"
+        }
+      },
       "match": [
         "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
       ]
@@ -1816,7 +1844,7 @@
       "citations": {
         "action": {
           "file": "driver-transcript.txt",
-          "quote": "+ wait_for_absence CLEARED_BEFORE_2474"
+          "quote": "fill 'Message verify-session' AFTER_CLEAR_2474"
         },
         "result": {
           "file": "00-clear-reopened.xml",

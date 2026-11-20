@@ -1748,6 +1748,7 @@ if [[ "$feature" == chat-shared.md ]]; then
         wait_for_absence 'Waiting for chat connection'
         wait_for_absence Retry
         shot shared-link-recovered
+        cp "$EVIDENCE/current.xml" "$EVIDENCE/shared-link-recovered.xml"
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Message verify-session' ''
         printf 'CHAT_LINK_RECOVERY_OK\n' | tee "$EVIDENCE/shared-link-recovery.txt"
     fi

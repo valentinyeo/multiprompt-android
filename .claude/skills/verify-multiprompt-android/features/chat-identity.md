@@ -27,6 +27,8 @@ The fixture uses the real protocol store and transcript reader over SSH. It does
 
 `projection-receipts-*.json` retains independent SSH-store acceptance IDs, host events and real JSONL transcript rows. `projection-state-*.json` records the visible order and counts derived from XML. The driver retains Send actions, draft and result PNG/XML pairs, and cleanup retains `receipts.txt`.
 
+The registry supplies exact action, result and receipt citation hints to the independent verifier: the second send from `driver-transcript.txt`, the reconnect order from `projection-state-reconnect.json`, and the once-only acceptance counts in `projection-proof.txt`.
+
 Equal bodies with different IDs, CRLF, ten delayed replies, native-fact overlap and cross-session isolation are covered by `MessageProjectionTest` on GitHub.
 
 `tools/message-projection/check.test.py` rejects the actual source before #77 (`ce2d32d9`) and #312 (`e31c9c4d`). GitHub's historical JVM replay runs the collision, CRLF, retained reply, host-ID and Fresh start fixtures against the five pre-fix implementations. Compile failures are not accepted as red proof; each replay must produce its named assertion failure.
