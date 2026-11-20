@@ -159,5 +159,6 @@
   "IGSH-2761": "AI usage sheet cuts off the Codex block below the navigation bar",
   "IGSH-2967": "Phone tests stop failing on missing Kotlin build files",
   "IGSH-2962": "Android: new versions take 21 minutes to reach the phone",
-  "IGSH-2975": "Phone tests can show a code block in a chat"
+  "IGSH-2975": "Phone tests can show a code block in a chat",
+  "IGSH-2976": "A Maven Central hiccup no longer fails a phone test"
 }
