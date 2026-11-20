@@ -54,7 +54,7 @@ class InboxSplitPillSpacingTest {
 
     private fun dp(value: Int) = value * density
 
-    private fun screen() = compose.onRoot().fetchSemanticsNode().boundsInRoot.width
+    private fun screen() = compose.onNodeWithText("All").fetchSemanticsNode().root!!.boundsInRoot.width
 
     private fun left(label: String) = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.left
 

@@ -2134,7 +2134,8 @@ internal fun SessionsScreen(
             if (!LocalMaterial3.current) {
                 FloatingBottomBar {
                     Row(
-                        Modifier.padding(horizontal = Kit.ScreenEdge, vertical = Kit.ControlGap)
+                        Modifier.fillMaxWidth()
+                            .padding(horizontal = Kit.ScreenEdge, vertical = Kit.ControlGap)
                             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                             .drawWithContent {
                                 drawContent()
@@ -2161,7 +2162,7 @@ internal fun SessionsScreen(
                                 else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
                             }
                             key(id, displayedWorkspaceSplitIds) {
-                                Box(Modifier.findPin(state.selectedWorkspaceId == id).padding(horizontal = Kit.ScreenEdge)) {
+                                Box(Modifier.findPin(state.selectedWorkspaceId == id)) {
                                     if (state.selectedWorkspaceId == id) {
                                         KitPrimaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true })
                                     } else {
