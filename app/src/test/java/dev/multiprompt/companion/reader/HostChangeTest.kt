@@ -49,9 +49,9 @@ class HostChangeTest {
         assertEquals("Could not change permission mode; try again", HostChange.BYPASS.failure)
     }
 
-    @Test fun theActiveChoiceFollowsTheHostSettings() {
+    @Test fun theActiveModelFollowsTheLiveChatNotTheSavedPick() {
         val settings = HostSettings("opus", "high", "acceptEdits", true)
-        assertEquals(listOf(HostChange.OPUS, HostChange.HIGH, HostChange.EDITS),
+        assertEquals(listOf(HostChange.SONNET, HostChange.LOW, HostChange.EDITS),
             HostChange.entries.filter { it.active(settings, "Sonnet 4.5", "low") })
     }
 
