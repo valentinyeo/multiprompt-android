@@ -20,14 +20,17 @@ test('only cheap rules and the one independent verifier run on PRs', () => {
   assert.match(check, /all\) source_checks; unit_checks; m3_unit_checks; lint_checks ;;/);
   assert.match(check, /tools\/ci\/pr-workflows\.test\.mjs/);
   assert.doesNotMatch(check, /bash tools\/kit-controls\/replay\.sh/);
+  assert.match(check, /control_map\.test\.py/);
+  assert.doesNotMatch(check, /control_map\.py check/);
   if (!ref) {
     assert.doesNotMatch(cheap, /BASE_SHA/);
     assert.match(cheap, /run: node \.github\/scripts\/pstack-verifier\/coverage\.cjs check/);
-    assert.match(cheap, /control_map\.py check 2>&1/);
+    assert.doesNotMatch(cheap, /control_map/);
     assert.doesNotMatch(cheap, /--base/);
     const weekly = read('.github/workflows/maintain-verification.yml');
     assert.match(weekly, /BASE_SHA="\$base" node \.github\/scripts\/pstack-verifier\/coverage\.cjs check/);
     assert.match(weekly, /control_map\.py check --base "\$base"/);
+    assert.match(weekly, /CONTROL_MAP_LIVE=1 python3 -B [^\n]*control_map\.test\.py/);
     assert.match(weekly, /continue-on-error: true/);
   }
 });
