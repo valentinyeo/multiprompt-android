@@ -1695,7 +1695,20 @@ if [[ "$feature" == chat-identity.md ]]; then
     tap_text verify-session
     wait_for_text REPLY_AFTER_2532
     projection_assert reconnect
-    printf 'MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK\n' | tee "$EVIDENCE/projection-proof.txt"
+    python3 - "$EVIDENCE" <<'PROJECTION_PROOF' | tee "$EVIDENCE/projection-proof.txt"
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+states = {name: json.loads(root.joinpath('projection-state-' + name + '.json').read_text()) for name in ('before', 'fresh', 'catchup', 'reconnect')}
+for name, state in states.items():
+    expected = ['PHONE_BEFORE_2532', 'REPLY_BEFORE_2532'] + ([] if name == 'before' else ['Fresh start', 'PHONE_AFTER_2532', 'REPLY_AFTER_2532'])
+    assert state['visible'] == expected, (name, state['visible'])
+    assert state['occurrences'] == 1, (name, state['occurrences'])
+assert states['reconnect']['phone_ids'] == states['fresh']['phone_ids'] == states['catchup']['phone_ids']
+receipts = [len(json.loads(root.joinpath('projection-receipts-' + name + '.json').read_text())['accepted']) for name in ('before', 'fresh', 'catchup', 'reconnect')]
+print('MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK phases=' + ','.join(states) + ' receipts=' + ','.join(str(count) for count in receipts) +
+      ' reconnect_visible=' + ','.join(states['reconnect']['visible']) + ' occurrences=1')
+PROJECTION_PROOF
     exit 0
 fi
 if [[ "$feature" == chat-shared.md ]]; then
