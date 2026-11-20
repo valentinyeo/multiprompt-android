@@ -209,12 +209,22 @@ doctor() {
         [[ "$attempt" -lt 3 ]]
         sleep 3
     done
-    for attempt in {1..30}; do
+    local network_restarted=0
+    for attempt in {1..90}; do
         if "$scripts/ssh-ready.sh"; then
             setup_failure=0
             return
         fi
-        printf 'Emulator network not up yet, attempt %s/30\n' "$attempt" | tee -a "$EVIDENCE/network-wait.txt"
+        if (( attempt == 30 && network_restarted == 0 )); then
+            network_restarted=1
+            adb shell cmd connectivity airplane-mode enable || true
+            sleep 3
+            adb shell cmd connectivity airplane-mode disable || true
+            adb shell svc wifi enable || true
+            adb shell svc data enable || true
+            printf 'NETWORK_RESTARTED\n' | tee -a "$EVIDENCE/network-wait.txt"
+        fi
+        printf 'Emulator network not up yet, attempt %s/90\n' "$attempt" | tee -a "$EVIDENCE/network-wait.txt"
         sleep 2
     done
     printf 'BLOCKED: emulator cannot reach 10.0.2.2\n' >&2
