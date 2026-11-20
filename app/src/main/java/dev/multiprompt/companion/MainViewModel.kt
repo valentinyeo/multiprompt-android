@@ -37,6 +37,8 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.ChatMention
+import dev.multiprompt.companion.reader.MentionChat
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.SwitchAi
@@ -167,6 +169,8 @@ data class AppUiState(
     val newSession: NewSessionPicker? = null,
 ) {
     val inboxSessions: List<TmuxSession> get() = AccountHostMap.withAccountSessions(sessions, accountLayout, accountHosts)
+
+    fun mentionChats(current: TmuxSession): List<MentionChat> = ChatMention.chats(sessions, current)
     val showFrequentSplit: Boolean get() = accountLayout?.settings?.get("frequent") ?: true
     val showFavoritesSplit: Boolean get() = accountLayout?.settings?.get("favorites") ?: true
     val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
