@@ -82,6 +82,89 @@ test('a journey that failed still fails the job whatever the judge said', () => 
   }
 });
 
+test('a journey already red on main becomes a note, not a failed check', () => {
+  const red = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, redOnMain: ['hosts.md'], redOnMainUrl: runUrl });
+  assert.equal(red.verdict, 'PASS+NOTES');
+  assert.equal(red.journeys[0].redOnMain, true);
+  assert.ok(red.notes.join(' ').includes(`Already red on main (nightly ${runUrl}): hosts.md; tracked as a ticket, not a PR block.`), red.notes.join(' '));
+  assert.doesNotMatch(red.notes.join(' '), /Journey not passed/);
+});
+
+test('a journey that failed and is not red on main still fails the check', () => {
+  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'failure', 'terminal.md': 'failure' }, redOnMain: ['terminal.md'], redOnMainUrl: runUrl });
+  assert.equal(ruled.verdict, 'FAIL');
+  assert.match(ruled.notes.join(' '), /Journey not passed: hosts\.md \(failure\)\./);
+  assert.match(ruled.notes.join(' '), /Already red on main .*terminal\.md; tracked as a ticket/);
+  const clean = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMain: ['terminal.md'], redOnMainUrl: runUrl });
+  assert.equal(clean.verdict, 'PASS');
+  assert.deepEqual(clean.notes, []);
+});
+
+test('an empty red list and a missing one behave as before', () => {
+  for (const redOnMain of [[], undefined]) {
+    assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, redOnMain }).verdict, 'FAIL');
+    assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMain }).verdict, 'PASS');
+  }
+  const noted = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMainNote: 'No journey counts as red on main: no completed android-full run on main yet.' });
+  assert.match(noted.notes.join(' '), /No journey counts as red on main/);
+});
+
+test('only journeys that did not pass are written for the verify chat', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'red-journeys-'));
+  try {
+    const file = path.join(directory, 'red-journeys.json');
+    const jobs = [
+      { name: 'nightly hosts.md', status: 'completed', conclusion: 'success' },
+      { name: 'nightly terminal.md / verify', status: 'completed', conclusion: 'failure' },
+      { name: 'nightly sessions.md / verify', status: 'in_progress', conclusion: null },
+      { name: 'journey chat-queued.md', status: 'completed', conclusion: 'success' },
+    ];
+    assert.deepEqual(verifier.redJourneys({ 'hosts.md': 'success', 'terminal.md': 'failure', 'sessions.md': null, 'chat-queued.md': 'cancelled' }), ['chat-queued.md', 'terminal.md']);
+    assert.deepEqual(verifier.writeRedJourneys(file, jobs), ['sessions.md', 'terminal.md']);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), ['sessions.md', 'terminal.md']);
+    const workflow = jobBlock(read('.github/workflows/android-full.yml'), 'red-journeys');
+    assert.match(workflow, /needs: nightly-journeys/);
+    assert.match(workflow, /if: always\(\)/);
+    assert.match(workflow, /run: node \.github\/scripts\/pstack-verifier\/verifier\.cjs red-journeys/);
+    assert.match(workflow, /name: red-journeys/);
+    assert.match(workflow, /retention-days: 7/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+const redOnMainRun = url => ['run', 'list', '-w', 'android-full.yml', '-b', 'main', '-s', 'completed', '-L', '1', '--json', 'databaseId,url'];
+
+test('the latest completed nightly run on main is read, and a missing artifact counts as no red journeys', () => {
+  const asked = [];
+  const run = args => {
+    asked.push(args);
+    if (args[0] === 'run' && args[1] === 'list') return JSON.stringify([{ databaseId: '42', url: runUrl }]);
+    if (args[0] === 'run' && args[1] === 'download') return '';
+    throw new Error(`unexpected ${args.join(' ')}`);
+  };
+  assert.deepEqual(verifier.latestNightlyRun('example/repo', run), { id: '42', url: runUrl, reason: '' });
+  assert.deepEqual(asked[0], redOnMainRun(runUrl));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'red-on-main-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'red-journeys.json'), JSON.stringify(['terminal.md']));
+    assert.deepEqual(verifier.downloadRedOnMain('example/repo', directory, run), { journeys: ['terminal.md'], url: runUrl, note: '' });
+    assert.deepEqual(asked.find(args => args[1] === 'download'), ['run', 'download', '42', '-R', 'example/repo', '-n', 'red-journeys', '-D', directory]);
+    fs.rmSync(path.join(directory, 'red-journeys.json'));
+    const missing = verifier.downloadRedOnMain('example/repo', directory, run);
+    assert.deepEqual(missing.journeys, []);
+    assert.match(missing.note, /no readable red-journeys artifact/);
+    const none = verifier.downloadRedOnMain('example/repo', directory, args => (args[1] === 'list' ? '[]' : ''));
+    assert.deepEqual(none.journeys, []);
+    assert.match(none.note, /no completed android-full run on main yet/);
+    const broken = verifier.downloadRedOnMain('example/repo', directory, () => { throw new Error('gh is not logged in'); });
+    assert.deepEqual(broken.journeys, []);
+    assert.match(broken.note, /the nightly run list failed/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('driving nothing caps the verdict at PASS+NOTES and says why', () => {
   const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: [], conclusions: {}, notDrivenReason: 'Only documentation changed.' });
   assert.equal(ruled.verdict, 'PASS+NOTES');
