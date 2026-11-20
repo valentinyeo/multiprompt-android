@@ -404,6 +404,7 @@ internal fun ChatHistoryList(
                         { emoji -> onReaction(message, emoji) }
                     } else null,
                     delivery = message.delivery?.takeIf { it in FAILURE_LABELS || it == PendingPrompts.WAITING_LABEL },
+                    notSentDetail = message.notSentDetail?.takeIf { message.delivery == ChatHistory.NOT_SENT },
                     onCancel = if (message.role == "user" && (message.delivery == "Queued" || message.cancellable) && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null,
@@ -451,6 +452,7 @@ private fun HistoryBubble(
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     delivery: String? = null,
+    notSentDetail: String? = null,
     findHits: List<ChatFind.Hit> = emptyList(),
     activeHit: ChatFind.Hit? = null,
 ) {
@@ -501,6 +503,11 @@ private fun HistoryBubble(
             } else if (delivery != null) {
                 Text(delivery, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                     color = chatHintColor(sunlight))
+                val detail = notSentDetail?.takeIf { delivery == ChatHistory.NOT_SENT }
+                if (detail != null) {
+                    Text(detail, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
+                        color = chatHintColor(sunlight), modifier = Modifier.padding(top = 2.dp))
+                }
             }
             if (isUser) {
                 val painted = reply?.body ?: text
