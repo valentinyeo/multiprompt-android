@@ -16,7 +16,7 @@
       "screen": "AI usage",
       "label": "Dismiss AI usage",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:AiUsageSheet:KitSheet:90073eaacdef9f43:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:33",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:28",
       "journey": "ai-usage.md",
       "proof": {
         "recipe": ".claude/skills/verify-multiprompt-android/features/ai-usage.md",
@@ -28,10 +28,14 @@
       "id": "ai-usage.scroll-ai-usage",
       "screen": "AI usage",
       "label": "Scroll AI usage",
-      "site": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:AiUsageSheet:verticalScroll:74f9c94015fb4c77:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:40",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitSheetScrollColumn:verticalScroll:f8ee04a7cef2c4c7:1",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:361",
+      "journey": "ai-usage.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/ai-usage.md",
+        "action": "Open AI usage from Session list actions",
+        "result": "Claude and Codex blocks are fully on screen in ai-usage-open.json"
+      }
     },
     {
       "id": "reader-more.sign-in-to-sync-sign-out",
@@ -5853,7 +5857,7 @@
     {
       "id": "forward.DesignKit.KitRoundButton.clickable.9",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitRoundButton:clickable:c70d005b47a79aaf:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:110",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:113",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "attach-menu.attach",
@@ -5895,7 +5899,7 @@
     {
       "id": "forward.DesignKit.KitExpandButton.clickable.10",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitExpandButton:clickable:05f1cc3e776882d0:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:124",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:127",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "chat-markdown-and-tables.expand-table"
@@ -5905,7 +5909,7 @@
     {
       "id": "forward.DesignKit.KitTitlePill.clickable.11",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitTitlePill:clickable:05f1cc3e776882d0:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:134",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:137",
       "reason": "Library definition has no interactive call sites in app/src/main. Future onClick call sites are scanned as controls.",
       "callers": [],
       "component": "KitTitlePill"
@@ -5913,7 +5917,7 @@
     {
       "id": "forward.DesignKit.KitPrimaryButton.clickable.12",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitPrimaryButton:clickable:c70d005b47a79aaf:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:177",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:180",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "app-navigation-and-host-identity.claude-code",
@@ -5953,7 +5957,7 @@
     {
       "id": "forward.DesignKit.KitSecondaryButton.clickable.13",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitSecondaryButton:clickable:c70d005b47a79aaf:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:196",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:199",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "app-navigation-and-host-identity.back",
@@ -6038,7 +6042,7 @@
     {
       "id": "forward.DesignKit.KitToggle.toggleable.14",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitToggle:toggleable:491467427548df30:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:210",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:213",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "session-list-settings.show-frequent-split",
@@ -6053,7 +6057,7 @@
     {
       "id": "forward.DesignKit.KitSegmented.selectable.15",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitSegmented:selectable:1a5720fb39b4fbda:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:231",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:234",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "session-list-settings.system-theme",
@@ -6070,7 +6074,7 @@
     {
       "id": "forward.DesignKit.KitListRow.clickable.16",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitListRow:clickable:c70d005b47a79aaf:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:262",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:265",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "reader-more.sign-in-to-sync-sign-out",
@@ -6220,7 +6224,7 @@
     {
       "id": "forward.DesignKit.KitSheet.ModalBottomSheet.17",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitSheet:ModalBottomSheet:40f5dceb46db4ac5:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:344",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:370",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "ai-usage.dismiss-ai-usage",
@@ -6266,7 +6270,7 @@
     {
       "id": "forward.DesignKit.KitMenu.KitSheet.18",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitMenu:KitSheet:fb96bbd1dab2891a:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:365",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:393",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "inbox-menu.dismiss-inbox-menu",
@@ -6282,9 +6286,9 @@
       "component": "KitMenu"
     },
     {
-      "id": "forward.DesignKit.KitMenu.verticalScroll.19",
-      "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitMenu:verticalScroll:f8ee04a7cef2c4c7:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:369",
+      "id": "forward.DesignKit.KitSheetScrollColumn.verticalScroll.19",
+      "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitSheetScrollColumn:verticalScroll:f8ee04a7cef2c4c7:1",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:361",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "inbox-menu.dismiss-inbox-menu",
@@ -6295,14 +6299,15 @@
         "inbox-session-actions.dismiss-inbox-session-actions",
         "chat-header.dismiss-chat-header",
         "session-actions.dismiss-session-actions",
-        "attach-menu.dismiss-attach-menu"
+        "attach-menu.dismiss-attach-menu",
+        "ai-usage.scroll-ai-usage"
       ],
-      "component": "KitMenu"
+      "component": "KitSheetScrollColumn"
     },
     {
       "id": "forward.DesignKit.KitMenuRow.KitListRow.20",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitMenuRow:KitListRow:baec765160a2a171:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:418",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:445",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "attach-host-settings.accept-edits",
@@ -6444,7 +6449,7 @@
     {
       "id": "forward.DesignKit.KitAnswerOption.clickable.21",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitAnswerOption:clickable:05f1cc3e776882d0:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:480",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:507",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "chat-question.choose-answer-option"
@@ -6454,7 +6459,7 @@
     {
       "id": "forward.DesignKit.KitSearchBox.BasicTextField.22",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitSearchBox:BasicTextField:30ab1eb9c03890c9:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:512",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:539",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "chat-search.search-this-chat"
@@ -6464,7 +6469,7 @@
     {
       "id": "forward.DesignKit.KitSearchBox.KeyboardActions.23",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:KitSearchBox:KeyboardActions:9511b146f1b288f3:1",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:519",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt:546",
       "reason": "Shared implementation delegates the same interaction to the named component call sites; not a second user control.",
       "callers": [
         "chat-search.search-this-chat"
@@ -6595,7 +6600,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "142f129a349a2d26245dd0acb0d457b94259b70448d5c19cd284e15d47c7040b"
+      "sha256": "4a0c6f9a68b1ee2d688269f55d2b10c63c5ffce1c05173f4fbde99595131300c"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt",
@@ -6665,7 +6670,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "1136dc15e99bc066d1a2c07ec06f2cdb8a0937106e07e415f3b2ce1bcca0d111"
+      "sha256": "ed9db84c9518170a5f86fe1509c7511427e7d870062d2c0eb8389959606b658f"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/DeviceApprovalPrompt.kt",
@@ -6853,7 +6858,7 @@
     {
       "id": "ai-usage",
       "screen": "AI usage",
-      "source": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:33",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/AiUsageSheet.kt:28",
       "entry": "See controls with this screen name; shared screens list their entry contexts."
     },
     {
