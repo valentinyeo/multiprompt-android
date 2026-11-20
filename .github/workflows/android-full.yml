@@ -53,6 +53,7 @@ jobs:
       released_robots: ${{ matrix.released_robots }}
       release_choices: ${{ matrix.release_choices }}
       pins_scroll: ${{ matrix.pins_scroll }}
+      break_it: true
       app_ref: ${{ github.sha }}
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

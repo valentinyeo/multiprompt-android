@@ -1,4 +1,5 @@
 {
+  "IGSH-2884": "Break-it runs nightly and only chat-history journeys open the big chat",
   "IGSH-2903": "Android verification back to what pstack asks for",
   "IGSH-2771": "Failed release cannot poison later releases",
   "IGSH-2760": "Phone tests stop before the emulator starts",
