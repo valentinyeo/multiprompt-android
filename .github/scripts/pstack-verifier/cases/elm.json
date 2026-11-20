@@ -15,17 +15,6 @@
     "reader.send-enter-interrupt"
   ],
   "evidence": {
-    "parent": {
-      "app-source-sha.txt": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
-      "side-result.json": "{\"passed\": true, \"productAssertion\": false}",
-      "driver-transcript.txt": "+ fill 'Message verify-session' VERIFY_SENT_528\n+ tap_desc 'Send prompt'\n+ tap_text 'Session actions'\n+ tap_text 'Enter / approve'\n+ tap_text 'Session actions'\n+ tap_text 'Interrupt session'\nDriver exit 0\n",
-      "08-send-draft.xml": "<hierarchy><node text=\"VERIFY_SENT_528\" /></hierarchy>\n",
-      "10-send-result.xml": "<hierarchy><node text=\"VERIFY_RECEIVED:VERIFY_SENT_528\" /></hierarchy>\n",
-      "12-enter-result.xml": "<hierarchy><node text=\"VERIFY_ENTER_528\" /></hierarchy>\n",
-      "14-interrupt-result.xml": "<hierarchy><node text=\"VERIFY_INTERRUPTED_528\" /></hierarchy>\n",
-      "receipts.txt": "VERIFY_RECEIVED:VERIFY_SENT_528\nVERIFY_ENTER_528\nVERIFY_INTERRUPTED_528\n",
-      "tmux-final.txt": "VERIFY_RECEIVED:VERIFY_SENT_528\nVERIFY_ENTER_528\nVERIFY_INTERRUPTED_528\n"
-    },
     "head": {
       "app-source-sha.txt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
       "side-result.json": "{\"passed\": true, \"productAssertion\": false}",

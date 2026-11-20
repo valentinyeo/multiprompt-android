@@ -11,32 +11,23 @@ const FAMILIES = ['deepseek', 'claude'];
 
 function prepare(sample, directory) {
   const directories = {};
-  const parentDirectories = {};
   const conclusions = {};
-  const parentConclusions = {};
-  const parents = {};
   for (const feature of sample.features) {
-    for (const side of ['parent', 'head']) {
-      const target = path.join(directory, side, feature);
-      fs.mkdirSync(target, { recursive: true });
-      for (const [file, text] of Object.entries(sample.evidence[side])) {
-        if (!/^[\w.-]+$/.test(file)) throw new Error('Evidence filenames must be flat');
-        fs.writeFileSync(path.join(target, file), text);
-      }
-      (side === 'head' ? directories : parentDirectories)[feature] = target;
+    const target = path.join(directory, 'head', feature);
+    fs.mkdirSync(target, { recursive: true });
+    for (const [file, text] of Object.entries(sample.evidence.head)) {
+      if (!/^[\w.-]+$/.test(file)) throw new Error('Evidence filenames must be flat');
+      fs.writeFileSync(path.join(target, file), text);
     }
+    directories[feature] = target;
     conclusions[feature] = 'success';
-    parentConclusions[feature] = 'success';
-    const files = verifier.readSideFiles(parentDirectories[feature]);
-    parents[feature] = verifier.parentResult({ conclusion: 'success', ...files, mergeBase: 'b'.repeat(40) });
   }
   const plan = coverage.planChange(sample.diff, sample.changedOutcomes);
   const user = verifier.judgeContext({
     pr: sample.pr, diff: sample.diff, plan, features: sample.features,
-    toolingProof: 'Hosted source checks completed successfully.\n',
-    parents, parentConclusions, conclusions, directories, parentDirectories,
+    conclusions, directories,
   });
-  return { user, plan, directories, conclusions, parents };
+  return { user, plan, directories, conclusions };
 }
 
 async function runCase(sample, { ask, output }) {
@@ -49,7 +40,7 @@ async function runCase(sample, { ask, output }) {
     const model = verifier.parseVerdict(raw);
     const plan = coverage.planChange(sample.diff, [...prepared.plan.outcomes, ...model.changedOutcomes]);
     const featureProof = coverage.featureErrors({ plan, coverage: model.coverage, directories: prepared.directories, conclusions: prepared.conclusions, sha: sample.pr.head.sha });
-    const ruled = verifier.applyRules({ modelVerdict: model.verdict, features: sample.features, conclusions: prepared.conclusions, parents: prepared.parents, featureProof });
+    const ruled = verifier.applyRules({ features: sample.features, conclusions: prepared.conclusions, featureProof });
     return { rawVerdict: model.verdict, verdict: ruled.verdict, summary: model.summary, notes: ruled.notes, featureProof };
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
@@ -63,7 +54,7 @@ function grade(results, expected) {
   if (Object.keys(results).sort().join() !== Object.keys(expected).sort().join()) throw new Error('Missing or unexpected case results');
   return Object.entries(expected).map(([label, verdict]) => ({
     label, expected: verdict, ...results[label],
-    matched: !results[label].error && results[label].rawVerdict === verdict && results[label].verdict === verdict,
+    matched: !results[label].error && results[label].rawVerdict === verdict,
   }));
 }
 

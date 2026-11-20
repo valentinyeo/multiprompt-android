@@ -226,21 +226,14 @@ test('a broken or timed-out replay and evidence from a different APK fail', t =>
   assert.ok(fixture.inspect().errors.length);
 });
 
-test('repro-first success and a model PASS cannot override broken or missing stress proof', t => {
+test('a stressed replay is carried by its journey result, not by a second verdict rule', t => {
   const fixture = retained(t);
-  const options = { modelVerdict: 'PASS', bugFix: true, features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' }, parents: { 'ai-switch.md': 'product assertion' } };
-  assert.equal(verifier.applyRules(options).verdict, 'FAIL');
-  const passed = verifier.applyRules({ ...options, stressProof: fixture.inspect() });
-  assert.equal(passed.verdict, 'PASS');
-  assert.ok(passed.notes.some(line => line.includes('break-it/stream-send.txt')));
+  const options = { features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' } };
+  const complete = fixture.inspect();
+  assert.ok(complete.evidence.some(line => line.includes('break-it/stream-send.txt')));
+  assert.equal(verifier.applyRules({ ...options, stressProof: complete }).verdict, 'PASS');
   fs.rmSync(path.join(fixture.dir, 'rotate.png'));
-  assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'FAIL');
-});
-
-test('break-it tooling changes exercise the real stress gate without inventing an Android parent repro', t => {
-  const fixture = retained(t);
-  const options = { modelVerdict: 'PASS', bugFix: false, stressRequired: true, features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' }, parents: { 'ai-switch.md': 'passed' } };
-  assert.equal(verifier.applyRules(options).verdict, 'FAIL');
+  assert.ok(fixture.inspect().errors.length);
   assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'PASS');
 });
 

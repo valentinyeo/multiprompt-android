@@ -6,7 +6,7 @@ The workflow `pstack-verifier-eval.yml` runs on dispatch, weekly, and pull reque
 
 ## Cases and acceptance
 
-Each case contains an organic pull request, a small source diff, registered outcomes, and parent/head artifact files. These are **synthetic evidence fixtures**, not captures from new Android builds. The patches are based on source at `e37d6303f9e7ad1e898909d3f5febee91ad57f0d`. They exercise whether the verifier reads contradictions rather than trusting a green journey status. They do not establish emulator reliability or general detection accuracy.
+Each case contains an organic pull request, a small source diff, registered outcomes, and head artifact files. These are **synthetic evidence fixtures**, not captures from new Android builds. The patches are based on source at `e37d6303f9e7ad1e898909d3f5febee91ad57f0d`. They exercise whether the verifier reads contradictions rather than trusting a green journey status. They do not establish emulator reliability or general detection accuracy.
 
 | Label | Change | Expected |
 | --- | --- | --- |
@@ -20,12 +20,12 @@ Each case contains an organic pull request, a small source diff, registered outc
 Every case must satisfy all three criteria on **both** families:
 
 1. Its parsed model verdict exactly matches the hidden answer, including raw FAIL for defects. A deterministic gate rescuing a model's false PASS does not count.
-2. The production coverage checks and verdict rules produce the same verdict. Clean cases must cite retained action/result files and independent side effects where required.
+2. The production coverage checks still run and report their citations and errors. Clean cases must cite retained action/result files and independent side effects where required.
 3. The answer is valid JSON in the production format. Missing cases, errors, malformed responses and `PASS+NOTES` fail.
 
 ## Blinding and reuse
 
-`cases/*.json` contains no answer labels. `expected.json` is loaded only after all model responses. The judge receives no label, answer table, model comparison, case file path or task brief. Each Claude call starts in a fresh temporary directory with only the parent/head evidence. Tools, MCP servers, slash commands, settings sources and session persistence are disabled. Its environment excludes GitHub and DeepSeek credentials.
+`cases/*.json` contains no answer labels. `expected.json` is loaded only after all model responses. The judge receives no label, answer table, model comparison, case file path or task brief. Each Claude call starts in a fresh temporary directory with only the head evidence. Tools, MCP servers, slash commands, settings sources and session persistence are disabled. Its environment excludes GitHub and DeepSeek credentials.
 
 Both families receive the identical production `JUDGE_INSTRUCTIONS` and `judgeContext` output. The existing registry remains unchanged, including ordinary references to signed release candidates. Parsing, artifact quoting, changed-outcome planning, coverage checks and final verdict rules are shared with the live verifier. There is no alternate prompt and no automatic retry to improve a failing score.
 
@@ -42,4 +42,4 @@ node --test tools/pstack-verifier-eval.test.js tools/pstack-verifier.test.js too
 node tools/strip-comments.mjs --check
 ```
 
-The regular hosted source checks and `pstack-verifier` picker also run the harness tests. No app behavior changes in this PR, so no Android journey coverage is claimed.
+The regular hosted source checks also run the harness tests. No app behavior changes here, so no Android journey coverage is claimed.

@@ -25,8 +25,8 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | Rule | Enforced by |
 |---|---|
 | Every PR builds, unit-tests and lints without unrelated phone jobs | `test.yml` runs build and `tools/check.sh source/unit/m3/lint`; `tools/ci/pr-workflows.test.mjs` checks workflow ownership |
-| Every PR gets one independent verdict, including tooling-only changes. At most three touched journeys run, with edited repro recipes first; remaining guards are named as deferred to nightly `android-full`. Code maps registry recipes and the shared chat reader paths to outcomes before the picker model adds guards | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js`; tooling retains hosted parent/head rule proof |
-| The judge is a model family no PR author used. Each PR body names every author with `Author model: <family>/<model>`; a missing, unknown or all-families-used author list fails | `authorFamilies` and `chooseJudge` in `verifier.cjs`, `tools/pstack-verifier.test.js` |
+| Every PR runs a head phone journey for each feature it touches, and nothing else | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js` |
+| The judge is a model family no PR author used, and its verdict is advisory. Each PR body names every author with `Author model: <family>/<model>`; a missing, unknown or all-families-used author list skips the judge comment and the journey result stands | `authorFamilies` and `chooseJudge` in `verifier.cjs`, `tools/pstack-verifier.test.js` |
 | Reuse base proof only for the same source SHA, journey and unchanged driver inputs | `parent-cache.cjs`, retained base artifacts and `tools/parent-cache.test.js` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
 | An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |

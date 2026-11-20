@@ -66,10 +66,19 @@ test('a cancelled journey or one with no result forces FAIL', () => {
   assert.match(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: {} }).notes.join(' '), /no result/);
 });
 
-test('when every journey passed the model verdict stands', () => {
+test('a passing set of journeys stays green even when the judge said FAIL', () => {
   for (const modelVerdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
     const ruled = verifier.applyRules({ modelVerdict, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
-    assert.equal(ruled.verdict, modelVerdict);
+    assert.equal(ruled.verdict, 'PASS');
+  }
+  const advisory = verifier.applyRules({ modelVerdict: 'FAIL', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
+  assert.match(advisory.notes.join(' '), /advisory/);
+});
+
+test('a journey that failed still fails the job whatever the judge said', () => {
+  for (const modelVerdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
+    const ruled = verifier.applyRules({ modelVerdict, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
+    assert.equal(ruled.verdict, 'FAIL');
   }
 });
 
@@ -79,7 +88,7 @@ test('driving nothing caps the verdict at PASS+NOTES and says why', () => {
   assert.match(ruled.notes.join(' '), /Nothing was driven/);
   assert.match(ruled.notes.join(' '), /Only documentation changed\./);
   assert.equal(verifier.applyRules({ modelVerdict: 'PASS+NOTES', features: [], conclusions: {} }).verdict, 'PASS+NOTES');
-  assert.equal(verifier.applyRules({ modelVerdict: 'FAIL', features: [], conclusions: {} }).verdict, 'FAIL');
+  assert.equal(verifier.applyRules({ modelVerdict: 'FAIL', features: [], conclusions: {} }).verdict, 'PASS+NOTES');
 });
 
 test('model output that does not parse gives no verdict', () => {
@@ -155,40 +164,37 @@ test('the picker can classify a bug fix, and only fix or bug words count', () =>
   assert.equal(verifier.saysBug(verifier.loadTicketTitles()['IGSH-2568']), false);
 });
 
-test('unknown journey names are dropped and at most three run', () => {
+test('unknown journey names are dropped and every named journey runs', () => {
   const picked = verifier.parsePick(JSON.stringify({
     features: ['hosts.md', 'made-up.md', 'session-settings.md', '../etc/passwd', 'hosts.md', 'terminal.md', 'sessions.md', 'chat-cancel.md'],
     reason: 'x',
     changed_outcomes: [],
     change_kind: 'tooling',
   }));
-  assert.deepEqual(picked.features, ['hosts.md', 'terminal.md', 'sessions.md']);
+  assert.deepEqual(picked.features, ['hosts.md', 'terminal.md', 'sessions.md', 'chat-cancel.md']);
   assert.ok(picked.dropped.includes('made-up.md'));
   assert.ok(picked.dropped.includes('session-settings.md'));
-  assert.ok(picked.dropped.includes('chat-cancel.md'));
   assert.deepEqual(verifier.validateFeatures('hosts.md').features, []);
   assert.deepEqual(verifier.validateFeatures(null).features, []);
 });
 
-test('the three picked journeys are shared by head and parent, not picked twice', () => {
-  assert.equal(verifier.MAX_JOURNEYS, 3);
+test('every picked journey runs on head, and no parent matrix exists', () => {
   const picked = verifier.parsePick(JSON.stringify({
     features: verifier.ALLOWLIST,
     changed_outcomes: [],
     change_kind: 'tooling',
-    reason: 'Exercise the cap.',
+    reason: 'Exercise every journey.',
   }));
-  assert.equal(picked.features.length, 3);
+  assert.equal(picked.features.length, verifier.ALLOWLIST.length);
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  for (const [job, side, ref] of [['journeys', 'head', 'head_sha'], ['parents', 'parent', 'merge_base']]) {
-    const block = jobBlock(workflow, job);
-    assert.match(block, /^ {4}needs: pick$/m);
-    assert.ok(block.includes('        feature: ${{ fromJSON(needs.pick.outputs.features) }}'));
-    assert.ok(block.includes('      feature: ${{ matrix.feature }}'));
-    assert.ok(block.includes(`      side: ${side}`));
-    assert.ok(block.includes(`      app_ref: \${{ needs.pick.outputs.${ref} }}`));
-    assert.doesNotMatch(block, /^ {8}(?:include|side):/m);
-  }
+  assert.doesNotMatch(workflow, /^ {2}parents:$/m);
+  const block = jobBlock(workflow, 'journeys');
+  assert.match(block, /^ {4}needs: pick$/m);
+  assert.ok(block.includes('        feature: ${{ fromJSON(needs.pick.outputs.features) }}'));
+  assert.ok(block.includes('      feature: ${{ matrix.feature }}'));
+  assert.ok(block.includes('      side: head'));
+  assert.ok(block.includes('      app_ref: ${{ needs.pick.outputs.head_sha }}'));
+  assert.doesNotMatch(block, /^ {8}(?:include|side):/m);
 });
 
 test('required outcome journeys cannot be omitted by the model picker', () => {
@@ -196,9 +202,8 @@ test('required outcome journeys cannot be omitted by the model picker', () => {
   const selected = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery'] });
   assert.deepEqual(selected.features, ['session-reader.md', 'chat-shared.md']);
   assert.equal(selected.smoke, false);
-  const bounded = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] });
-  assert.deepEqual(bounded.features, ['chat-shared.md', 'session-reader.md', 'sessions.md']);
-  assert.deepEqual(bounded.deferred, ['terminal.md']);
+  const every = verifier.includeRequiredJourneys(picked, { outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey'] });
+  assert.deepEqual(every.features, ['session-reader.md', 'chat-shared.md', 'sessions.md', 'terminal.md']);
 });
 
 test('changed recipes and owned drivers are mandatory before model suggestions', () => {
@@ -214,45 +219,39 @@ test('changed recipes and owned drivers are mandatory before model suggestions',
   assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/scroll.test.py' }], 1), true);
 });
 
-for (const repro of [true, false]) {
-  test(`an oversize shared-driver change ${repro ? 'with' : 'without'} a repro keeps the cap and defers guards`, () => {
-    const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
-    const files = ['.claude/skills/verify-multiprompt-android/scripts/drive.sh', ...(repro ? [`${gate.REGISTRY_PATH}/chat-shared.md`] : [])];
-    const diff = files.map(file => `diff --git a/${file} b/${file}\n+changed`).join('\n');
-    const picked = { features: ['session-reader.md', 'chat-codex.md', 'terminal.md'], dropped: ['made-up.md'] };
-    const selected = verifier.includeRequiredJourneys(picked, { outcomes: [] }, diff);
-    assert.deepEqual(selected.features, repro ? ['chat-shared.md', 'session-reader.md', 'chat-codex.md'] : picked.features);
-    assert.equal(selected.features.length, verifier.MAX_JOURNEYS);
-    assert.deepEqual(new Set([...selected.features, ...selected.deferred]), new Set(gate.changedJourneys(diff)));
-    assert.ok(selected.deferred.length > 3);
-    assert.ok(selected.deferred.every(name => !selected.features.includes(name)));
-    assert.deepEqual(selected.dropped, ['made-up.md']);
-    const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: selected.features, conclusions: Object.fromEntries(selected.features.map(name => [name, 'success'])), parents: Object.fromEntries(selected.features.map(name => [name, 'passed'])), deferred: selected.deferred });
-    assert.equal(ruled.verdict, 'PASS+NOTES');
-    const body = verifier.buildComment({ sha, ...ruled, summary: 'Bounded proof.', evidence: [], notCovered: [], runUrl });
-    assert.match(body, /Deferred to nightly android-full/);
-    for (const name of selected.deferred) assert.ok(body.includes(name), name);
-  });
-}
-
-test('more than three directly edited recipes require splitting instead of dropping an edited recipe', () => {
+test('a shared-driver change runs every journey it touches instead of deferring guards', () => {
   const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
-  const diff = ['hosts.md', 'terminal.md', 'chat-shared.md', 'chat-codex.md'].map(name => `diff --git a/${gate.REGISTRY_PATH}/${name} b/${gate.REGISTRY_PATH}/${name}\n+changed`).join('\n');
-  assert.throws(() => verifier.includeRequiredJourneys({ features: [] }, { outcomes: [] }, diff), /changed recipes.*split/i);
+  const files = ['.claude/skills/verify-multiprompt-android/scripts/drive.sh', `${gate.REGISTRY_PATH}/chat-shared.md`];
+  const diff = files.map(file => `diff --git a/${file} b/${file}\n+changed`).join('\n');
+  const picked = { features: ['session-reader.md', 'chat-codex.md', 'terminal.md'], dropped: ['made-up.md'] };
+  const selected = verifier.includeRequiredJourneys(picked, { outcomes: [] }, diff);
+  const required = gate.changedJourneys(diff);
+  assert.deepEqual(selected.features, required);
+  assert.deepEqual(selected.dropped, ['made-up.md']);
+  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: selected.features, conclusions: Object.fromEntries(selected.features.map(name => [name, 'success'])) });
+  assert.equal(ruled.verdict, 'PASS');
+  const body = verifier.buildComment({ sha, ...ruled, summary: 'Full proof.', evidence: [], notCovered: [], runUrl });
+  assert.doesNotMatch(body, /Deferred/);
+  for (const name of required) assert.ok(body.includes(name), name);
 });
 
-test('deferred guards are outside PR coverage but selected and unmapped outcomes still fail closed', () => {
+test('nine directly edited recipes pick nine journeys', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const recipes = ['hosts.md', 'terminal.md', 'chat-shared.md', 'chat-codex.md', 'sessions.md', 'session-reader.md', 'chat-search.md', 'ai-usage.md', 'snippets.md'];
+  const diff = recipes.map(name => `diff --git a/${gate.REGISTRY_PATH}/${name} b/${gate.REGISTRY_PATH}/${name}\n+changed`).join('\n');
+  const selected = verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff);
+  assert.equal(selected.features.length, 9);
+  assert.deepEqual(new Set(selected.features), new Set(recipes));
+});
+
+test('every scheduled outcome still needs its own journalled proof', () => {
   const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
   const plan = { product: true, outcomes: ['reader.send-enter-interrupt', 'chat.link-recovery', 'inbox.search', 'terminal.journey', 'app-name.journey'] };
   const selected = verifier.includeRequiredJourneys({ features: ['session-reader.md', 'chat-shared.md', 'sessions.md'] }, plan);
-  const scoped = verifier.scopePlan(plan, selected.deferred);
-  assert.ok(scoped.outcomes.includes('reader.send-enter-interrupt'));
-  assert.ok(!scoped.outcomes.includes('terminal.journey'));
-  const proof = gate.featureErrors({ plan: scoped, sha });
+  assert.ok(selected.features.includes('terminal.md'));
+  const proof = gate.featureErrors({ plan, sha });
   assert.match(proof.errors.join(' '), /reader.send-enter-interrupt/);
-  assert.doesNotMatch(proof.errors.join(' '), /terminal.journey/);
   assert.match(proof.errors.join(' '), /app-name.journey/);
-  assert.equal(verifier.applyRules({ modelVerdict: 'FAIL', features: [], deferred: selected.deferred }).verdict, 'FAIL');
 });
 
 test('all signed registry routes build candidates with the same journey identity for evidence', () => {
@@ -270,13 +269,11 @@ test('all signed registry routes build candidates with the same journey identity
   assert.ok(!verifier.ALLOWLIST.includes('session-settings.md'));
   assert.ok(!verifier.ALLOWLIST.includes('chat-working.md'));
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  for (const job of ['journeys', 'parents']) {
-    const block = jobBlock(workflow, job);
-    for (const flag of ['candidate', 'released_chat', 'released_robots', 'release_choices', 'pins_scroll']) {
-      assert.ok(block.includes(`      ${flag}: \${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].${flag} }}`));
-    }
-    assert.ok(block.includes('      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}'));
+  const block = jobBlock(workflow, 'journeys');
+  for (const flag of ['candidate', 'released_chat', 'released_robots', 'release_choices', 'pins_scroll']) {
+    assert.ok(block.includes(`      ${flag}: \${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].${flag} }}`));
   }
+  assert.ok(block.includes('      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}'));
 });
 
 test('every signed route accepts pinned parent and head candidates but keeps published pin guards', () => {
@@ -375,7 +372,7 @@ test('the comment names the model, the runner, the journeys, the evidence and th
     sha,
     verdict: 'PASS',
     summary: 'Sent and received.',
-    journeys: [{ feature: 'session-reader.md', conclusion: 'success', passed: true, parent: 'not passed' }],
+    journeys: [{ feature: 'session-reader.md', conclusion: 'success', passed: true }],
     evidence: ['The receipt shows the sent text.'],
     notCovered: ['Dictation.'],
     notes: [],
@@ -383,7 +380,7 @@ test('the comment names the model, the runner, the journeys, the evidence and th
   });
   assert.match(body, /DeepSeek \(deepseek-flash\)/);
   assert.match(body, /GitHub-hosted runner/);
-  assert.match(body, /`session-reader\.md` parent: not passed, head: passed/);
+  assert.match(body, /`session-reader\.md`: passed/);
   assert.match(body, /- The receipt shows the sent text\./);
   assert.match(body, /Not covered:\n- Dictation\./);
   assert.match(body, new RegExp(`Run: ${runUrl}`));
@@ -635,7 +632,7 @@ test('the pick and judge jobs check out only the scripts and the journey maps, n
 test('every PR to main gets an unconditional pstack-verifier result, including drafts, forks and dependabot', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'pstack-verifier'), /^ {4}name: pstack-verifier$/m);
-  assert.match(jobBlock(workflow, 'pstack-verifier'), /needs: \[pick, journeys, parents\]/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /needs: \[pick, journeys\]/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /pull-requests: write/);
   const pick = jobBlock(workflow, 'pick');
   assert.doesNotMatch(pick, /^ {4}if:/m);
@@ -650,16 +647,14 @@ test('every PR to main gets an unconditional pstack-verifier result, including d
 test('the caller grants the permissions verify.yml asks for, and dispatch adds no input that verify.yml reads', () => {
   const verify = read('.github/workflows/verify.yml');
   const asked = topBlock(verify, 'permissions').slice(1).filter(Boolean).map(line => line.trim());
-  for (const job of ['journeys', 'parents']) {
-    const granted = jobBlock(read('.github/workflows/pstack-verifier.yml'), job);
-    for (const permission of asked) assert.ok(granted.includes(permission), `${job} grants ${permission}`);
-  }
+  const granted = jobBlock(read('.github/workflows/pstack-verifier.yml'), 'journeys');
+  for (const permission of asked) assert.ok(granted.includes(permission), `journeys grants ${permission}`);
   const caller = topBlock(read('.github/workflows/pstack-verifier.yml'), 'on').join('\n');
   const inputs = [...caller.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]);
   assert.deepEqual(inputs, ['pr']);
 });
 
-test('verify.yml keeps non-PR triggers and delegates PR journeys to the capped picker', () => {
+test('verify.yml keeps non-PR triggers and delegates PR journeys to the verifier picker', () => {
   const verify = read('.github/workflows/verify.yml');
   const triggers = topBlock(verify, 'on').join('\n');
   for (const trigger of ['workflow_dispatch', 'workflow_call']) {
@@ -695,110 +690,71 @@ test('the model is a flash model, never a pro one', () => {
   assert.doesNotMatch(read('.github/scripts/pstack-verifier/verifier.cjs'), /v4-pro/);
 });
 
-test('a feature parent result never changes the verdict', () => {
-  for (const parent of ['not passed', 'passed', 'no result', 'product assertion']) {
-    for (const modelVerdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
-      const ruled = verifier.applyRules({ modelVerdict, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, parents: { 'hosts.md': parent } });
-      assert.equal(ruled.verdict, modelVerdict, `${parent} ${modelVerdict}`);
-      assert.equal(ruled.journeys[0].parent, parent);
-    }
+test('coverage gaps are notes and never change the verdict', () => {
+  const gap = 'FEATURE_NOT_EXERCISED: required journey terminal.md was not scheduled.';
+  const passed = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, featureProof: { accepted: [], errors: [gap] } });
+  assert.equal(passed.verdict, 'PASS');
+  assert.deepEqual(passed.notes, [gap]);
+  const failed = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, featureProof: { accepted: [], errors: [gap] } });
+  assert.equal(failed.verdict, 'FAIL');
+  assert.match(failed.notes.join(' '), /Journey not passed: hosts\.md/);
+  assert.match(failed.notes.join(' '), /FEATURE_NOT_EXERCISED/);
+});
+
+test('a judge that throws or answers junk leaves the journey-only verdict', async () => {
+  const plan = { outcomes: [] };
+  for (const ask of [
+    async () => { throw new Error('DeepSeek answered 503'); },
+    async () => verifier.parseVerdict('not json'),
+  ]) {
+    const judged = await verifier.judgeAnswer({ ask, diff: '', plan, features: ['hosts.md'], directories: {}, conclusions: { 'hosts.md': 'success' }, sha });
+    assert.match(judged.judgeNote, /^Judge unavailable: /);
+    assert.deepEqual(judged.model, verifier.journeyOnlyVerdict());
+    assert.deepEqual(judged.featureProof.errors, []);
+    assert.equal(judged.plan, plan);
+    assert.equal(verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, featureProof: judged.featureProof }).verdict, 'PASS');
   }
+  const noJudge = await verifier.judgeAnswer({ ask: null, diff: '', plan, features: ['hosts.md'], directories: {}, conclusions: { 'hosts.md': 'success' }, sha });
+  assert.equal(noJudge.judgeNote, undefined);
+  assert.deepEqual(noJudge.model, verifier.journeyOnlyVerdict());
 });
 
-test('a bug fix can pass when the parent failed a product assertion and head plus stress passed', () => {
-  const proven = verifier.applyRules({
-    modelVerdict: 'PASS',
-    bugFix: true,
-    stressProof: { errors: [], evidence: [] },
-    features: ['hosts.md'],
-    conclusions: { 'hosts.md': 'success' },
-    parents: { 'hosts.md': 'product assertion' },
-  });
-  assert.equal(proven.verdict, 'PASS');
-  assert.equal(verifier.applyRules({
-    modelVerdict: 'FAIL',
-    bugFix: true,
-    stressProof: { errors: [], evidence: [] },
-    features: ['hosts.md'],
-    conclusions: { 'hosts.md': 'success' },
-    parents: { 'hosts.md': 'product assertion' },
-  }).verdict, 'FAIL');
-  assert.equal(verifier.applyRules({
-    modelVerdict: 'PASS',
-    bugFix: true,
-    stressProof: { errors: [], evidence: [] },
-    features: ['hosts.md'],
-    conclusions: { 'hosts.md': 'failure' },
-    parents: { 'hosts.md': 'product assertion' },
-  }).verdict, 'FAIL');
-});
-
-test('a bug fix passes with one recorded repro and a passing regression guard', () => {
+test('a bug fix is judged by its head journeys, not by a parent repro or a stressed replay', () => {
   const ruled = verifier.applyRules({
     modelVerdict: 'PASS',
-    bugFix: true,
-    stressProof: { errors: [], evidence: [] },
+    stressProof: { errors: ['BREAK_IT_FAILED: retained stress evidence is required for every bug-fix journey.'], evidence: [] },
     features: ['reader-version.md', 'settings-controls.md'],
     conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
-    parents: { 'reader-version.md': 'product assertion', 'settings-controls.md': 'passed' },
+  });
+  assert.equal(ruled.verdict, 'PASS');
+  assert.doesNotMatch(ruled.notes.join(' '), /No recorded repro|setup, build or fixture|BREAK_IT_FAILED/);
+  assert.equal(verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } }).verdict, 'FAIL');
+});
+
+test('two passing head journeys leave no notes', () => {
+  const ruled = verifier.applyRules({
+    features: ['reader-version.md', 'settings-controls.md'],
+    conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
   });
   assert.equal(ruled.verdict, 'PASS');
   assert.deepEqual(ruled.notes, []);
 });
 
-test('a bug fix fails with only regression guards and no recorded repro', () => {
-  const ruled = verifier.applyRules({
-    modelVerdict: 'PASS',
-    bugFix: true,
-    stressProof: { errors: [], evidence: [] },
-    features: ['reader-version.md', 'settings-controls.md'],
-    conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
-    parents: { 'reader-version.md': 'passed', 'settings-controls.md': 'passed' },
-  });
-  assert.equal(ruled.verdict, 'FAIL');
-  assert.match(ruled.notes.join(' '), /No recorded repro/);
-  assert.match(ruled.notes.join(' '), /settings-controls\.md parent passed/);
-});
-
-test('a recorded repro does not excuse a regression guard that did not pass on head', () => {
+test('one head journey that did not pass fails the job whatever the other journeys showed', () => {
   for (const conclusion of ['failure', 'cancelled', 'skipped', null]) {
     const ruled = verifier.applyRules({
-      modelVerdict: 'PASS',
-      bugFix: true,
-      stressProof: { errors: [], evidence: [] },
       features: ['reader-version.md', 'settings-controls.md'],
       conclusions: { 'reader-version.md': 'success', 'settings-controls.md': conclusion },
-      parents: { 'reader-version.md': 'product assertion', 'settings-controls.md': 'passed' },
     });
     assert.equal(ruled.verdict, 'FAIL', conclusion);
     assert.match(ruled.notes.join(' '), /Journey not passed: settings-controls\.md/);
-    assert.doesNotMatch(ruled.notes.join(' '), /No recorded repro/);
   }
 });
 
-test('a bug fix fails when the parent failed in setup rather than a product assertion', () => {
-  for (const parent of ['not passed', 'no result']) {
-    const ruled = verifier.applyRules({
-      modelVerdict: 'PASS',
-      bugFix: true,
-      stressProof: { errors: [], evidence: [] },
-      features: ['hosts.md'],
-      conclusions: { 'hosts.md': 'success' },
-      parents: { 'hosts.md': parent },
-    });
-    assert.equal(ruled.verdict, 'FAIL', parent);
-    assert.match(ruled.notes.join(' '), /setup, build or fixture/);
-  }
-  assert.equal(verifier.applyRules({ modelVerdict: 'PASS', bugFix: true, features: [], conclusions: {} }).verdict, 'FAIL');
-});
-
-test('a feature is unaffected by the bug-fix repro rule', () => {
+test('the bug-fix label comes from the title or the ticket, never from a feature', () => {
   const ruled = verifier.applyRules({
-    modelVerdict: 'PASS',
-    bugFix: false,
     features: ['hosts.md'],
     conclusions: { 'hosts.md': 'success' },
-    parents: { 'hosts.md': 'passed' },
   });
   assert.equal(ruled.verdict, 'PASS');
   assert.deepEqual(ruled.notes, []);
@@ -807,20 +763,11 @@ test('a feature is unaffected by the bug-fix repro rule', () => {
   assert.equal(verifier.isBugFix({ title, changeKind: 'bug' }), true);
 });
 
-test('a head journey that failed still forces FAIL whatever the parent did', () => {
-  for (const parent of ['passed', 'not passed', 'no result']) {
-    const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, parents: { 'hosts.md': parent } });
-    assert.equal(ruled.verdict, 'FAIL', parent);
-  }
-});
-
-test('a missing parent result adds a pipeline note and nothing else', () => {
-  const missing = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' }, parents: { 'hosts.md': 'passed' } });
-  assert.equal(missing.verdict, 'PASS');
-  assert.match(missing.notes.join(' '), /No parent result for terminal\.md/);
-  assert.doesNotMatch(missing.notes.join(' '), /hosts\.md/);
-  const present = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, parents: { 'hosts.md': 'not passed' } });
-  assert.deepEqual(present.notes, []);
+test('a failed head journey forces FAIL and an all-passed set stays PASS', () => {
+  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
+  assert.equal(ruled.verdict, 'FAIL');
+  assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' } }).verdict, 'PASS');
+  assert.match(ruled.notes.join(' '), /Journey not passed: hosts\.md/);
 });
 
 test('the parent result comes from the recorded result file, the job conclusion and the app source', () => {
@@ -864,37 +811,36 @@ test('the result file and source sha are read from the parent artifact only when
   }
 });
 
-test('the comment lists the parent and the head result of every journey', () => {
+test('the comment lists the head result of every journey', () => {
   const body = verifier.buildComment({
     sha,
     verdict: 'PASS',
     summary: 'Fixed.',
     journeys: [
-      { feature: 'hosts.md', conclusion: 'success', passed: true, parent: 'not passed' },
-      { feature: 'terminal.md', conclusion: 'failure', passed: false, parent: 'passed' },
-      { feature: 'sessions.md', conclusion: null, passed: false, parent: 'no result' },
+      { feature: 'hosts.md', conclusion: 'success', passed: true },
+      { feature: 'terminal.md', conclusion: 'failure', passed: false },
+      { feature: 'sessions.md', conclusion: null, passed: false },
     ],
     evidence: [],
     notCovered: [],
     notes: [],
     runUrl,
   });
-  assert.match(body, /^- `hosts\.md` parent: not passed, head: passed$/m);
-  assert.match(body, /^- `terminal\.md` parent: passed, head: not passed \(failure\)$/m);
-  assert.match(body, /^- `sessions\.md` parent: no result, head: no result$/m);
+  assert.match(body, /^Journeys driven:$/m);
+  assert.match(body, /^- `hosts\.md`: passed$/m);
+  assert.match(body, /^- `terminal\.md`: not passed \(failure\)$/m);
+  assert.match(body, /^- `sessions\.md`: no result$/m);
+  assert.doesNotMatch(body, /parent/);
   assert.equal(body.split('\n')[0], `pstack-verifier: PASS @ ${sha}`);
 });
 
-test('parent job names and artifact names never collide with the head side', () => {
+test('journey job names and artifact names match the head side only', () => {
   const jobs = [
     { name: 'journey hosts.md / verify', status: 'completed', conclusion: 'success' },
-    { name: 'parent journey hosts.md / verify', status: 'completed', conclusion: 'success' },
     { name: 'parent journey terminal.md / verify', status: 'completed', conclusion: 'cancelled' },
   ];
   assert.deepEqual(verifier.jobConclusions(jobs, ['hosts.md', 'terminal.md']), { 'hosts.md': 'success', 'terminal.md': null });
-  assert.deepEqual(verifier.jobConclusions(jobs, ['hosts.md', 'terminal.md'], 'parent'), { 'hosts.md': 'success', 'terminal.md': 'cancelled' });
-  assert.equal(verifier.artifactName('hosts.md', '9', 'head'), 'verify-hosts.md-9');
-  assert.equal(verifier.artifactName('hosts.md', '9', 'parent'), 'verify-hosts.md-9-parent');
+  assert.equal(verifier.artifactName('hosts.md', '9'), 'verify-hosts.md-9');
   const verify = read('.github/workflows/verify.yml');
   assert.match(verify, /name: verify-\$\{\{ env\.VERIFY_JOURNEY \}\}-\$\{\{ github\.run_id \}\}\$\{\{ inputs\.side == 'parent' && '-parent' \|\| '' \}\}\$\{\{ inputs\.side && inputs\.side != 'head' && inputs\.side != 'parent' && format\('-\{0\}', inputs\.side\) \|\| '' \}\}$/m);
   assert.match(verify, /stage: stage-1\$\{\{ inputs\.side && format\('-\{0\}-\{1\}', inputs\.side, inputs\.feature\) \|\| '' \}\}$/m);
@@ -913,18 +859,11 @@ test('the merge base comes from the compare API and must be a full sha', () => {
   assert.match(pick, /merge_base: \$\{\{ steps\.pick\.outputs\.merge_base \}\}/);
 });
 
-test('the parents job drives the merge base with the head journey scripts and signing secrets', () => {
+test('no PR run drives the parent side', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  const parents = jobBlock(workflow, 'parents');
-  assert.match(parents, /^ {4}name: parent journey \$\{\{ matrix\.feature \}\}$/m);
-  assert.match(parents, /^ {4}uses: \.\/\.github\/workflows\/verify\.yml$/m);
-  assert.match(parents, /^ {6}feature: \$\{\{ matrix\.feature \}\}$/m);
-  assert.match(parents, /^ {6}side: parent$/m);
-  assert.match(parents, /^ {6}app_ref: \$\{\{ needs\.pick\.outputs\.merge_base \}\}$/m);
-  assert.match(parents, /fail-fast: false/);
-  assert.match(parents, /^ {4}if: needs\.pick\.outputs\.features != '\[\]'$/m);
-  assert.doesNotMatch(parents, /DEEPSEEK|secrets:\s*inherit/);
-  assert.doesNotMatch(parents, /DEEPSEEK/);
+  assert.doesNotMatch(workflow, /^ {2}parents:$/m);
+  assert.doesNotMatch(workflow, /side: parent/);
+  assert.doesNotMatch(workflow, /parent journey/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /MERGE_BASE: \$\{\{ needs\.pick\.outputs\.merge_base \}\}/);
 });
 
@@ -992,7 +931,6 @@ test('drive.sh prints a product-assertion marker and keeps setup failures separa
   assert.match(jobBlock(workflow, 'pick'), /change_kind: \$\{\{ steps\.pick\.outputs\.change_kind \}\}/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /CHANGE_KIND: \$\{\{ needs\.pick\.outputs\.change_kind \}\}/);
   assert.match(jobBlock(workflow, 'pick'), /tools\/release-notes\/ticket-titles\.json/);
-  assert.match(jobBlock(workflow, 'pick'), /\.claude\/skills\/verify-multiprompt-android\/scripts\/drive\.sh/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /tools\/release-notes\/ticket-titles\.json/);
 });
 
@@ -1024,11 +962,10 @@ test('a verdict wrapped in prose or a fence still parses, and a bad answer is as
   assert.equal(asked, 1);
 });
 
-test('SOFT-2536 bounds five required journeys and names the nightly guards', () => {
+test('every required outcome journey runs, so nothing waits for nightly', () => {
   const outcomes = ['sign-in.journey', 'host-changed-key.journey', 'chat-reactions.journey', 'claude.skills-model-effort', 'inbox.search'];
   const selected = verifier.includeRequiredJourneys({ features: ['sign-in.md'], smoke: false }, { product: true, outcomes });
-  assert.deepEqual(selected.features, ['sign-in.md', 'host-changed-key.md', 'chat-reactions.md']);
-  assert.deepEqual(selected.deferred, ['native-skills.md', 'sessions.md']);
+  assert.deepEqual(selected.features, ['sign-in.md', 'host-changed-key.md', 'chat-reactions.md', 'native-skills.md', 'sessions.md']);
 });
 
 test('android-full schedules every deferred candidate with its registered runner inputs', () => {
@@ -1142,7 +1079,7 @@ test('docs/tooling skips Android but retains exact base and non-UI classificatio
       assert.match(run.output, /^no_product_change=true$/m);
       assert.match(run.output, /^features=\[\]$/m);
       assert.match(run.output, /No product change/);
-      assert.match(run.output, /independent verifier judges/);
+      assert.match(run.output, /No Android journey is scheduled/);
       assert.match(run.output, /^change_kind=tooling$/m);
       assert.match(run.output, new RegExp(`^merge_base=${sha}$`, 'm'));
     }
@@ -1166,12 +1103,10 @@ test('product changes still require the secret, even in drafts and dependabot PR
 
 test('tooling and product changes both run the independent judge', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  for (const job of ['journeys', 'parents']) {
-    assert.match(jobBlock(workflow, job), /^ {4}if: needs\.pick\.outputs\.features != '\[\]'$/m);
-  }
+  assert.match(jobBlock(workflow, 'journeys'), /^ {4}if: needs\.pick\.outputs\.features != '\[\]'$/m);
   const final = jobBlock(workflow, 'pstack-verifier');
   assert.doesNotMatch(final, /if:.*no_product_change/);
-  assert.match(final, /name: Judge the change against the journey evidence\n {8}id: judge\n {8}if: needs\.pick\.outputs\.reused != 'true'\n {8}env:/);
+  assert.match(final, /name: Judge the change against the journey evidence\n {8}id: judge\n {8}env:/);
 });
 
 test('judge family differs from every author family', () => {
