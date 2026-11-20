@@ -565,32 +565,28 @@ jobs:
             fi
       - name: Install Claude Code for the agent reviewer
         id: agent-review-cli
-        if: (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true'
+        if: always() && (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true' && steps.native-ui.conclusion != 'skipped'
         continue-on-error: ${{ inputs.side == 'parent' }}
         run: npm i -g @anthropic-ai/claude-code@2.1.326
       - name: Collect change context for the agent reviewer
         id: agent-review-context
-        if: (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true'
+        if: always() && (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true' && steps.native-ui.conclusion != 'skipped'
         continue-on-error: ${{ inputs.side == 'parent' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p "$EVIDENCE/agent-review"
-          git fetch --depth=50 origin main
-          {
-            printf 'AGENT_REVIEW_TITLE<<EOF\n'
-            git log -1 --format=%s
-            printf '\nEOF\n'
-            printf 'AGENT_REVIEW_BODY<<EOF\n'
-            git log -1 --format=%b
-            printf '\nEOF\n'
-            printf 'AGENT_REVIEW_DIFF<<EOF\n'
-            git diff origin/main...HEAD
-            printf '\nEOF\n'
-          } >> "$GITHUB_ENV"
+          git log -1 --format=%s > "$EVIDENCE/agent-review/title.txt"
+          git log -1 --format=%b > "$EVIDENCE/agent-review/body.txt"
+          git fetch --no-tags --depth=200 origin main
+          if git diff --quiet origin/main...HEAD 2>/dev/null; then
+            printf '(empty)\n' > "$EVIDENCE/agent-review/diff.txt"
+          else
+            git diff origin/main...HEAD > "$EVIDENCE/agent-review/diff.txt" || printf '(empty)\n' > "$EVIDENCE/agent-review/diff.txt"
+          fi
       - name: Independent agent review on the live emulator
         id: agent-review
-        if: (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true'
+        if: always() && (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true' && steps.native-ui.conclusion != 'skipped'
         continue-on-error: ${{ inputs.side == 'parent' }}
         timeout-minutes: 45
         env:
