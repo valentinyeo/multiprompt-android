@@ -1,0 +1,2 @@
+.github/workflows/pstack-verifier.yml:pstack-verifier verdict stage of the one step-1 verifier; pick is its first stage
+.github/workflows/test.yml:test registry and source checks in the cheap CI job, not a second step-1 verifier

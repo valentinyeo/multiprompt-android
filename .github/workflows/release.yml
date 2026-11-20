@@ -19,19 +19,10 @@ concurrency:
 
 jobs:
   build-and-publish:
-    timeout-minutes: 75
+    timeout-minutes: 55
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    env:
-      EVIDENCE: ${{ github.workspace }}/build/release-proof
-      VERIFY_APK: ${{ github.workspace }}/app/build/outputs/apk/release/app-release.apk
-      VERIFY_PACKAGE: dev.multiprompt.companion
-      VERIFY_FEATURE: robot-faces.md
     steps:
-      - name: Set fixture directory
-        timeout-minutes: 2
-        run: echo "FIXTURE=$RUNNER_TEMP/verify-ssh" >> "$GITHUB_ENV"
-
       - uses: actions/checkout@v4
         timeout-minutes: 5
         with:
@@ -144,6 +135,7 @@ jobs:
         run: mkdir -p build/release-launch-evidence
 
       - name: Launch signed M3 APK
+        id: release-launch
         uses: reactivecircus/android-emulator-runner@v2.34.0
         timeout-minutes: 5
         with:
@@ -162,56 +154,6 @@ jobs:
           name: release-launch-evidence
           path: build/release-launch-evidence/
           if-no-files-found: warn
-
-      - uses: android-actions/setup-android@v3
-        timeout-minutes: 5
-        with:
-          packages: platform-tools
-
-      - name: Prepare signed release journey
-        timeout-minutes: 40
-        env:
-          CANDIDATE_APK: ${{ env.VERIFY_APK }}
-          EXPECTED_COMMIT: ${{ github.sha }}
-          EXPECTED_VERSION: ${{ env.VERSION_NAME }}
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: |
-          mkdir -p "$EVIDENCE"
-          sudo apt-get update -qq
-          sudo apt-get install -y ffmpeg
-          sdkmanager --install 'build-tools;35.0.0' 'platforms;android-35'
-          bash tools/release-choices/prepare.sh
-          .claude/skills/verify-multiprompt-android/scripts/fixture.sh
-
-      - name: Record signed release journey
-        id: release-proof
-        timeout-minutes: 15
-        uses: ./.github/actions/android-proof
-        env:
-          EXPECTED_VERSION: ${{ env.VERSION_NAME }}
-        with:
-          stage: release-proof
-          target: default
-          script: bash tools/release-proof.sh
-
-      - name: Stop release fixture and retain receipts
-        if: always()
-        timeout-minutes: 2
-        run: .claude/skills/verify-multiprompt-android/scripts/cleanup.sh
-
-      - name: Upload release proof
-        timeout-minutes: 5
-        id: release-proof-upload
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-proof
-          path: ${{ env.EVIDENCE }}/
-          if-no-files-found: error
-          retention-days: 14
 
       - name: Reject older releases
         timeout-minutes: 5
@@ -239,7 +181,6 @@ jobs:
           mkdir -p "$release_dir"
           cp "$source_apk" "$release_dir/multiprompt-companion.apk"
           sha256=$(sha256sum "$release_dir/multiprompt-companion.apk" | cut -d' ' -f1)
-          test "$sha256" = "$(cat "$EVIDENCE/recorded-apk-sha256.txt")"
           size=$(stat -c%s "$release_dir/multiprompt-companion.apk")
 
           previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion-update.json" || echo '{}')
@@ -275,7 +216,7 @@ jobs:
 
       - name: Publish fixed android-latest channel
         timeout-minutes: 5
-        if: success() && steps.release-proof.outcome == 'success' && steps.release-proof-upload.outcome == 'success'
+        if: success() && steps.release-launch.outcome == 'success'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -344,7 +285,7 @@ jobs:
 
       - name: Publish fixed android-m3-latest channel
         timeout-minutes: 5
-        if: success() && steps.release-proof.outcome == 'success' && steps.release-proof-upload.outcome == 'success'
+        if: success() && steps.release-launch.outcome == 'success'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

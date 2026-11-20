@@ -21,3 +21,10 @@ test('test workflows keep saving the Gradle cache', () => {
     }
   }
 });
+
+test('verify journeys avoid stale dependency metadata from older Gradle home caches', () => {
+  const steps = blocks(read('verify.yml'));
+  assert.equal(steps.length, 1, 'verify.yml setup-gradle step count changed, recheck the cache rule');
+  assert.match(steps[0], /^\s+gradle-home-cache-strict-match:\s*true\s*$/m);
+  assert.doesNotMatch(steps[0], /gradle-home-cache-excludes:\s*\n\s*caches\/modules-2/);
+});
