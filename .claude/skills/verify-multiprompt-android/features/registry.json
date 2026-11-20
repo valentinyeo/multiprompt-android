@@ -741,7 +741,7 @@
     },
     "skill-pills.md": {
       "name": "Skills within messages",
-      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.",
+      "description": "insert a skill mid-message, check composer and sent pills, remove a pill, send the remaining text, then type a six-line draft and check the message box bounds. SOFT-2543, IGSH-2957.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -753,7 +753,8 @@
         ]
       },
       "outcomes": [
-        "skills.pills"
+        "skills.pills",
+        "reader.composer-long-draft"
       ],
       "evidence": {
         "skill-pills-state.json": 4000,
@@ -1782,6 +1783,14 @@
       "paths": [
         "^app/src/main/java/dev/multiprompt/companion/data/(CrashReportStore|ExitReasons|CrashTrace|CrashPayload|AndroidExitReasonSource)\\.kt$",
         "^app/src/main/java/dev/multiprompt/companion/account/CrashReportUpload\\.kt$"
+      ]
+    },
+    "reader.composer-long-draft": {
+      "description": "A draft long enough to wrap six lines keeps the message box at the bottom above the keyboard: the + button and the text field share one composer row, +, dictation and send stay bottom aligned with the grown field, and no hint or chat text shows through the row.",
+      "journey": "skill-pills.md",
+      "sideEffect": false,
+      "match": [
+        "FloatingBottomBar|floating-bottom-bar|Alignment\\.Bottom|composerLayout|skillPills"
       ]
     }
   }

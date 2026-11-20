@@ -52,6 +52,48 @@ tap_desc 'Send prompt'
 wait_receipt 'VERIFY_RECEIVED:Keep this'
 wait_for_text 'Received Keep this.'
 pills_state sent-removed 'Keep this'
+long_draft='Checking%swhen%sit%sresets.%sWe%sneed%sinstructions%sfor%sthis,%sthis%snever%sused%sto%shappen.%sWe%shad%sa%svery%sgood%ssetup%sfor%sthis%sin%splace,%sbut%ssince%susing%sthe%snew%sstack%sthis%shas%sbroken%sdown.%s/review-native'
+fill 'Message verify-session' "$long_draft"
+tap_node editor ''
+sleep 2
+dump_ui
+python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select draft --value "${long_draft//%s/ }" >/dev/null
+python3 - "$EVIDENCE/current.xml" <<'PYCOMPOSER'
+import re
+import sys
+import xml.etree.ElementTree as ET
+nodes = list(ET.parse(sys.argv[1]).getroot().iter('node'))
+
+def rect(node):
+    numbers = list(map(int, re.findall(r'-?\d+', node.get('bounds') or '')))
+    assert len(numbers) == 4, node.get('bounds')
+    return numbers
+
+def by_desc(value):
+    found = [node for node in nodes if (node.get('content-desc') or '').strip() == value]
+    assert found, f'missing {value!r}'
+    return rect(found[0])
+
+root = rect(nodes[0])
+field = [node for node in nodes if node.get('class') == 'android.widget.EditText']
+assert len(field) == 1, f'expected one composer field, found {len(field)}'
+field = rect(field[0])
+attach = by_desc('Attach')
+mic = by_desc('Start dictation')
+send = by_desc('Send prompt')
+tolerance = 24
+print(f'COMPOSER root={root} field={field} attach={attach} mic={mic} send={send}')
+assert field[1] >= root[1] and field[3] <= root[3], 'the text field leaves the window'
+assert attach[2] <= field[0] and attach[1] >= field[1] and attach[3] <= field[3], f'the + button leaves the composer row: {attach} vs {field}'
+assert abs(attach[3] - field[3]) <= tolerance, f'the + button is not bottom aligned: {attach} vs {field}'
+assert abs(mic[3] - field[3]) <= tolerance, f'dictation is not bottom aligned: {mic} vs {field}'
+assert abs(send[3] - field[3]) <= tolerance, f'send is not bottom aligned: {send} vs {field}'
+assert field[3] >= root[3] - 40, f'the composer row is not at the bottom of the window: {field} vs {root}'
+assert field[3] - field[1] >= 110, f'the long draft did not grow the field: {field}'
+print('COMPOSER_LONG_DRAFT_BOUNDS_OK')
+PYCOMPOSER
+shot composer-long-draft
+python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value 'Message verify-session'
 sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/skill-pills-receipts.txt"
 sudo cat /home/verifyssh/.claude/projects/-home-verifyssh-native-skills-work/a1b2c3d4-1009-4000-8000-000000001009.jsonl > "$EVIDENCE/skill-pills-transcript.jsonl"
 python3 - "$EVIDENCE" <<'PYPILLS'

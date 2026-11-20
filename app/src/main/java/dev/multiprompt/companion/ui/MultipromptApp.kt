@@ -4237,7 +4237,9 @@ internal fun ReaderScreen(
         },
         bottomBar = {
             FloatingBottomBar(
-                Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
+                Modifier.imePadding()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
                 if (savedToken > 0 && !attachMenuExpanded) {
@@ -4619,7 +4621,7 @@ internal fun ReaderScreen(
                                 }
                                 Row(
                                     Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                                    verticalAlignment = Alignment.Bottom,
                                 ) {
                                     Box(Modifier.weight(1f).padding(vertical = 10.dp).skillPills(skillSpans, composerLayout)) {
                                         if (prompt.isEmpty()) {

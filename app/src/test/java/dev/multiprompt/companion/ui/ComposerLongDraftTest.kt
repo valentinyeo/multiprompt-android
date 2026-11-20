@@ -193,7 +193,7 @@ class ComposerLongDraftTest {
         )
         assertTrue(
             "the draft grew the field instead of the row: field=$fieldBounds",
-            fieldBounds.height > (ReaderControlSize.value * 2).value,
+            fieldBounds.height > (ReaderControlSize * 2).value,
         )
         val draftTexts = descendants(bar).flatMap { texts(it) }
         assertEquals("the composer row shows only the draft, no hint", listOf(longDraft), draftTexts)
