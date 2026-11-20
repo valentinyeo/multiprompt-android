@@ -209,7 +209,7 @@ jobs:
   verify:
     name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
+    timeout-minutes: ${{ inputs.agent_review && 90 || inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
     env:
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: ${{ inputs.driver_feature || inputs.feature || 'native-skills.md' }}
@@ -532,8 +532,11 @@ jobs:
       - name: Install, doctor and drive the real app
         if: steps.parent-cache.outputs.hit != 'true'
         id: native-ui
-        timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 40 || inputs.side == 'parent' && 20 || inputs.break_it && 55 || 35 }}
+        timeout-minutes: ${{ inputs.agent_review && 75 || inputs.feature == 'reader-controls.md' && 40 || inputs.side == 'parent' && 20 || inputs.break_it && 55 || 35 }}
         continue-on-error: ${{ inputs.side == 'parent' || github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
+        env:
+          AGENT_REVIEW: ${{ inputs.agent_review }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         uses: ./.github/actions/android-proof
         with:
           stage: stage-1${{ inputs.side && format('-{0}-{1}', inputs.side, inputs.feature) || '' }}
@@ -541,12 +544,24 @@ jobs:
           script: |
             proof() {
               adb install -r -g "$VERIFY_APK"
+              journey_code=0
               if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]; then
                 if [ "$VERIFY_FEATURE" = launcher-icon.md ]; then .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; else bash tools/release-choices/run.sh; fi
               else
                 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+                set +e
                 .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+                journey_code=$?
+                set -e
               fi
+              if [[ "$AGENT_REVIEW" == true ]]; then
+                bash .github/scripts/pstack-verifier/agent-review-context.sh
+                npm i -g @anthropic-ai/claude-code@2.1.326
+                set +e
+                node .github/scripts/pstack-verifier/agent-review.cjs
+                set -e
+              fi
+              if [[ "$journey_code" -ne 0 ]]; then return "$journey_code"; fi
               if [[ "$BREAK_IT" == true ]]; then
                 printf 'NORMAL_JOURNEY_PASSED; starting break-it replay on the same emulator\n' | tee "$EVIDENCE/normal-journey-passed.txt"
                 timeout --signal=TERM --kill-after=30s 1200s bash tools/android-break-it/run.sh
@@ -563,35 +578,6 @@ jobs:
             else
               proof
             fi
-      - name: Install Claude Code for the agent reviewer
-        id: agent-review-cli
-        if: always() && (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true' && steps.native-ui.conclusion != 'skipped'
-        continue-on-error: ${{ inputs.side == 'parent' }}
-        run: npm i -g @anthropic-ai/claude-code@2.1.326
-      - name: Collect change context for the agent reviewer
-        id: agent-review-context
-        if: always() && (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true' && steps.native-ui.conclusion != 'skipped'
-        continue-on-error: ${{ inputs.side == 'parent' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p "$EVIDENCE/agent-review"
-          git log -1 --format=%s > "$EVIDENCE/agent-review/title.txt"
-          git log -1 --format=%b > "$EVIDENCE/agent-review/body.txt"
-          git fetch --no-tags --depth=200 origin main
-          if git diff --quiet origin/main...HEAD 2>/dev/null; then
-            printf '(empty)\n' > "$EVIDENCE/agent-review/diff.txt"
-          else
-            git diff origin/main...HEAD > "$EVIDENCE/agent-review/diff.txt" || printf '(empty)\n' > "$EVIDENCE/agent-review/diff.txt"
-          fi
-      - name: Independent agent review on the live emulator
-        id: agent-review
-        if: always() && (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true' && steps.native-ui.conclusion != 'skipped'
-        continue-on-error: ${{ inputs.side == 'parent' }}
-        timeout-minutes: 45
-        env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: node .github/scripts/pstack-verifier/agent-review.cjs
       - name: Retain agent review verdict
         if: always() && (inputs.agent_review == true) && steps.parent-cache.outputs.hit != 'true'
         continue-on-error: ${{ inputs.side == 'parent' }}
