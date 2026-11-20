@@ -46,7 +46,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | A release reads the Gradle cache and never writes it, so one failed release cannot poison every retry. Test workflows keep writing it | `cache-read-only: true` on the release `setup-gradle` step, checked by `tools/ci/release-cache.test.mjs` in `tools/check.sh source` |
 | Every PR title starts with its ticket, like `IGSH-1684: what changed`; add that ticket's exact Hypertask title to `tools/release-notes/ticket-titles.json`. Update notes show one `IGSH-N exact title` line per ticket, never filler | `tools/release-notes/notes.mjs` in `test.yml` and `release.yml` |
 | Feature work is not frozen (`"frozen": false` since IGSH-2570, 2026-11-20). Turning a freeze back on needs its own ticket with an end date. While `"frozen"` is true, a PR whose title ticket is not in `tools/freeze/allowed-tickets.json` fails | `tools/freeze/check.mjs` in the required `test` job of `test.yml` |
-| The Android feature map gets weekly source and registered-journey coverage; drift opens one correction PR, never auto-merges | `maintain-verification.yml`, `control_map.py check/locations`, its weekly base comparison, and the registry-driven hosted journey matrix |
+| The Android feature map gets weekly source and registered-journey coverage; drift opens one correction PR, never auto-merges. Pull requests never run the control list check | `maintain-verification.yml`, `control_map.py check/locations` and `control_map.test.py` with `CONTROL_MAP_LIVE=1`, its weekly base comparison, and the registry-driven hosted journey matrix |
 | No keys in Git; whole history rescanned weekly | `secret-scan` in `gitleaks.yml`, required on `main` |
 
 ## Release and install
