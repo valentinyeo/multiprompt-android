@@ -39,7 +39,8 @@ class HostChangeTest {
         assertEquals(listOf(HostChange.FABLE), HostChange.entries.filter { it.active(HostSettings("fable", "", "", true), null, null) })
         assertTrue(HostChange.FABLE.active(null, "Fable 5.1", null))
         assertTrue(HostChange.FABLE.active(null, "claude-fable-5-1", null))
-        assertFalse(HostChange.OPUS.active(HostSettings("fable", "", "", true), "Opus 4.1", null))
+        assertTrue(HostChange.OPUS.active(HostSettings("fable", "", "", true), "Opus 4.1", null))
+        assertFalse(HostChange.FABLE.active(HostSettings("fable", "", "", true), "Opus 4.1", null))
     }
 
     @Test fun noticesMatchTheDesktop() {
