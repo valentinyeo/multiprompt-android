@@ -1,4 +1,5 @@
 {
+  "IGSH-2953": "Android: @mention list shows cryptic names instead of chat names",
   "IGSH-2884": "Break-it runs nightly and only chat-history journeys open the big chat",
   "IGSH-2903": "Android verification back to what pstack asks for",
   "IGSH-2771": "Failed release cannot poison later releases",
