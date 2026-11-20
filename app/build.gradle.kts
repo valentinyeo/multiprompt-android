@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.gradle.api.tasks.Sync
 
 plugins {
     alias(libs.plugins.android.application)
@@ -111,6 +112,26 @@ android {
     }
 }
 
+val robolectricDepsDir = layout.buildDirectory.dir("robolectric-deps")
+
+configurations {
+    create("robolectricAndroidAll") {
+        isCanBeConsumed = false
+        isCanBeResolved = true
+    }
+}
+
+val syncRobolectricAndroidAll = tasks.register<Sync>("syncRobolectricAndroidAll") {
+    from(configurations.named("robolectricAndroidAll"))
+    into(robolectricDepsDir)
+}
+
+tasks.withType<Test>().configureEach {
+    dependsOn(syncRobolectricAndroidAll)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricDepsDir.get().asFile.absolutePath)
+}
+
 androidComponents {
     beforeVariants(selector().withBuildType("m3")) {
         it.hostTests.getValue(com.android.build.api.variant.HostTestBuilder.UNIT_TEST_TYPE).enable = true
@@ -156,4 +177,7 @@ dependencies {
     testImplementation(libs.json)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.robolectric)
+    add("robolectricAndroidAll", libs.robolectric.android.all.`28`)
+    add("robolectricAndroidAll", libs.robolectric.android.all.`34`)
+    add("robolectricAndroidAll", libs.robolectric.android.all.`35`)
 }

@@ -10,6 +10,9 @@ sshlib = "0.5.1"
 bouncycastle = "1.85.2"
 junit = "4.13.2"
 robolectric = "4.16.1"
+robolectricAndroidAll28 = "9-robolectric-4913185-2-i7"
+robolectricAndroidAll34 = "14-robolectric-10818077-i7"
+robolectricAndroidAll35 = "15-robolectric-13954326-i7"
 androidxTestRunner = "1.7.0"
 json = "20250517"
 okhttp = "5.3.0"
@@ -46,6 +49,9 @@ connectbot-ssh = { module = "org.connectbot.sshlib:sshlib", version.ref = "sshli
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 junit = { module = "junit:junit", version.ref = "junit" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+robolectric-android-all-28 = { module = "org.robolectric:android-all-instrumented", version.ref = "robolectricAndroidAll28" }
+robolectric-android-all-34 = { module = "org.robolectric:android-all-instrumented", version.ref = "robolectricAndroidAll34" }
+robolectric-android-all-35 = { module = "org.robolectric:android-all-instrumented", version.ref = "robolectricAndroidAll35" }
 json = { module = "org.json:json", version.ref = "json" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 androidx-browser = { module = "androidx.browser:browser", version.ref = "browser" }
