@@ -23,7 +23,7 @@ test('unit tests resolve Robolectric android-all jars through Gradle instead of 
     assert.match(
       buildGradle,
       new RegExp(
-        `add\\("robolectricAndroidAll${sdk}",\\s*libs\\.robolectric\\.android\\.all\\.\\\`${sdk}\\\`\\)`,
+        `add\\("robolectricAndroidAll${sdk}",\\s*libs\\.robolectric\\.androidall\\.sdk${sdk}\\)`,
       ),
       `sdk ${sdk} jar must be declared in its own configuration`,
     );
@@ -32,7 +32,7 @@ test('unit tests resolve Robolectric android-all jars through Gradle instead of 
       new RegExp(`from\\(configurations\\.named\\("robolectricAndroidAll${sdk}"\\)\\)`),
       `sync task must include robolectricAndroidAll${sdk}`,
     );
-    assert.match(versions, new RegExp(`robolectric-android-all-${sdk}`));
+    assert.match(versions, new RegExp(`robolectric-androidall-sdk${sdk}`));
   }
   assert.doesNotMatch(buildGradle, /create\("robolectricAndroidAll"\)/);
   assert.doesNotMatch(buildGradle, /add\("robolectricAndroidAll",/);

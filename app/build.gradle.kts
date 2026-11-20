@@ -187,7 +187,7 @@ dependencies {
     testImplementation(libs.json)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     testImplementation(libs.robolectric)
-    add("robolectricAndroidAll28", libs.robolectric.android.all.`28`)
-    add("robolectricAndroidAll34", libs.robolectric.android.all.`34`)
-    add("robolectricAndroidAll35", libs.robolectric.android.all.`35`)
+    add("robolectricAndroidAll28", libs.robolectric.androidall.sdk28)
+    add("robolectricAndroidAll34", libs.robolectric.androidall.sdk34)
+    add("robolectricAndroidAll35", libs.robolectric.androidall.sdk35)
 }
