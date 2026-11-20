@@ -3,11 +3,12 @@ package dev.multiprompt.companion.ui
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.model.Workspace
 import org.junit.Assert.assertEquals
@@ -23,7 +24,6 @@ import org.robolectric.annotation.Config
 class InboxSplitPillSpacingTest {
     @get:Rule val compose = createComposeRule()
     private val state = mutableStateOf(AppUiState())
-    private var density = 1f
 
     private fun folders(count: Int) = (1..count).map {
         Workspace(id = "folder-$it", name = "Folder %02d".format(it), hostId = "h", remotePath = "/tmp")
@@ -31,7 +31,6 @@ class InboxSplitPillSpacingTest {
 
     private fun render() {
         compose.setContent {
-            density = LocalDensity.current.density
             MaterialTheme {
                 SessionsScreen(
                     state = state.value, signedIn = true, onSignIn = {}, onSignOut = {},
@@ -52,20 +51,18 @@ class InboxSplitPillSpacingTest {
         compose.waitForIdle()
     }
 
-    private fun dp(value: Int) = value * density
+    private fun left(label: String) = compose.onNodeWithText(label).getBoundsInRoot().left.value
 
-    private fun screen() = compose.onNodeWithText("All").fetchSemanticsNode().root!!.boundsInRoot.width
+    private fun right(label: String) = compose.onNodeWithText(label).getBoundsInRoot().right.value
 
-    private fun left(label: String) = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.left
-
-    private fun right(label: String) = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot.right
+    private fun screen() = compose.onRoot().getBoundsInRoot().width.value
 
     @Test fun pillsSitACloseGapFromTheLeftEdge() {
         render()
-        assertEquals(Kit.ScreenEdge.value * density, left("All"), 1f)
-        assertEquals(Kit.ControlGap.value * density, left("Favorites") - right("All"), 1f)
-        assertEquals(Kit.ControlGap.value * density, left("Frequent") - right("Favorites"), 1f)
-        assertTrue("Bar must fit three pills on a phone", right("Frequent") <= screen() - dp(12))
+        assertEquals(Kit.ScreenEdge.value, left("All"), 1f)
+        assertEquals(Kit.ControlGap.value, left("Favorites") - right("All"), 1f)
+        assertEquals(Kit.ControlGap.value, left("Frequent") - right("Favorites"), 1f)
+        assertTrue("Bar must fit three pills on a phone", right("Frequent") <= screen() - 12f)
     }
 
     @Test fun overflowingBarKeepsTheFirstPillAtTheLeftInset() {
@@ -75,8 +72,8 @@ class InboxSplitPillSpacingTest {
         )
         render()
         compose.onNodeWithText("All").assertIsDisplayed()
-        assertEquals(Kit.ScreenEdge.value * density, left("All"), 1f)
-        assertEquals(Kit.ControlGap.value * density, left("Favorites") - right("All"), 1f)
+        assertEquals(Kit.ScreenEdge.value, left("All"), 1f)
+        assertEquals(Kit.ControlGap.value, left("Favorites") - right("All"), 1f)
         compose.onNodeWithText("Folder 09").assertIsNotDisplayed()
     }
 
@@ -97,7 +94,8 @@ class InboxSplitPillSpacingTest {
     }
 
     private fun assertFullyVisible(label: String) {
-        assertTrue("$label starts under the left edge", left(label) >= dp(12) - 1f)
-        assertTrue("$label runs under the right edge", right(label) <= screen() - dp(12) + 1f)
+        val inset = Kit.ScreenEdge.value
+        assertTrue("$label starts under the left edge", left(label) >= inset - 1f)
+        assertTrue("$label runs under the right edge", right(label) <= screen() - inset + 1f)
     }
 }
