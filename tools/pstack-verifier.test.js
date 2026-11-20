@@ -804,9 +804,11 @@ test('verify.yml keeps non-PR triggers and delegates PR journeys to the verifier
   assert.doesNotMatch(triggers, /^ {2}pull_request:/m);
   const call = triggers.slice(triggers.indexOf('  workflow_call:'), triggers.indexOf('  workflow_dispatch:'));
   assert.match(call, /^ {6}feature:\n {8}description: .+\n {8}required: true\n {8}type: string\n/m);
-  assert.deepEqual([...call.slice(call.indexOf('    inputs:')).matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['driver_feature', 'released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate', 'break_it', 'feature', 'side', 'app_ref']);
+  const callInputs = call.slice(call.indexOf('    inputs:'), call.indexOf('  workflow_dispatch:'));
+  assert.deepEqual([...callInputs.matchAll(/^ {6}(\w+):$/gm)].map(match => match[1]), ['driver_feature', 'released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate', 'break_it', 'feature', 'side', 'app_ref', 'agent_review']);
+  assert.match(call, /^ {6}CLAUDE_CODE_OAUTH_TOKEN:\n {8}required: false\n {4}inputs:/m);
   assert.match(call, /^ {6}side:\n {8}description: .+\n {8}required: false\n {8}type: string\n/m);
-  assert.match(call, /^ {6}app_ref:\n {8}description: .+\n {8}required: false\n {8}type: string\n$/m);
+  assert.match(call, /^ {6}app_ref:\n {8}description: .+\n {8}required: false\n {8}type: string\n {6}agent_review:\n {8}description: .+\n {8}required: false\n {8}type: boolean\n {8}default: false\n$/m);
   assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}-\$\{\{ inputs\.break_it_control \|\| 'none' \}\}$/m);
 });
 
