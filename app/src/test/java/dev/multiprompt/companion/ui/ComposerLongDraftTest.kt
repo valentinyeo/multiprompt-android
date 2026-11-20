@@ -128,6 +128,57 @@ class ComposerLongDraftTest {
     private fun near(pixel: Int, expected: Int, tolerance: Int = 24): Boolean =
         listOf(16, 8, 0).all { shift -> Math.abs(((pixel shr shift) and 0xFF) - ((expected shr shift) and 0xFF)) <= tolerance }
 
+    private fun settleComposer() {
+        repeat(8) {
+            compose.waitForIdle()
+            shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
+        }
+    }
+
+    private fun settledCapture(node: SemanticsNodeInteraction): Bitmap {
+        val view = (node.fetchSemanticsNode().root as ViewRootForTest).view.rootView
+        val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
+        val hardwareAccelerated = view.isHardwareAccelerated
+        ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
+        return try {
+            repeat(4) {
+                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
+                view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
+                view.viewTreeObserver.dispatchOnDraw()
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+            compose.waitForIdle()
+            node.captureToImage().asAndroidBitmap()
+        } finally {
+            ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", hardwareAccelerated)
+        }
+    }
+
+    private fun skillPillBandPixels(bitmap: Bitmap, textRight: Int): Pair<Int, Int> {
+        val surface = Kit.Surface.toArgb()
+        val xMax = textRight.coerceIn(1, bitmap.width)
+        var pillRows = 0
+        var pillPixels = 0
+        for (y in 0 until bitmap.height) {
+            var pill = 0
+            var pillMin = bitmap.width
+            var pillMax = 0
+            for (x in 0 until xMax) {
+                if (near(bitmap.getPixel(x, y), surface, 8)) {
+                    pill++
+                    pillMin = minOf(pillMin, x)
+                    pillMax = maxOf(pillMax, x)
+                }
+            }
+            if (pill > 20) {
+                pillRows++
+                pillPixels += pill
+                println("COMPOSER_ROW y=$y pill=$pill pillX=$pillMin..$pillMax")
+            }
+        }
+        return pillRows to pillPixels
+    }
+
     private fun save(node: SemanticsNodeInteraction, name: String): Bitmap {
         val view = (node.fetchSemanticsNode().root as ViewRootForTest).view.rootView
         val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
@@ -157,7 +208,7 @@ class ComposerLongDraftTest {
     @Test fun aLongDraftKeepsEveryComposerControlOnOneRowAndShowsNoHint() {
         render()
         compose.onNode(hasSetTextAction()).performTextInput(longDraft)
-        compose.waitForIdle()
+        settleComposer()
 
         val bar = node(compose.onNodeWithTag("floating-bottom-bar"))
         val field = node(compose.onNode(hasSetTextAction()))
@@ -179,33 +230,22 @@ class ComposerLongDraftTest {
 
         val layout = textLayout(field)
         val tokenStart = longDraft.indexOf(skill)
+        assertTrue(
+            "a long draft scrolls inside the composer field: lines=${layout.lineCount}",
+            layout.hasVisualOverflow,
+        )
         val first = layout.getBoundingBox(tokenStart)
         val last = layout.getBoundingBox(longDraft.length - 1)
         println("COMPOSER_TOKEN layout_start=$first layout_end=$last lines=${layout.lineCount}")
 
-        val bitmap = save(compose.onNode(hasSetTextAction()), "composer-field")
-        val surface = Kit.Surface.toArgb()
-        val textRight = (micBounds.left - fieldBounds.left).toInt() - 4
-        var pillRows = 0
-        var pillPixels = 0
-        for (y in 0 until bitmap.height) {
-            var pill = 0
-            var pillMin = bitmap.width
-            var pillMax = 0
-            for (x in 0 until textRight.coerceIn(1, bitmap.width)) {
-                if (near(bitmap.getPixel(x, y), surface, 8)) {
-                    pill++
-                    pillMin = minOf(pillMin, x)
-                    pillMax = maxOf(pillMax, x)
-                }
-            }
-            if (pill > 20) {
-                pillRows++
-                pillPixels += pill
-                println("COMPOSER_ROW y=$y pill=$pill pillX=$pillMin..$pillMax")
-            }
+        val bitmap = settledCapture(compose.onNode(hasSetTextAction())).also {
+            val output = File("build/reports/igsh-844/igsh-2957-composer-field.png")
+            checkNotNull(output.parentFile).mkdirs()
+            output.outputStream().use { stream -> assertTrue(it.compress(Bitmap.CompressFormat.PNG, 100, stream)) }
         }
-        println("COMPOSER_PILL rows=$pillRows pixels=$pillPixels textRight=$textRight")
+        val textRight = (micBounds.left - fieldBounds.left).toInt() - 4
+        val (pillRows, pillPixels) = skillPillBandPixels(bitmap, textRight)
+        println("COMPOSER_PILL rows=$pillRows pixels=$pillPixels textRight=$textRight overflow=${layout.hasVisualOverflow}")
 
         assertTrue(
             "the + button sits inside the composer row: attach=$attachBounds row=$barBounds",
