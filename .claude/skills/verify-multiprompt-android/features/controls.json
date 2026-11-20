@@ -6711,7 +6711,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "cd6cc976e47067572da0a93584ab8ff2658d2f9036fdd2f87488f850c9637611"
+      "sha256": "8cb5ef8c525efdd573da81eb848c48fade790f2aa3cc34761eff789fa49dc3d6"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/NewBelow.kt",
@@ -6791,7 +6791,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/SkillMessageText.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "745d2807407d0214174e0253e540410043aeaeaea8dfe16b66648e8532397f51"
+      "sha256": "025548037d949259b5dbbf833945422395541e2b92aa35470e9dea6481a6dbfa"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/Theme.kt",

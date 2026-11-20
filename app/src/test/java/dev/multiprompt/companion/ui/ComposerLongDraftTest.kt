@@ -2,8 +2,11 @@ package dev.multiprompt.companion.ui
 
 import android.app.Application
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Looper
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -28,8 +31,15 @@ import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.skills.NativeSkill
 import java.io.File
+import java.time.Duration
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestCoroutineScheduler
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -38,6 +48,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.util.ReflectionHelpers
@@ -47,7 +58,8 @@ import org.robolectric.util.ReflectionHelpers
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ComposerLongDraftTest {
-    @get:Rule val compose = createComposeRule()
+    private val scheduler = TestCoroutineScheduler()
+    @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private lateinit var f: SessionActivityFixture
     private lateinit var connection: SessionReaderConnection
 
@@ -117,7 +129,25 @@ class ComposerLongDraftTest {
         listOf(16, 8, 0).all { shift -> Math.abs(((pixel shr shift) and 0xFF) - ((expected shr shift) and 0xFF)) <= tolerance }
 
     private fun save(node: SemanticsNodeInteraction, name: String): Bitmap {
-        val bitmap = node.captureToImage().asAndroidBitmap()
+        val view = (node.fetchSemanticsNode().root as ViewRootForTest).view.rootView
+        val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
+        val hardwareAccelerated = view.isHardwareAccelerated
+        ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
+        val redraw = CoroutineScope(UnconfinedTestDispatcher(scheduler)).launch {
+            while (isActive) {
+                delay(16)
+                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
+                view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
+                view.viewTreeObserver.dispatchOnDraw()
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+        }
+        val bitmap = try {
+            node.captureToImage().asAndroidBitmap()
+        } finally {
+            redraw.cancel()
+            ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", hardwareAccelerated)
+        }
         val output = File("build/reports/igsh-844/igsh-2957-$name.png")
         checkNotNull(output.parentFile).mkdirs()
         output.outputStream().use { assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
@@ -222,10 +252,12 @@ class ComposerLongDraftTest {
         val layout = textLayout(field)
         assertTrue("the draft must fit to keep its pill: lines=${layout.lineCount}", !layout.hasVisualOverflow)
 
+        val mic = node(compose.onNodeWithContentDescription("Start dictation"))
         val bitmap = save(compose.onNode(hasSetTextAction()), "composer-pill")
         val surface = Kit.Surface.toArgb()
+        val textRight = (mic.boundsInRoot.left - field.boundsInRoot.left).toInt() - 4
         val pillPixels = (0 until bitmap.height).sumOf { y ->
-            (0 until bitmap.width).count { x -> near(bitmap.getPixel(x, y), surface, 8) }
+            (0 until textRight.coerceIn(1, bitmap.width)).count { x -> near(bitmap.getPixel(x, y), surface, 8) }
         }
         println("COMPOSER_FITTING_PILL pixels=$pillPixels")
         assertTrue("a draft that fits keeps its skill pill: pixels=$pillPixels", pillPixels > 200)
