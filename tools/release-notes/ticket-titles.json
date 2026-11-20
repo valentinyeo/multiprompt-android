@@ -69,6 +69,7 @@
   "IGSH-2292": "Android: send any file to the server, not only pictures",
   "IGSH-1768": "Android chats keep working without hidden terminals",
   "IGSH-1850": "Android: show a named live chat mention as a name",
+  "IGSH-3000": "Phone test proves a fresh start keeps its chat",
   "IGSH-2274": "Android keeps the same chat after Fresh start",
   "IGSH-2302": "Android: send a smaller terminal picture over the network",
   "IGSH-2307": "Android: copy a link from a message",
