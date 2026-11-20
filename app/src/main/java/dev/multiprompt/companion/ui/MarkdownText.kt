@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
@@ -43,8 +44,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.LinkInteractionListener
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -84,7 +87,6 @@ fun MarkdownText(
     val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
     val scale = if (LocalReaderStyle.current) fontSize.value / ReaderTextSize.value else if (LocalMaterial3.current) fontSize.value / 15f else 1f
     val lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, scale)
-    val sessionLinks = onSessionLink
     val bringMatch = remember { BringIntoViewRequester() }
     LaunchedEffect(activeHit?.message, activeHit?.start, activeHit?.end) {
         if (activeHit != null && matchHits.any { it.message == activeHit.message && it.start == activeHit.start && it.end == activeHit.end }) {
@@ -93,18 +95,27 @@ fun MarkdownText(
         }
     }
     fun mark(value: AnnotatedString, at: Int) = value.marking(at, matchHits, activeHit)
-    fun runsAnnotated(runs: List<InlineRun>) = markdownAnnotated(runs, linkColor, codeBg, codeFontFamily, mentionChats)
+    val defaultFontSize = fontSize
+    val defaultLineHeight = lineHeight
+    fun runsAnnotated(runs: List<InlineRun>) = markdownAnnotated(
+        runs,
+        linkColor,
+        codeBg,
+        codeFontFamily,
+        mentionChats,
+        onSessionLink,
+    ) { openMarkdownUrl(context, it) }
     @Composable
     fun MarkdownLineText(
         annotated: AnnotatedString,
         modifier: Modifier = Modifier,
-        fontSize: TextUnit = fontSize,
-        lineHeight: TextUnit = lineHeight,
+        textFontSize: TextUnit = defaultFontSize,
+        textLineHeight: TextUnit = defaultLineHeight,
         textColor: Color = color,
         fontWeight: FontWeight? = null,
         fontStyle: FontStyle? = null,
     ) {
-        MarkdownLinkedText(annotated, fontSize, lineHeight, textColor, sessionLinks, modifier, fontWeight, fontStyle)
+        MarkdownLinkedText(annotated, textFontSize, textLineHeight, textColor, modifier, fontWeight, fontStyle)
     }
     @Composable
     fun Modifier.pin(at: Int, length: Int): Modifier {
@@ -145,8 +156,8 @@ fun MarkdownText(
                 }
                 is MdBlock.Heading -> MarkdownLineText(
                     mark(runsAnnotated(block.runs), base),
-                    fontSize = if (LocalReaderStyle.current) ReaderHeadingTextSize * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
-                    lineHeight = if (LocalReaderStyle.current) ReaderHeadingLineHeight * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.lineHeight * scale else (fontSize.value * headingScale(block.level) * 1.35f).sp,
+                    textFontSize = if (LocalReaderStyle.current) ReaderHeadingTextSize * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.fontSize * scale else (fontSize.value * headingScale(block.level)).sp,
+                    textLineHeight = if (LocalReaderStyle.current) ReaderHeadingLineHeight * scale else if (LocalMaterial3.current) MaterialTheme.typography.titleMedium.lineHeight * scale else (fontSize.value * headingScale(block.level) * 1.35f).sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(top = 4.dp).pin(base, piece.length),
                 )
@@ -171,7 +182,7 @@ fun MarkdownText(
                     Box(Modifier.width(3.dp).fillMaxHeight().background(if (LocalMaterial3.current) MaterialTheme.colorScheme.primary else color.copy(alpha = 0.4f)))
                     MarkdownLineText(
                         mark(runsAnnotated(block.runs), base),
-                        fontSize = if (LocalMaterial3.current && !LocalReaderStyle.current) 13.sp else fontSize,
+                        textFontSize = if (LocalMaterial3.current && !LocalReaderStyle.current) 13.sp else fontSize,
                         textColor = if (LocalMaterial3.current) MaterialTheme.colorScheme.onSurfaceVariant else color.copy(alpha = 0.85f),
                         fontStyle = if (LocalMaterial3.current) FontStyle.Normal else FontStyle.Italic,
                         modifier = Modifier.padding(start = 10.dp).weight(1f).pin(base, piece.length),
@@ -384,6 +395,7 @@ private fun MarkdownTable(
     onSessionLink: ((String) -> Unit)? = null,
 ) {
     val material3 = LocalMaterial3.current
+    val context = LocalContext.current
     val columns = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
     val rows = listOf(table.header) + table.rows
     val cellCount = rows.size * columns
@@ -404,12 +416,17 @@ private fun MarkdownTable(
                     cellAt += length
                     if (c < columns - 1) cellAt += 1
                     MarkdownLinkedText(
-                        markdownAnnotated(runs, linkColor, codeBg, if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace, mentionChats)
-                            .marking(at, matchHits, activeHit),
+                        markdownAnnotated(
+                            runs,
+                            linkColor,
+                            codeBg,
+                            if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace,
+                            mentionChats,
+                            onSessionLink,
+                        ) { openMarkdownUrl(context, it) }.marking(at, matchHits, activeHit),
                         fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * (fontSize.value / ReaderTextSize.value) else if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / 15f) else (fontSize.value * 0.92f).sp,
                         lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * (fontSize.value / ReaderTextSize.value) else TextUnit.Unspecified,
                         color = color,
-                        onSessionLink = onSessionLink,
                         modifier = Modifier.testTag("md-cell").padding(horizontal = 8.dp, vertical = 5.dp),
                         fontWeight = if (rowIndex == 0) { if (LocalMaterial3.current) FontWeight.SemiBold else FontWeight.Bold } else FontWeight.Normal,
                     )
@@ -466,8 +483,13 @@ internal fun markdownAnnotated(
     codeBg: Color,
     codeFontFamily: FontFamily = FontFamily.Monospace,
     mentionChats: List<MentionChat> = emptyList(),
+    onSessionLink: ((String) -> Unit)? = null,
+    onUrlClick: ((String) -> Unit)? = null,
 ): AnnotatedString = buildAnnotatedString {
     val linkStyle = SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)
+    val urlListener = onUrlClick?.let { open ->
+        LinkInteractionListener { link -> if (link is LinkAnnotation.Url) open(link.url) }
+    }
     runs.forEach { run ->
         val style = SpanStyle(
             fontWeight = if (run.bold) FontWeight.Bold else null,
@@ -478,11 +500,13 @@ internal fun markdownAnnotated(
         )
         val url = run.url
         when {
-            url != null -> withLink(LinkAnnotation.Url(url, TextLinkStyles(linkStyle))) {
+            url != null -> withLink(
+                LinkAnnotation.Url(url, TextLinkStyles(linkStyle), urlListener),
+            ) {
                 withStyle(style) { append(run.text) }
             }
             run.code || mentionChats.isEmpty() -> withStyle(style) { append(run.text) }
-            else -> appendSessionLinked(run.text, style, linkStyle, mentionChats)
+            else -> appendSessionLinked(run.text, style, linkStyle, mentionChats, onSessionLink)
         }
     }
 }
@@ -492,16 +516,22 @@ private fun AnnotatedString.Builder.appendSessionLinked(
     style: SpanStyle,
     linkStyle: SpanStyle,
     mentionChats: List<MentionChat>,
+    onSessionLink: ((String) -> Unit)?,
 ) {
     val spans = ChatSessionLink.spans(text, mentionChats)
     if (spans.isEmpty()) {
         withStyle(style) { append(text) }
         return
     }
+    val sessionListener = onSessionLink?.let { open ->
+        LinkInteractionListener { link -> if (link is LinkAnnotation.Clickable) open(link.tag) }
+    }
     var cursor = 0
     for (span in spans) {
         if (span.start > cursor) withStyle(style) { append(text, cursor, span.start) }
-        withLink(LinkAnnotation.Clickable(span.session, TextLinkStyles(linkStyle))) {
+        withLink(
+            LinkAnnotation.Clickable(span.session, TextLinkStyles(linkStyle), sessionListener),
+        ) {
             withStyle(style) { append(text, span.start, span.end) }
         }
         cursor = span.end
@@ -515,29 +545,21 @@ internal fun MarkdownLinkedText(
     fontSize: TextUnit,
     lineHeight: TextUnit,
     color: Color,
-    onSessionLink: ((String) -> Unit)?,
     modifier: Modifier = Modifier,
     fontWeight: FontWeight? = null,
     fontStyle: FontStyle? = null,
 ) {
-    val context = LocalContext.current
-    Text(
-        annotated,
+    BasicText(
+        text = annotated,
         modifier = modifier,
-        fontSize = fontSize,
-        lineHeight = lineHeight,
-        color = color,
-        fontWeight = fontWeight,
-        fontStyle = fontStyle,
-        onLinkClick = onSessionLink?.let { open ->
-            { link ->
-                when (link) {
-                    is LinkAnnotation.Clickable -> open(link.tag)
-                    is LinkAnnotation.Url -> openMarkdownUrl(context, link.url)
-                    else -> Unit
-                }
-            }
-        },
+        style = TextStyle(
+            color = color,
+            fontSize = fontSize,
+            lineHeight = lineHeight,
+            fontWeight = fontWeight,
+            fontStyle = fontStyle,
+            fontFamily = chatFontFamily(),
+        ),
     )
 }
 
