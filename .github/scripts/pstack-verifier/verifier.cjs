@@ -217,6 +217,27 @@ function parsePick(content, { mapped = [], productSource = true } = {}) {
   return { ...plan, features, dropped, reason, smoke: false };
 }
 
+async function pickWithFallback({ ask, codePlan, log = message => console.error(message) }) {
+  try {
+    return await askParsed({
+      ask,
+      parse: content => parsePick(content, { mapped: codePlan.outcomes, productSource: codePlan.product }),
+    });
+  } catch (error) {
+    if (/^FEATURE_UNMAPPED:/.test(String(error?.message ?? ''))) throw error;
+    log(`pstack-verifier pick: AI picker unavailable (${error.message}); using the feature map.`);
+    return {
+      features: [],
+      dropped: [],
+      changedOutcomes: codePlan.outcomes,
+      changeKind: codePlan.product ? 'product' : 'tooling',
+      unmapped: false,
+      smoke: false,
+      reason: 'AI picker unavailable; journeys chosen from the feature map.',
+    };
+  }
+}
+
 function parseVerdict(content) {
   const parsed = parseJson(content);
   if (!parsed) throw new Error('the verifier answer is not JSON');
@@ -342,7 +363,7 @@ function jobConclusions(jobs, features) {
 
 function requireKey(env) {
   if (!String(env.DEEPSEEK_API_KEY ?? '').trim()) {
-    throw new Error('The repo secret DEEPSEEK_API_KEY is empty or missing. The verifier cannot run without it.');
+    throw new Error('The repo secret DEEPSEEK_API_KEY is empty or missing. The AI picker and the DeepSeek judge cannot run without it.');
   }
   return env.DEEPSEEK_API_KEY.trim();
 }
@@ -541,7 +562,6 @@ async function pick(env) {
     return;
   }
   if (pr.head.repo?.full_name !== repo) throw new Error('Product changes from forks cannot be verified with repository secrets');
-  const key = requireKey(env);
   const mergeBase = fetchMergeBase(repo, pr.base.ref, head);
   const diff = fetchDiff(repo, number);
   if (!/^diff --git /m.test(diff)) throw new Error('no patch text came back for the pull request');
@@ -553,12 +573,12 @@ async function pick(env) {
     ? `Mapped by rule for these changed paths (they stand; add guards on top): ${JSON.stringify(codePlan.outcomes)}`
     : 'No changed path maps to a registered outcome by rule.';
   const user = `Directly edited recipes (must run): ${JSON.stringify(recipes)}\n${mapped}\nRequired candidates (rank repro first, then relevant guards): ${JSON.stringify(deterministic.features)}\n\nJourney catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
-  const picked = await askParsed({
+  const picked = await pickWithFallback({
+    codePlan,
     ask: error => {
       if (error) console.error(`pstack-verifier pick: invalid answer: ${error.message}`);
-      return callDeepSeek({ key, system: PICK_INSTRUCTIONS, user: error ? `${user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. Keep every outcome already mapped by rule. Only if no mapped outcome applies and the changed product source has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.` : user });
+      return callDeepSeek({ key: requireKey(env), system: PICK_INSTRUCTIONS, user: error ? `${user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. Keep every outcome already mapped by rule. Only if no mapped outcome applies and the changed product source has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.` : user });
     },
-    parse: content => parsePick(content, { mapped: codePlan.outcomes, productSource: codePlan.product }),
   });
   if (picked.unmapped) console.error(`pstack-verifier pick: the model also answered unmapped; the ${codePlan.outcomes.length} code-mapped outcome(s) stand.`);
   const plan = coverageGate.planChange(diff, picked.changedOutcomes, files);
@@ -649,7 +669,6 @@ async function judgeAnswer({ ask, diff, plan, features, directories, conclusions
 
 async function judge(env) {
   if (env.PICK_RESULT !== 'success') throw new Error(`the journey picker ended as ${env.PICK_RESULT || 'unknown'}, so there is no verdict`);
-  requireKey(env);
   const repo = requireRepo(env);
   const number = requireNumber(env);
   const sha = String(env.HEAD_SHA ?? '');
@@ -744,7 +763,7 @@ async function judge(env) {
 
 module.exports = {
   JUDGE_INSTRUCTIONS, judgeContext, ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, SMOKE_JOURNEY, PRODUCT_ASSERTION,
-  RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
+  RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, pickWithFallback, parseVerdict, applyRules, parentResult, buildComment,
   saysBug, loadTicketTitles, isBugFix, noProductChange, judgeAnswer, journeyOnlyVerdict,
   artifactName, authorFamilies, chooseJudge, callClaude, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys, journeyRunners,
 };
