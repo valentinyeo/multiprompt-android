@@ -32,6 +32,13 @@ function extractText(stdout) {
   return stdout;
 }
 
+function readContext(env, name) {
+  if (env[name]?.trim()) return env[name];
+  const file = path.join(env.EVIDENCE || '', 'agent-review', `${name.replace('AGENT_REVIEW_', '').toLowerCase()}.txt`);
+  if (fs.existsSync(file)) return fs.readFileSync(file, 'utf8').trimEnd();
+  return '';
+}
+
 function buildUser(env, workspace) {
   const feature = env.VERIFY_FEATURE || env.VERIFY_JOURNEY;
   if (!feature) throw new Error('VERIFY_FEATURE is missing');
@@ -39,10 +46,10 @@ function buildUser(env, workspace) {
   const recipeText = fs.readFileSync(recipe, 'utf8');
   return [
     '# Change',
-    `Title: ${env.AGENT_REVIEW_TITLE || '(none)'}`,
-    `Body:\n${env.AGENT_REVIEW_BODY || '(none)'}`,
+    `Title: ${readContext(env, 'AGENT_REVIEW_TITLE') || '(none)'}`,
+    `Body:\n${readContext(env, 'AGENT_REVIEW_BODY') || '(none)'}`,
     '## Diff',
-    env.AGENT_REVIEW_DIFF || '(empty)',
+    readContext(env, 'AGENT_REVIEW_DIFF') || '(empty)',
     '',
     '# Feature recipe',
     recipeText,
