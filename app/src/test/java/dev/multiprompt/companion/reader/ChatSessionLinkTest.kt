@@ -31,7 +31,7 @@ class ChatSessionLinkTest {
 
     @Test fun desktopBraceFormLinksTheNameOnly() {
         val spans = ChatSessionLink.spans("Ask HT Product Lead{live-product-5511} next.", chats)
-        assertEquals(listOf(SessionNameSpan(4, 20, "live-product-5511")), spans)
+        assertEquals(listOf(SessionNameSpan(4, 19, "live-product-5511")), spans)
     }
 
     @Test fun matchingRespectsDisplayedCase() {
