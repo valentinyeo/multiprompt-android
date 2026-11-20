@@ -5085,8 +5085,12 @@
       "label": "Insert chat mention",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:ChatMentionPicker:clickable:f90559a5be3e36e2:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5936",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "message-reply.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/message-reply.md",
+        "action": "mpa tap text 'Mention 2953'",
+        "result": "Composer holds @Mention 2953 and the host receipt holds @Mention 2953{live-cl_mention-2953}"
+      }
     },
     {
       "id": "composer-suggestions.scroll-composer-suggestions",
@@ -6716,7 +6720,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "94e208f2abb61e9b9eee2a1039d52fc8a93f896b10e19e5ce1f693b557f12730"
+      "sha256": "4ab588194c144d86dacfe08ce10cb9f202b71140f3d0e0e20d1e647f7330a986"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/NewBelow.kt",
