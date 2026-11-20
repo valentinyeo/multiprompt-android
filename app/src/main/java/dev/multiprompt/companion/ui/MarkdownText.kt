@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
@@ -23,6 +24,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.LinkAnnotation
@@ -69,6 +73,8 @@ fun MarkdownText(
     activeHit: ChatFind.Hit? = null,
 ) {
     val blocks = remember(text) { MarkdownParser.parse(LiveMention.visible(text)) }
+    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     var heading: String? = null
     val codeBg = color.copy(alpha = 0.10f)
     val codeFontFamily = if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace
@@ -162,11 +168,10 @@ fun MarkdownText(
                         modifier = Modifier.padding(start = 10.dp).weight(1f).pin(base, piece.length),
                     )
                 }
-                is MdBlock.Code -> Box(
+                is MdBlock.Code -> Column(
                     Modifier
                         .fillMaxWidth()
                         .background(codeBg, chromeShape(RoundedCornerShape(4.dp)))
-                        .horizontalScroll(rememberScrollState())
                         .padding(10.dp)
                         .pin(base, piece.length),
                 ) {
@@ -176,8 +181,18 @@ fun MarkdownText(
                         fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * scale else (fontSize.value * 0.88f).sp,
                         lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * scale else (fontSize.value * 1.35f).sp,
                         color = color,
-                        softWrap = false,
+                        modifier = Modifier.testTag("md-code"),
                     )
+                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
+                        KitRoundButton(
+                            onClick = {
+                                clipboard.setText(AnnotatedString(block.text))
+                                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                            },
+                            icon = Icons.Default.ContentCopy,
+                            description = "Copy code",
+                        )
+                    }
                 }
                 is MdBlock.Table -> ChatTable(
                     block,
