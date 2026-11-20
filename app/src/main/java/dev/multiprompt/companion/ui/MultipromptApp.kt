@@ -453,6 +453,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             session = readerSession,
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label ?: readerSession.hostId,
             mentionChats = state.mentionChats(readerSession),
+            onOpenMentionedSession = viewModel::openMentionedSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             initialFontScale = viewModel.readerFontScale(readerSession),
@@ -3066,6 +3067,7 @@ internal fun ReaderScreen(
     unreadMessageKey: String? = null,
     onMarkUnreadFrom: (String) -> Unit = {},
     mentionChats: List<MentionChat> = emptyList(),
+    onOpenMentionedSession: (String) -> Unit = {},
     unreadSinceEpochSeconds: Long? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
@@ -4804,6 +4806,8 @@ internal fun ReaderScreen(
                 findQuery = if (searchOpen) searchQuery else "",
                 findIndex = searchIndex,
                 onFindCount = { historyFindCount = it },
+                mentionChats = mentionChats,
+                onSessionLink = onOpenMentionedSession,
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
@@ -5026,6 +5030,8 @@ internal fun ReaderScreen(
                                     imagePreviews = true,
                                     matchHits = hits,
                                     activeHit = active,
+                                    mentionChats = mentionChats,
+                                    onSessionLink = onOpenMentionedSession,
                                 )
                             }
                         }
