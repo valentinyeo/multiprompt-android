@@ -40,6 +40,7 @@ const FAMILY_PATTERNS = [
   ['google', /google|gemini/i],
   ['moonshot', /moonshot|kimi/i],
   ['minimax', /minimax/i],
+  ['cursor', /cursor|composer/i],
 ];
 
 function authorFamilies(body) {

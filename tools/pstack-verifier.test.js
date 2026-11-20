@@ -1181,6 +1181,8 @@ test('judge family differs from every author family', () => {
   assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: opencode-go/deepseek-v4.1-flash')).family, 'anthropic');
   assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: anthropic/claude-opus-5-5')).family, 'deepseek');
   assert.throws(() => verifier.chooseJudge(verifier.authorFamilies('Author model: deepseek/deepseek-v4.1-flash\nAuthor model: anthropic/claude-opus-5-5')), /NO_INDEPENDENT_JUDGE/);
+  assert.deepEqual(verifier.authorFamilies('Author model: cursor/composer-2.5'), ['cursor']);
+  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: cursor/composer-2.5')).family, 'deepseek');
   assert.throws(() => verifier.authorFamilies('no author line'), /AUTHOR_MODEL_MISSING/);
   assert.throws(() => verifier.authorFamilies('Author model: mystery/thing'), /AUTHOR_MODEL_UNKNOWN/);
 });
