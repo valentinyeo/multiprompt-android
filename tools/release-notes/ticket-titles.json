@@ -154,5 +154,7 @@
   "IGSH-2906": "Coverage-growth rules stop blocking Android PRs",
   "IGSH-2960": "Android PR checks work when the AI picker is out of credit",
   "IGSH-2907": "Tests already broken on main become tickets, not PR blocks",
+  "IGSH-2761": "AI usage sheet cuts off the Codex block below the navigation bar",
+  "IGSH-2967": "Phone tests stop failing on missing Kotlin build files",
   "IGSH-2474": "Android: old messages come back after /clear"
 }

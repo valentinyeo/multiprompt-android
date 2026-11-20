@@ -5,9 +5,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.MoreVert
@@ -26,7 +30,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import java.io.File
 import java.time.Duration
 import kotlinx.coroutines.CoroutineScope
@@ -224,6 +230,36 @@ class DesignKitTest {
         var red = 0
         for (x in 0 until bitmap.width) for (y in 0 until bitmap.height) if (bitmap.getPixel(x, y) != 0 && Color(bitmap.getPixel(x, y)).red > 0.8f && Color(bitmap.getPixel(x, y)).green < 0.7f) red++
         assertTrue("expected red label pixels, found $red", red > 20)
+    }
+
+    @Test
+    fun sheetScrollColumnReachesSecondPlanBlockInShortSheet() {
+        compose.setContent {
+            BoxWithConstraints(Modifier.height(220.dp).fillMaxWidth()) {
+                KitSheetSurface(maxContentHeight = maxHeight) {
+                    Text("AI usage", style = Kit.Heading, color = Kit.Text)
+                    KitSheetScrollColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        KitPlanBlock(
+                            name = "Claude",
+                            percent = "37.5%",
+                            fraction = 0.375f,
+                            paceLine = "BEHIND",
+                            detailLine = "WEEK 37.5% | 5H 12.5% | EMPTY IN 42H",
+                        )
+                        KitPlanBlock(
+                            name = "Codex",
+                            percent = "62.5%",
+                            fraction = 0.625f,
+                            paceLine = "AHEAD",
+                            detailLine = "WEEK 62.5% | 5H 25% | EMPTY IN 18H",
+                        )
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Claude").assertIsDisplayed()
+        compose.onNodeWithText("Codex").performScrollTo()
+        compose.onNodeWithText("Codex").assertIsDisplayed()
     }
 
     @Test
