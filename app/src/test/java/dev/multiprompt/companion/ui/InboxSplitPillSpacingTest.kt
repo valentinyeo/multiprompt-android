@@ -55,7 +55,7 @@ class InboxSplitPillSpacingTest {
 
     private fun right(label: String) = compose.onNodeWithText(label).getBoundsInRoot().right.value
 
-    private fun screen() = compose.onRoot().getBoundsInRoot().width.value
+    private fun screen() = compose.onRoot().getBoundsInRoot().right.value
 
     @Test fun pillsSitACloseGapFromTheLeftEdge() {
         render()
