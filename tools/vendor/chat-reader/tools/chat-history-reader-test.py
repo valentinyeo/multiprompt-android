@@ -6914,6 +6914,59 @@ class AgentHostStreamContractTest(AgentHostStreamFixture, AgentHostTest):
     pass
 
 
+class HostHandoverLockTest(unittest.TestCase):
+    def test_terminal_ownership_waits_for_the_previous_owner_lock(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.object(reader, 'HOME', Path(temporary)):
+            provider, sid = 'claude', 'handover-lock-fixture'
+            previous = reader.host_lock(provider, sid)
+            self.assertIsNotNone(previous)
+            reached = threading.Event()
+            returned = threading.Event()
+            replies, failures = [], []
+            lock = reader.host_lock
+            write = reader.host_write
+            owner_path = reader.host_paths(provider, sid)['owner']
+
+            def observe_lock(*args, **kwargs):
+                reached.set()
+                return lock(*args, **kwargs)
+
+            def observe_write(path, value):
+                result = write(path, value)
+                if path == owner_path:
+                    reached.set()
+                return result
+
+            def handover():
+                try:
+                    replies.append(reader.host_handover(provider, sid))
+                except BaseException as error:
+                    failures.append(error)
+                finally:
+                    returned.set()
+
+            with patch.object(reader, 'host_stop', return_value=dict(status='stopped')), \
+                    patch.object(reader, 'host_lock', side_effect=observe_lock), \
+                    patch.object(reader, 'host_write', side_effect=observe_write):
+                worker = threading.Thread(target=handover)
+                worker.start()
+                try:
+                    self.assertTrue(reached.wait(10), 'handover must reach ownership transfer')
+                    self.assertFalse(reader.host_handed_over(provider, sid),
+                                     'terminal ownership must not be published while the old host still holds the lock')
+                    self.assertFalse(returned.is_set(), 'handover must not finish before the old host releases its lock')
+                finally:
+                    reader.host_release(previous)
+                    worker.join(10)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(failures, [])
+                self.assertEqual(replies, [dict(status='handover', previous='stopped')])
+                self.assertTrue(reader.host_handed_over(provider, sid))
+                acquired = lock(provider, sid)
+                self.assertIsNotNone(acquired, 'completed handover must leave the lock available')
+                reader.host_release(acquired)
+
+
 class HostControlFixture(HostEventStreamFixture):
     def writes(self):
         return [json.loads(line) for line in self.agent_input.getvalue().decode().splitlines() if line.strip()]
