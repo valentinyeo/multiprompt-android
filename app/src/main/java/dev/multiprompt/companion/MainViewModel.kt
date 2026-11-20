@@ -1771,6 +1771,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun openMentionedSession(sessionName: String) {
+        val session = _state.value.sessions.firstOrNull { it.name == sessionName }
+            ?: _state.value.inboxSessions.firstOrNull { it.name == sessionName }
+            ?: return
+        openExistingSession(session)
+    }
+
     fun openExistingSession(session: TmuxSession) {
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.update { current ->
