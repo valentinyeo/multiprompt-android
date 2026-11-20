@@ -1,5 +1,5 @@
 {
-  "IGSH-2474": "Android: old messages come back after /clear",
+  "IGSH-2903": "Android verification back to what pstack asks for",
   "IGSH-2771": "Failed release cannot poison later releases",
   "IGSH-2760": "Phone tests stop before the emulator starts",
   "IGSH-2754": "One phone test CLI replaces 34 loose test scripts",
@@ -148,5 +148,7 @@
   "IGSH-2748": "PR checker randomly refuses the chat fix as unmapped",
   "IGSH-2715": "Phone tests use real-shaped chats and a daily live chat probe",
   "IGSH-2781": "Chat phone tests use real-size chats and check the screen",
-  "IGSH-2840": "App crashes on Valentin's phone after update 0.1.609"
+  "IGSH-2840": "App crashes on Valentin's phone after update 0.1.609",
+  "IGSH-2906": "Coverage-growth rules stop blocking Android PRs",
+  "IGSH-2474": "Android: old messages come back after /clear"
 }
