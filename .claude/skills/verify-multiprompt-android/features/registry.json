@@ -1080,10 +1080,10 @@
       "evidence": {
         "compacted-chat.json": 700,
         "compacted-chat-proof.txt": 700,
-        "resumed-chat.json": 700,
         "resumed-chat-proof.txt": 700,
-        "fresh-chat.json": 700,
         "fresh-chat-proof.txt": 700,
+        "code-block.json": 700,
+        "code-block-proof.txt": 700,
         "pre-425-reader.txt": 1500,
         "seed-counts.json": 3000
       }

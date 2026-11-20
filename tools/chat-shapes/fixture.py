@@ -10,6 +10,9 @@ STAMP = '2026-11-20T09:00:00.000Z'
 HOST_ROOT = '.local/state/multiprompt/agent-host'
 LONG_SESSION = 'cl-long-chat'
 LONG_SID = '11560000-0000-4000-8000-000000001156'
+CODE_BLOCK_FIRST = 'CODE_BLOCK_2975_START ' + ('x' * 180)
+CODE_BLOCK_SECOND = 'CODE_BLOCK_2975_TAIL_2715'
+CODE_BLOCK_MESSAGE = '```\n' + CODE_BLOCK_FIRST + '\n' + CODE_BLOCK_SECOND + '\n```'
 
 SHAPES = (
     dict(shape='compacted', session='live-compacted-2715', project='compacted-work',
@@ -38,7 +41,8 @@ TRANSCRIPTS = {
         'native': [('user', 'COMPACTED_CONTINUE_2715'), ('assistant', 'COMPACTED_AFTER_2715')],
     },
     'fresh': {'sid': [('user', 'FRESH_QUESTION_2715'), ('assistant', 'FRESH_READY_2715')]},
-    'resumed': {'native': [('user', 'RESUMED_QUESTION_2715'), ('assistant', 'RESUMED_READY_2715')]},
+    'resumed': {'native': [('user', 'RESUMED_QUESTION_2715'), ('assistant', 'RESUMED_READY_2715'),
+                           ('assistant', CODE_BLOCK_MESSAGE)]},
 }
 
 
@@ -136,6 +140,14 @@ def last_text(path):
     return ''.join(part.get('text', '') for part in event['message']['content'])
 
 
+def penultimate_text(path):
+    lines = [line for line in Path(path).read_text().splitlines() if line.strip()]
+    if len(lines) < 2:
+        return ''
+    event = json.loads(lines[-2])
+    return ''.join(part.get('text', '') for part in event['message']['content'])
+
+
 def transcript_sids(home, entry):
     return sorted(path.stem for path in project_folder(home, entry).glob('*.jsonl'))
 
@@ -165,7 +177,11 @@ def check(home):
         assert Path(item['cwd']).is_dir(), 'SHAPES_CWD_MISSING'
         for big in (item['transcript'], item['neighbour_transcript']):
             assert Path(big).is_file() and Path(big).stat().st_size < 8192, 'SHAPES_TRANSCRIPT_MISMATCH'
-        assert last_text(item['transcript']) == entry['latest'], 'SHAPES_TRANSCRIPT_MISMATCH'
+        if entry['shape'] == 'resumed':
+            assert penultimate_text(item['transcript']) == entry['latest'], 'SHAPES_TRANSCRIPT_MISMATCH'
+            assert CODE_BLOCK_FIRST in last_text(item['transcript']), 'SHAPES_TRANSCRIPT_MISMATCH'
+        else:
+            assert last_text(item['transcript']) == entry['latest'], 'SHAPES_TRANSCRIPT_MISMATCH'
         assert last_text(item['neighbour_transcript']) == entry['neighbour_text'], 'SHAPES_TRANSCRIPT_MISMATCH'
         native = latest_init(item['log'])
         sids = transcript_sids(home, entry)
