@@ -30,7 +30,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | Reuse base proof only for the same source SHA, journey and unchanged driver inputs | `parent-cache.cjs`, retained base artifacts and `tools/parent-cache.test.js` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
 | An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |
-| Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, `coverage.cjs` ratchet in `test.yml`, and structured artifact validation in `pstack-verifier` |
+| Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, the `coverage.cjs` ratchet in `maintain-verification.yml`, and structured artifact validation in `pstack-verifier` |
 | Retrying a check replaces only its own per-run proof artifact | `overwrite: true` on proof uploads; PR #392 `c2f673c6` HTTP 409 replay in `tools/pstack-verifier.test.js` |
 | Table readiness recognises the icon-only Close description without text or exported test tags | retained phone-screen and expand-handshake replays in `tools/chat-table/ui.test.py`, run by `verify.yml` |
 | One registry owns verification recipes, picker eligibility and dispatch options | `coverage.cjs check` in `tools/check.sh` and `test.yml` |
@@ -45,7 +45,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | A release reads the Gradle cache and never writes it, so one failed release cannot poison every retry. Test workflows keep writing it | `cache-read-only: true` on the release `setup-gradle` step, checked by `tools/ci/release-cache.test.mjs` in `tools/check.sh source` |
 | Every PR title starts with its ticket, like `IGSH-1684: what changed`; add that ticket's exact Hypertask title to `tools/release-notes/ticket-titles.json`. Update notes show one `IGSH-N exact title` line per ticket, never filler | `tools/release-notes/notes.mjs` in `test.yml` and `release.yml` |
 | Feature work is not frozen (`"frozen": false` since IGSH-2570, 2026-11-20). Turning a freeze back on needs its own ticket with an end date. While `"frozen"` is true, a PR whose title ticket is not in `tools/freeze/allowed-tickets.json` fails | `tools/freeze/check.mjs` in the required `test` job of `test.yml` |
-| The Android feature map gets weekly source and registered-journey coverage; drift opens one correction PR, never auto-merges | `maintain-verification.yml`, `control_map.py check/locations` and the registry-driven hosted journey matrix |
+| The Android feature map gets weekly source and registered-journey coverage; drift opens one correction PR, never auto-merges | `maintain-verification.yml`, `control_map.py check/locations`, its weekly base comparison, and the registry-driven hosted journey matrix |
 | No keys in Git; whole history rescanned weekly | `secret-scan` in `gitleaks.yml`, required on `main` |
 
 ## Release and install
