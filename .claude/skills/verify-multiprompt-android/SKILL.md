@@ -82,7 +82,7 @@ The scanner checks Kotlin calls and modifiers across `app/src/main`. It rejects 
 python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py locations
 ```
 
-On pull requests, CI runs a plain `check` against the committed map, so drift, unmapped controls and choice digests still fail. It does not compare with the PR base, so a PR never blocks on a coverage ratchet; `maintain-verification.yml` compares against its base and reports new gaps weekly. New controls still need journeys. CI retains `android-control-coverage` with the count and missing list. `tools/check.sh source` runs the same check and its tests. The historical test reads the actual parent and merged source of [PR #380](https://github.com/valentinyeo/multiprompt-android/pull/380), commit `50eb80bbcc560ee2813d0eb869ab2364663275a8`, and rejects its previously unmapped chat-search controls.
+Pull requests run no control-map check, so app screen edits wait only on their touched-feature journeys. `maintain-verification.yml` compares the committed map with the live inventory weekly, against its base, and reports new gaps in its evidence and correction PR; that run also executes these tool tests with `CONTROL_MAP_LIVE=1`, non-blocking. New controls still need journeys before that run reports clean. `tools/check.sh source` runs the tool tests; the two that read the live inventory skip unless `CONTROL_MAP_LIVE=1` is set. The historical test reads the actual parent and merged source of [PR #380](https://github.com/valentinyeo/multiprompt-android/pull/380), commit `50eb80bbcc560ee2813d0eb869ab2364663275a8`, and rejects its previously unmapped chat-search controls.
 
 ## Weekly maintenance
 

@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
@@ -35,12 +36,13 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
-import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import java.io.File
@@ -128,15 +130,14 @@ class ReplyToMessageTest {
     }
 
     @Test
-    fun codeScrollsBothWaysWithoutStartingReply() {
-        harness("```\n" + "wide_code_".repeat(30) + "\n```")
-        val code = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
-        fun position() = code.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange].value()
-        code.performTouchInput { swipeLeft() }
-        val afterLeft = position()
-        assertTrue("Wide code must scroll left", afterLeft > 0f)
-        code.performTouchInput { swipeRight() }
-        assertTrue("Wide code must scroll back right", position() < afterLeft)
+    fun wideCodeWrapsToTheBubbleWithoutStartingReply() {
+        val wide = "wide_code_".repeat(30)
+        harness("```\n$wide\n```")
+        val layouts = ArrayList<TextLayoutResult>()
+        compose.onNodeWithTag("md-code").performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(wide, layouts.single().layoutInput.text.text)
+        assertTrue("Wide code must wrap, not scroll out of view", layouts.single().lineCount > 1)
+        compose.onNodeWithTag("md-code").performTouchInput { swipeLeft() }
         compose.onNodeWithContentDescription("Cancel reply").assertDoesNotExist()
     }
 
