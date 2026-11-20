@@ -27,16 +27,16 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      no_product_change: ${{ steps.pick.outputs.no_product_change }}
-      features: ${{ steps.pick.outputs.features }}
-      runners: ${{ steps.pick.outputs.runners }}
-      smoke: ${{ steps.pick.outputs.smoke }}
-      reason: ${{ steps.pick.outputs.reason }}
-      number: ${{ steps.pick.outputs.number }}
-      head_sha: ${{ steps.pick.outputs.head_sha }}
-      merge_base: ${{ steps.pick.outputs.merge_base }}
-      changed_outcomes: ${{ steps.pick.outputs.changed_outcomes }}
-      change_kind: ${{ steps.pick.outputs.change_kind }}
+      no_product_change: ${{ steps.pick-request.outputs.no_product_change }}
+      features: ${{ steps.pick-retry.outputs.features || steps.pick.outputs.features || steps.pick-request.outputs.features }}
+      runners: ${{ steps.pick-retry.outputs.runners || steps.pick.outputs.runners || steps.pick-request.outputs.runners }}
+      smoke: ${{ steps.pick-retry.outputs.smoke || steps.pick.outputs.smoke || steps.pick-request.outputs.smoke }}
+      reason: ${{ steps.pick-retry.outputs.reason || steps.pick.outputs.reason || steps.pick-request.outputs.reason }}
+      number: ${{ steps.pick-retry.outputs.number || steps.pick.outputs.number || steps.pick-request.outputs.number }}
+      head_sha: ${{ steps.pick-retry.outputs.head_sha || steps.pick.outputs.head_sha || steps.pick-request.outputs.head_sha }}
+      merge_base: ${{ steps.pick-retry.outputs.merge_base || steps.pick.outputs.merge_base || steps.pick-request.outputs.merge_base }}
+      changed_outcomes: ${{ steps.pick-retry.outputs.changed_outcomes || steps.pick.outputs.changed_outcomes || steps.pick-request.outputs.changed_outcomes }}
+      change_kind: ${{ steps.pick-retry.outputs.change_kind || steps.pick.outputs.change_kind || steps.pick-request.outputs.change_kind }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -48,15 +48,67 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      - name: Choose the journeys that exercise this change
-        id: pick
+      - name: Write journey picker request
+        id: pick-request
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ inputs.pr || github.event.pull_request.number }}
           EVENT_NAME: ${{ github.event_name }}
           EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PICK_REQUEST_FILE: ${{ runner.temp }}/pick-request.json
+          PICK_STATE_FILE: ${{ runner.temp }}/pick-state.json
+        run: node .github/scripts/pstack-verifier/verifier.cjs pick-request
+      - name: Call Token Ladder for journey pick
+        id: pick-ladder
+        if: steps.pick-request.outputs.need_ladder == 'true'
+        continue-on-error: true
+        uses: valentinyeo/token-ladder/.github/actions/ladder-call@main
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        with:
+          request-file: ${{ steps.pick-request.outputs.request-file }}
+          purpose: pr-journey-picker
+      - name: Choose the journeys that exercise this change
+        id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr || github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PICK_STATE_FILE: ${{ steps.pick-request.outputs.state-file }}
+          LADDER_ANSWER_FILE: ${{ steps.pick-ladder.outputs.answer-file }}
+          LADDER_FAILED: ${{ steps.pick-ladder.outcome == 'failure' || steps.pick-ladder.outcome == 'skipped' }}
+        run: node .github/scripts/pstack-verifier/verifier.cjs pick
+      - name: Call Token Ladder for journey pick correction
+        id: pick-ladder-retry
+        if: steps.pick.outputs.need_retry == 'true'
+        continue-on-error: true
+        uses: valentinyeo/token-ladder/.github/actions/ladder-call@main
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        with:
+          request-file: ${{ steps.pick.outputs.retry-request-file }}
+          purpose: pr-journey-picker-retry
+      - name: Finish journey pick after correction
+        id: pick-retry
+        if: steps.pick.outputs.need_retry == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.pr || github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PICK_STATE_FILE: ${{ steps.pick-request.outputs.state-file }}
+          PICK_RETRY_ANSWER_FILE: ${{ steps.pick-ladder-retry.outputs.answer-file }}
+          LADDER_FAILED: ${{ steps.pick-ladder-retry.outcome == 'failure' || steps.pick-ladder-retry.outcome == 'skipped' }}
         run: node .github/scripts/pstack-verifier/verifier.cjs pick
 
 
@@ -114,13 +166,9 @@ jobs:
         env:
           PICK_RESULT: ${{ needs.pick.result }}
         run: test "$PICK_RESULT" = success
-      - name: Install Claude Code for changes DeepSeek wrote
-        run: npm i -g @anthropic-ai/claude-code@2.1.326
-      - name: Judge the change against the journey evidence
+      - name: Post verifier verdict from journey results
         id: judge
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ needs.pick.outputs.number }}

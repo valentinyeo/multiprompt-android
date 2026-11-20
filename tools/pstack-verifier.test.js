@@ -66,20 +66,14 @@ test('a cancelled journey or one with no result forces FAIL', () => {
   assert.match(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: {} }).notes.join(' '), /no result/);
 });
 
-test('a passing set of journeys stays green even when the judge said FAIL', () => {
-  for (const modelVerdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
-    const ruled = verifier.applyRules({ modelVerdict, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
-    assert.equal(ruled.verdict, 'PASS');
-  }
-  const advisory = verifier.applyRules({ modelVerdict: 'FAIL', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
-  assert.match(advisory.notes.join(' '), /advisory/);
+test('a passing set of journeys stays PASS', () => {
+  const ruled = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
+  assert.equal(ruled.verdict, 'PASS');
 });
 
-test('a journey that failed still fails the job whatever the judge said', () => {
-  for (const modelVerdict of ['PASS', 'PASS+NOTES', 'FAIL']) {
-    const ruled = verifier.applyRules({ modelVerdict, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
-    assert.equal(ruled.verdict, 'FAIL');
-  }
+test('a journey that failed still fails the job', () => {
+  const ruled = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
+  assert.equal(ruled.verdict, 'FAIL');
 });
 
 test('a journey already red on main becomes a note, not a failed check', () => {
@@ -174,22 +168,22 @@ test('driving nothing caps the verdict at PASS+NOTES and says why', () => {
   assert.equal(verifier.applyRules({ modelVerdict: 'FAIL', features: [], conclusions: {} }).verdict, 'PASS+NOTES');
 });
 
-test('model output that does not parse gives no verdict', () => {
-  for (const bad of ['not json', '', '[]', '{}', '{"verdict":"MAYBE","summary":"x"}', '{"verdict":"PASS"}', '{"verdict":"PASS","summary":"  "}', '"PASS"']) {
-    assert.throws(() => verifier.parseVerdict(bad), undefined, bad);
-  }
+test('picker and ladder response parsing reject bad JSON', () => {
   assert.throws(() => verifier.parsePick('not json'));
   assert.throws(() => verifier.parsePick('{"reason":"x"}'));
+  assert.throws(() => verifier.parseLadderResponse(JSON.stringify({ choices: [{ message: {} }] })), /no content/);
+  assert.throws(() => verifier.parseLadderResponse(JSON.stringify({ choices: [{ message: { content: '' }, finish_reason: 'stop' }] })), /no content/);
+  assert.throws(() => verifier.parseLadderResponse(JSON.stringify({ choices: [{ message: { content: '{' }, finish_reason: 'length' }] })), /cut the answer off/);
 });
 
-test('a well formed model answer parses, caps its lists and ignores extra keys', () => {
-  const evidence = Array.from({ length: 12 }, (_, index) => `line ${index}`);
-  const parsed = verifier.parseVerdict(JSON.stringify({ verdict: 'PASS+NOTES', summary: 'It works.', evidence, not_covered: ['dictation'], other: 1 }));
-  assert.equal(parsed.verdict, 'PASS+NOTES');
-  assert.equal(parsed.evidence.length, 8);
-  assert.deepEqual(parsed.notCovered, ['dictation']);
-  const fenced = verifier.parseVerdict('```json\n{"verdict":"PASS","summary":"ok","evidence":[],"not_covered":[]}\n```');
-  assert.equal(fenced.verdict, 'PASS');
+test('the picker request is a JSON chat body without a model field', () => {
+  const request = verifier.buildPickRequest({ system: 'pick', user: 'context' });
+  assert.deepEqual(request.messages, [{ role: 'system', content: 'pick' }, { role: 'user', content: 'context' }]);
+  assert.deepEqual(request.response_format, { type: 'json_object' });
+  assert.equal(request.max_tokens, 32000);
+  assert.equal(request.model, undefined);
+  const content = verifier.parseLadderResponse(JSON.stringify({ choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }] }));
+  assert.equal(content, '{"ok":true}');
 });
 
 test('picker outcome typos get one correction and genuine unmapped behavior still blocks', async () => {
@@ -234,9 +228,9 @@ test('code-mapped outcomes decide, so an unmapped answer only blocks a genuinely
 test('an exhausted AI picker falls back to the feature map instead of failing the check', async () => {
   const codePlan = { outcomes: ['codex.transcript', 'reader.host-restart'], product: true };
   const failures = [
-    () => { throw new Error('DeepSeek answered HTTP 402'); },
-    async () => { throw new Error('DeepSeek answered HTTP 402'); },
-    async () => { throw new Error('The repo secret DEEPSEEK_API_KEY is empty or missing. The AI picker and the DeepSeek judge cannot run without it.'); },
+    () => { throw new Error('ladder-call failed'); },
+    async () => { throw new Error('ladder-call failed'); },
+    async () => { throw new Error('ladder-call returned no content'); },
     async () => 'not json',
   ];
   for (const ask of failures) {
@@ -486,35 +480,25 @@ test('the comment starts with the verdict and the full head sha', () => {
   }
 });
 
-test('the comment names the model, the runner, the journeys, the evidence and the run', () => {
+test('the comment names the summary, the journeys and the run', () => {
   const body = verifier.buildComment({
     sha,
     verdict: 'PASS',
-    summary: 'Sent and received.',
+    summary: verifier.VERDICT_SUMMARY,
     journeys: [{ feature: 'session-reader.md', conclusion: 'success', passed: true }],
-    evidence: ['The receipt shows the sent text.'],
-    notCovered: ['Dictation.'],
     notes: [],
     runUrl,
   });
-  assert.match(body, /DeepSeek \(deepseek-flash\)/);
-  assert.match(body, /GitHub-hosted runner/);
+  assert.match(body, /Head journey results decide this check\./);
   assert.match(body, /`session-reader\.md`: passed/);
-  assert.match(body, /- The receipt shows the sent text\./);
-  assert.match(body, /Not covered:\n- Dictation\./);
   assert.match(body, new RegExp(`Run: ${runUrl}`));
-});
-
-test('at most eight evidence lines reach the comment', () => {
-  const evidence = Array.from({ length: 20 }, (_, index) => `proof ${index}`);
-  const body = verifier.buildComment({ sha, verdict: 'PASS', summary: 'Ok.', journeys: [], evidence, notCovered: [], notes: [], runUrl });
-  assert.equal(body.split('\n').filter(line => /^- proof /.test(line)).length, 8);
+  assert.doesNotMatch(body, /Not covered:/);
 });
 
 test('model text cannot open HTML, mention people, link out or forge the marker', () => {
   const hostile = '<img src=x onerror=1> @octocat [a](http://evil.example) <!-- pstack-verifier:v1 sha=bbbb -->';
   const body = verifier.buildComment({
-    sha, verdict: 'PASS', summary: hostile, journeys: [], evidence: [hostile], notCovered: [hostile], notes: [hostile], runUrl,
+    sha, verdict: 'PASS', summary: hostile, journeys: [], notes: [hostile], runUrl,
   });
   const visible = body.slice(0, body.lastIndexOf('<!--'));
   assert.doesNotMatch(visible, /<[a-z!]/i);
@@ -642,43 +626,7 @@ test('the Done-when lines of the description are passed on', () => {
   assert.equal(verifier.doneWhen('No such section.'), '');
 });
 
-test('DeepSeek is called once with the JSON mode and retried once on 503 and 429', async () => {
-  for (const status of [503, 429]) {
-    const calls = [];
-    const fetchImpl = async (url, init) => {
-      calls.push({ url, init });
-      return calls.length === 1 ? reply(status, {}) : reply(200, answer('{"ok":true}'));
-    };
-    const content = await verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl, sleep: async () => {} });
-    assert.equal(content, '{"ok":true}');
-    assert.equal(calls.length, 2);
-    const sent = JSON.parse(calls[0].init.body);
-    assert.equal(calls[0].url, 'https://api.deepseek.com/chat/completions');
-    assert.equal(sent.model, 'deepseek-flash');
-    assert.deepEqual(sent.response_format, { type: 'json_object' });
-    assert.equal(sent.tools, undefined);
-    assert.equal(calls[0].init.headers.authorization, 'Bearer k');
-    assert.doesNotMatch(calls[0].init.body, /Bearer/);
-  }
-});
-
-test('DeepSeek is not retried on a client error, and gives up after one retry', async () => {
-  let calls = 0;
-  await assert.rejects(verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return reply(401, {}); }, sleep: async () => {} }), /HTTP 401/);
-  assert.equal(calls, 1);
-  calls = 0;
-  await assert.rejects(verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return reply(500, {}); }, sleep: async () => {} }), /HTTP 500/);
-  assert.equal(calls, 2);
-  calls = 0;
-  await assert.rejects(verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return reply(200, { choices: [{ message: { content: '{' }, finish_reason: 'length' }] }); }, sleep: async () => {} }), /cut the answer off/);
-  assert.equal(calls, 2);
-  calls = 0;
-  const recovered = await verifier.callDeepSeek({ key: 'k', system: 's', user: 'u', fetchImpl: async () => { calls += 1; return calls === 1 ? reply(200, { choices: [{ message: { content: '{' }, finish_reason: 'length' }] }) : reply(200, { choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }] }); }, sleep: async () => {} });
-  assert.equal(recovered, '{"ok":true}');
-  assert.equal(calls, 2);
-});
-
-test('the judge still returns a journey-only verdict when the secret is empty', () => {
+test('the verdict job posts journey-only PASS+NOTES when nothing was driven', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-judge-'));
   try {
     fs.writeFileSync(path.join(directory, 'change.diff'), 'diff --git a/tools/x.sh b/tools/x.sh\n+echo\n');
@@ -687,28 +635,27 @@ const fs = require('node:fs');
 const args = process.argv.slice(2);
 if (args.some(arg => arg.includes('/jobs?'))) console.log(JSON.stringify([{ jobs: [] }]));
 else if (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync('${path.join(directory, 'change.diff').replace(/\\/g, '\\\\')}', 'utf8'));
-else console.log(JSON.stringify({ number: 1, title: 'Tidy the checks', body: 'Author model: openai/gpt-6.1-sol', head: { sha: '${sha}' } }));
+else console.log(JSON.stringify({ number: 1, title: 'Tidy the checks', body: 'tooling', head: { sha: '${sha}' } }));
 `, { mode: 0o755 });
     const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], {
       cwd: directory,
       encoding: 'utf8',
       env: {
-        PATH: `${directory}:${process.env.PATH}`, DEEPSEEK_API_KEY: '', PICK_RESULT: 'success', REPO: 'a/b', PR_NUMBER: '1',
+        PATH: `${directory}:${process.env.PATH}`, PICK_RESULT: 'success', REPO: 'a/b', PR_NUMBER: '1',
         HEAD_SHA: sha, RUN_ID: '1', RUN_URL: runUrl, FEATURES: '[]', CHANGED_OUTCOMES: '[]', VERIFIER_DRY: '1',
         COVERAGE_REPORT: path.join(directory, 'coverage.json'),
       },
     });
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /^pstack-verifier: PASS\+NOTES @ /m);
-    assert.match(run.stdout, /Judge unavailable: The repo secret DEEPSEEK_API_KEY is empty or missing/);
-    assert.match(run.stdout, /Only the journey results were checked\./);
+    assert.match(run.stdout, /Head journey results decide this check\./);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
 
 test('a picker that did not finish gives no verdict', () => {
-  const env = { PATH: process.env.PATH, DEEPSEEK_API_KEY: 'k', PICK_RESULT: 'failure' };
+  const env = { PATH: process.env.PATH, PICK_RESULT: 'failure' };
   const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], { env, encoding: 'utf8' });
   assert.notEqual(run.status, 0);
   assert.match(run.stderr, /no verdict/);
@@ -749,13 +696,15 @@ test('the journeys job passes only the existing signing secrets to verify.yml', 
   assert.doesNotMatch(workflow, /secrets:\s*inherit/);
 });
 
-test('the DeepSeek key reaches only the pick and judge steps, as env', () => {
+test('model keys reach only Token Ladder ladder-call steps in the pick job', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   const uses = workflow.match(/secrets\.DEEPSEEK_API_KEY/g) ?? [];
-  assert.deepEqual(uses, ['secrets.DEEPSEEK_API_KEY', 'secrets.DEEPSEEK_API_KEY']);
-  for (const job of ['pick', 'pstack-verifier']) {
-    assert.match(jobBlock(workflow, job), /^ {10}DEEPSEEK_API_KEY: \$\{\{ secrets\.DEEPSEEK_API_KEY \}\}$/m, job);
-  }
+  assert.equal(uses.length, 2);
+  const pick = jobBlock(workflow, 'pick');
+  assert.match(pick, /valentinyeo\/token-ladder\/\.github\/actions\/ladder-call@main/);
+  assert.match(pick, /purpose: pr-journey-picker/);
+  assert.match(pick, /node \.github\/scripts\/pstack-verifier\/verifier\.cjs pick-request/);
+  assert.doesNotMatch(jobBlock(workflow, 'pstack-verifier'), /DEEPSEEK|ladder-call/);
   assert.doesNotMatch(workflow, /^ {2}\S.*\n(?:.*\n)*?\s+run:.*DEEPSEEK/m);
 });
 
@@ -825,10 +774,10 @@ function stepBlocks(source) {
   return body.split(/^ {6}- /m).slice(1).map(block => `- ${block}`);
 }
 
-test('the model is a flash model, never a pro one', () => {
-  assert.equal(verifier.MODEL, 'deepseek-flash');
-  assert.doesNotMatch(verifier.MODEL, /pro/i);
-  assert.doesNotMatch(read('.github/scripts/pstack-verifier/verifier.cjs'), /v4-pro/);
+test('verifier.cjs has no direct provider URL or model key env reads', () => {
+  const source = read('.github/scripts/pstack-verifier/verifier.cjs');
+  assert.doesNotMatch(source, /api\.deepseek\.com|DEEPSEEK_API_KEY|CLAUDE_CODE_OAUTH/);
+  assert.match(read('.github/workflows/test.yml'), /lint-direct-model-calls@main/);
 });
 
 test('coverage gaps are notes and never change the verdict', () => {
@@ -842,27 +791,25 @@ test('coverage gaps are notes and never change the verdict', () => {
   assert.match(failed.notes.join(' '), /FEATURE_NOT_EXERCISED/);
 });
 
-test('a judge that throws or answers junk leaves the journey-only verdict', async () => {
-  const plan = { outcomes: [] };
-  for (const ask of [
-    async () => { throw new Error('DeepSeek answered 503'); },
-    async () => verifier.parseVerdict('not json'),
-  ]) {
-    const judged = await verifier.judgeAnswer({ ask, diff: '', plan, features: ['hosts.md'], directories: {}, conclusions: { 'hosts.md': 'success' }, sha });
-    assert.match(judged.judgeNote, /^Judge unavailable: /);
-    assert.deepEqual(judged.model, verifier.journeyOnlyVerdict());
-    assert.deepEqual(judged.featureProof.errors, []);
-    assert.equal(judged.plan, plan);
-    assert.equal(verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, featureProof: judged.featureProof }).verdict, 'PASS');
+test('ladder failure in the picker falls back to the feature map', async () => {
+  const codePlan = { outcomes: ['codex.transcript'], product: true };
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-ladder-'));
+  try {
+    const env = { LADDER_FAILED: 'true', LADDER_ANSWER_FILE: path.join(directory, 'missing.json') };
+    const picked = await verifier.pickWithFallback({
+      codePlan,
+      ask: () => verifier.ladderAnswerContent(env),
+      log: () => {},
+    });
+    assert.deepEqual(picked.changedOutcomes, codePlan.outcomes);
+    assert.match(picked.reason, /AI picker unavailable/);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
   }
-  const noJudge = await verifier.judgeAnswer({ ask: null, diff: '', plan, features: ['hosts.md'], directories: {}, conclusions: { 'hosts.md': 'success' }, sha });
-  assert.equal(noJudge.judgeNote, undefined);
-  assert.deepEqual(noJudge.model, verifier.journeyOnlyVerdict());
 });
 
-test('a bug fix is judged by its head journeys, not by a parent repro or a stressed replay', () => {
+test('a bug fix is checked by its head journeys, not by a parent repro or a stressed replay', () => {
   const ruled = verifier.applyRules({
-    modelVerdict: 'PASS',
     stressProof: { errors: ['BREAK_IT_FAILED: retained stress evidence is required for every bug-fix journey.'], evidence: [] },
     features: ['reader-version.md', 'settings-controls.md'],
     conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
@@ -905,9 +852,9 @@ test('the bug-fix label comes from the title or the ticket, never from a feature
 });
 
 test('a failed head journey forces FAIL and an all-passed set stays PASS', () => {
-  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
+  const ruled = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
   assert.equal(ruled.verdict, 'FAIL');
-  assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' } }).verdict, 'PASS');
+  assert.equal(verifier.applyRules({ features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' } }).verdict, 'PASS');
   assert.match(ruled.notes.join(' '), /Journey not passed: hosts\.md/);
 });
 
@@ -996,8 +943,8 @@ test('the merge base comes from the compare API and must be a full sha', () => {
   for (const bad of [{}, { merge_base_commit: {} }, { merge_base_commit: { sha: 'abc' } }, { merge_base_commit: { sha: 'C'.repeat(40) } }]) {
     assert.throws(() => verifier.fetchMergeBase('o/r', 'main', sha, () => JSON.stringify(bad)), /no merge base/);
   }
-  const pick = jobBlock(read('.github/workflows/pstack-verifier.yml'), 'pick');
-  assert.match(pick, /merge_base: \$\{\{ steps\.pick\.outputs\.merge_base \}\}/);
+  const pick = read('.github/workflows/pstack-verifier.yml').split('\njobs:\n')[1].split('\n  journeys:')[0];
+  assert.match(pick, /merge_base: \$\{\{ steps\.pick-retry\.outputs\.merge_base \|\| steps\.pick\.outputs\.merge_base/);
 });
 
 test('no PR run drives the parent side', () => {
@@ -1069,7 +1016,7 @@ test('drive.sh prints a product-assertion marker and keeps setup failures separa
   assert.match(drive, /printf 'SETUP_FAILED\\n' \| tee "\$EVIDENCE\/failure-class\.txt"/);
   assert.match(drive, /if \[\[ "\$code" != 0 && "\$product_checks" == 1 && "\$setup_failure" != 1 \]\]; then/);
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  assert.match(jobBlock(workflow, 'pick'), /change_kind: \$\{\{ steps\.pick\.outputs\.change_kind \}\}/);
+  assert.match(read('.github/workflows/pstack-verifier.yml').split('\njobs:\n')[1].split('\n  journeys:')[0], /change_kind: \$\{\{ steps\.pick-retry\.outputs\.change_kind/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /CHANGE_KIND: \$\{\{ needs\.pick\.outputs\.change_kind \}\}/);
   assert.match(jobBlock(workflow, 'pick'), /tools\/release-notes\/ticket-titles\.json/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /tools\/release-notes\/ticket-titles\.json/);
@@ -1184,7 +1131,7 @@ test('only a complete docs/tooling file list gets a no-product result', () => {
   }
 });
 
-function pickWithoutSecret(files, { fork = false, draft = false, login = 'author', count = files.length, diff = '', key = '', fetchStub = '' } = {}) {
+function pickWithoutSecret(files, { fork = false, draft = false, login = 'author', count = files.length, diff = '', ladderAnswer = '', ladderFailed = '' } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-pick-'));
   try {
     const pr = { state: 'open', draft, user: { login }, changed_files: count, head: { sha, repo: { full_name: fork ? 'fork/repo' : 'a/b' } }, base: { ref: 'main' } };
@@ -1206,14 +1153,25 @@ if (args.includes('Accept: application/vnd.github.diff')) {
   console.log(${JSON.stringify(JSON.stringify([files]))});
 }
 `, { mode: 0o755 });
-    const stub = path.join(directory, 'model.cjs');
-    fs.writeFileSync(stub, fetchStub);
+    const stateFile = path.join(directory, 'state.json');
+    const answerFile = path.join(directory, 'answer.json');
+    if (ladderAnswer) fs.writeFileSync(answerFile, JSON.stringify({ choices: [{ message: { content: ladderAnswer }, finish_reason: 'stop' }] }));
     const output = path.join(directory, 'output');
-    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
-      env: { PATH: `${directory}:${process.env.PATH}`, REPO: 'a/b', PR_NUMBER: '1', EVENT_NAME: 'pull_request', EVENT_HEAD_SHA: sha, GITHUB_OUTPUT: output, DEEPSEEK_API_KEY: key, NODE_OPTIONS: `--require=${stub}` },
+    const env = {
+      PATH: `${directory}:${process.env.PATH}`, REPO: 'a/b', PR_NUMBER: '1', EVENT_NAME: 'pull_request', EVENT_HEAD_SHA: sha, GITHUB_OUTPUT: output,
+      PICK_STATE_FILE: stateFile,
+    };
+    if (ladderFailed) env.LADDER_FAILED = ladderFailed;
+    else if (ladderAnswer) env.LADDER_ANSWER_FILE = answerFile;
+    const request = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick-request'], {
+      env: { ...env, PICK_REQUEST_FILE: path.join(directory, 'request.json'), PICK_STATE_FILE: stateFile },
       encoding: 'utf8',
     });
-    return { ...run, output: fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '' };
+    const recorded = fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : '';
+    if (request.status !== 0) return { ...request, output: recorded };
+    if (!fs.existsSync(stateFile)) return { ...request, output: recorded };
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], { env, encoding: 'utf8' });
+    return { ...run, output: fs.existsSync(output) ? fs.readFileSync(output, 'utf8') : recorded };
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -1247,23 +1205,20 @@ test('a pull request never schedules the break-it replay', () => {
 test('a product change is picked from the feature map when the AI picker has no credit', () => {
   const file = 'app/src/main/assets/chat_history_reader.py';
   const diff = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+hosted_claude_transcript_sid\n`;
-  const rejected = 'global.fetch = async () => ({ status: 402, ok: false });';
-  const offline = 'global.fetch = async () => { throw new Error("DeepSeek answered HTTP 402"); };';
-  const blocked = 'global.fetch = async () => ({ status: 200, ok: true, json: async () => ({ choices: [{ finish_reason: \'stop\', message: { content: \'not json\' } }] }) });';
   const cases = [
-    { options: {}, key: '', fetchStub: rejected },
-    { options: { draft: true }, key: 'test-only', fetchStub: offline },
-    { options: { login: 'dependabot[bot]' }, key: 'test-only', fetchStub: blocked },
+    { options: {}, ladderFailed: 'true' },
+    { options: { draft: true }, ladderFailed: 'true' },
+    { options: { login: 'dependabot[bot]' }, ladderFailed: 'true' },
   ];
-  for (const { options, key, fetchStub } of cases) {
-    const run = pickWithoutSecret([{ filename: file }], { ...options, diff, key, fetchStub });
+  for (const { options, ladderFailed, ladderAnswer } of cases) {
+    const run = pickWithoutSecret([{ filename: file }], { ...options, diff, ladderFailed, ladderAnswer });
     assert.equal(run.status, 0, run.stderr);
     assert.doesNotMatch(run.output, /no_product_change=true/);
     assert.match(run.output, /^change_kind=product$/m);
     assert.deepEqual(JSON.parse(run.output.match(/^features=(.+)$/m)[1]), ['host-restart.md', 'chat-codex.md']);
     assert.deepEqual(JSON.parse(run.output.match(/^changed_outcomes=(.+)$/m)[1]), ['reader.host-restart', 'codex.transcript']);
     assert.match(run.output, /^reason=AI picker unavailable; journeys chosen from the feature map\.$/m);
-    assert.match(run.stderr, /pstack-verifier pick: AI picker unavailable \((?:DeepSeek answered HTTP 402|The repo secret DEEPSEEK_API_KEY is empty or missing\. The AI picker and the DeepSeek judge cannot run without it\.|the picker answer is not the expected JSON)\); using the feature map\./);
+    assert.match(run.stderr, /pstack-verifier pick: AI picker unavailable \((?:ladder-call failed|the picker answer is not the expected JSON)\); using the feature map\./);
   }
   const fork = pickWithoutSecret([{ filename: 'app/src/main/App.kt' }], { fork: true });
   assert.equal(fork.status, 1);
@@ -1273,28 +1228,44 @@ test('a product change is picked from the feature map when the AI picker has no 
   assert.match(incomplete.stderr, /Incomplete pull request file list/);
 });
 
-test('tooling and product changes both run the independent judge', () => {
+test('tooling and product changes both post a journey-based verdict', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'journeys'), /^ {4}if: needs\.pick\.outputs\.features != '\[\]'$/m);
   const final = jobBlock(workflow, 'pstack-verifier');
   assert.doesNotMatch(final, /if:.*no_product_change/);
-  assert.match(final, /name: Judge the change against the journey evidence\n {8}id: judge\n {8}env:/);
+  assert.match(final, /name: Post verifier verdict from journey results\n {8}id: judge\n {8}env:/);
+  assert.doesNotMatch(final, /CLAUDE_CODE_OAUTH|DEEPSEEK_API_KEY/);
 });
 
-test('judge family differs from every author family', () => {
-  assert.deepEqual(verifier.authorFamilies('x\nAuthor model: openai/gpt-6.1-sol\n'), ['openai']);
-  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: openai/gpt-6.1-sol')).family, 'deepseek');
-  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: deepseek/deepseek-v4.1-flash')).family, 'anthropic');
-  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: opencode-go/deepseek-v4.1-flash')).family, 'anthropic');
-  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: anthropic/claude-opus-5-5')).family, 'deepseek');
-  assert.throws(() => verifier.chooseJudge(verifier.authorFamilies('Author model: deepseek/deepseek-v4.1-flash\nAuthor model: anthropic/claude-opus-5-5')), /NO_INDEPENDENT_JUDGE/);
-  assert.deepEqual(verifier.authorFamilies('Author model: cursor/composer-2.5'), ['cursor']);
-  assert.equal(verifier.chooseJudge(verifier.authorFamilies('Author model: cursor/composer-2.5')).family, 'deepseek');
-  assert.throws(() => verifier.authorFamilies('no author line'), /AUTHOR_MODEL_MISSING/);
-  assert.throws(() => verifier.authorFamilies('Author model: mystery/thing'), /AUTHOR_MODEL_UNKNOWN/);
-});
-
-test('verdict comment names the judge that ran', () => {
-  const body = verifier.buildComment({ sha: 'a'.repeat(40), verdict: 'PASS', summary: 'Ok.', journeys: [], evidence: [], notCovered: [], notes: [], runUrl: 'https://example.test/run', judgeLabel: 'Claude (haiku)' });
-  assert.match(body, /Verified by Claude \(haiku\), a model family no author used/);
+test('pick-request writes a ladder request file for product changes', () => {
+  const file = 'app/src/main/assets/chat_history_reader.py';
+  const diff = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+new\n`;
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-req-'));
+  try {
+    fs.writeFileSync(path.join(directory, 'diff.patch'), diff);
+    fs.writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync('${path.join(directory, 'diff.patch').replace(/\\/g, '\\\\')}', 'utf8'));
+else if (args.at(-1).includes('/compare/')) console.log(JSON.stringify({ merge_base_commit: { sha: '${sha}' } }));
+else if (args.at(-1) === 'repos/a/b/pulls/1') console.log(JSON.stringify({ number: 1, state: 'open', changed_files: 1, head: { sha: '${sha}', repo: { full_name: 'a/b' } }, base: { ref: 'main' }, title: 'T', body: '' }));
+else console.log(JSON.stringify([{ filename: '${file}' }]));
+`, { mode: 0o755 });
+    const requestFile = path.join(directory, 'request.json');
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick-request'], {
+      env: {
+        PATH: `${directory}:${process.env.PATH}`, REPO: 'a/b', PR_NUMBER: '1', EVENT_NAME: 'pull_request', EVENT_HEAD_SHA: sha,
+        PICK_REQUEST_FILE: requestFile, PICK_STATE_FILE: path.join(directory, 'state.json'),
+      },
+      encoding: 'utf8',
+    });
+    assert.equal(run.status, 0, run.stderr);
+    const request = JSON.parse(fs.readFileSync(requestFile, 'utf8'));
+    assert.deepEqual(request.response_format, { type: 'json_object' });
+    assert.equal(request.max_tokens, 32000);
+    assert.equal(request.model, undefined);
+    assert.ok(request.messages[0].content.includes('journey picker'));
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

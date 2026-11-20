@@ -158,5 +158,6 @@
   "IGSH-2907": "Tests already broken on main become tickets, not PR blocks",
   "IGSH-2761": "AI usage sheet cuts off the Codex block below the navigation bar",
   "IGSH-2967": "Phone tests stop failing on missing Kotlin build files",
-  "IGSH-2962": "Android: new versions take 21 minutes to reach the phone"
+  "IGSH-2962": "Android: new versions take 21 minutes to reach the phone",
+  "IGSH-2978": "PR checker uses Token Ladder and drops the text judge"
 }

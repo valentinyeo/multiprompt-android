@@ -57,7 +57,7 @@ test('all six phone jobs and historical replays run periodically, never on PRs',
   assert.match(weekly, /matrix: \$\{\{ fromJSON\(needs\.map\.outputs\.matrix\) \}\}/);
 });
 
-test('PR journeys come only from touched registry outcomes; even tooling receives the independent verdict', () => {
+test('PR journeys come only from touched registry outcomes; even tooling receives the journey verdict', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.equal((workflow.match(/run: node \.github\/scripts\/pstack-verifier\/verifier\.cjs judge/g) ?? []).length, 1);
   assert.doesNotMatch(workflow, /if:.*no_product_change/);
