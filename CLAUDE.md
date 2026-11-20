@@ -26,6 +26,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 |---|---|
 | Every PR builds, unit-tests and lints without unrelated phone jobs | `test.yml` runs build and `tools/check.sh source/unit/m3/lint`; `tools/ci/pr-workflows.test.mjs` checks workflow ownership |
 | Every PR runs a head phone journey for each feature it touches, and nothing else | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js` |
+| A journey red in the latest nightly run on main never blocks a PR; the verify chat files a ticket for it | the `red-journeys` artifact from `android-full.yml`, `applyRules` in `verifier.cjs` and `tools/pstack-verifier.test.js` |
 | The judge is a model family no PR author used, and its verdict is advisory. Each PR body names every author with `Author model: <family>/<model>`; a missing, unknown or all-families-used author list skips the judge comment and the journey result stands | `authorFamilies` and `chooseJudge` in `verifier.cjs`, `tools/pstack-verifier.test.js` |
 | Reuse base proof only for the same source SHA, journey and unchanged driver inputs | `parent-cache.cjs`, retained base artifacts and `tools/parent-cache.test.js` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |

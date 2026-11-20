@@ -8,11 +8,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -56,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.ModalBottomSheetProperties
@@ -328,14 +331,37 @@ internal fun KitSectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-internal fun KitSheetSurface(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+internal fun KitSheetSurface(
+    modifier: Modifier = Modifier,
+    maxContentHeight: Dp = Dp.Unspecified,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     Column(
-        modifier.fillMaxWidth().background(Kit.Sheet, Kit.SheetShape).padding(horizontal = Kit.SideChange, vertical = 12.dp),
+        modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .then(if (maxContentHeight != Dp.Unspecified) Modifier.heightIn(max = maxContentHeight) else Modifier)
+            .background(Kit.Sheet, Kit.SheetShape)
+            .padding(horizontal = Kit.SideChange, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(Modifier.align(Alignment.CenterHorizontally).width(32.dp).height(4.dp).background(Kit.TextMuted, CircleShape))
         content()
     }
+}
+
+@Composable
+internal fun ColumnScope.KitSheetScrollColumn(
+    modifier: Modifier = Modifier,
+    verticalArrangement: Arrangement.Vertical = Arrangement.Top,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val scrollState = rememberScrollState()
+    Column(
+        modifier.fillMaxWidth().weight(1f, fill = false).verticalScroll(scrollState),
+        verticalArrangement = verticalArrangement,
+        content = content,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -349,7 +375,9 @@ internal fun KitSheet(onDismiss: () -> Unit, dismissible: Boolean = true, conten
         dragHandle = null,
         shape = Kit.SheetShape,
     ) {
-        KitSheetSurface(content = content)
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            KitSheetSurface(modifier = Modifier.fillMaxWidth(), maxContentHeight = maxHeight, content = content)
+        }
     }
 }
 
@@ -365,8 +393,7 @@ internal fun KitMenu(
         KitSheet(onDismiss = onDismissRequest) {
             val sheet = this
             key(contentResetKey) {
-                val scrollState = rememberScrollState()
-                Column(Modifier.weight(1f, fill = false).verticalScroll(scrollState)) {
+                KitSheetScrollColumn {
                     KitListGroup(content = content)
                 }
                 if (footer != null) footer(sheet)

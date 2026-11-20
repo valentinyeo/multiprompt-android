@@ -217,6 +217,27 @@ function parsePick(content, { mapped = [], productSource = true } = {}) {
   return { ...plan, features, dropped, reason, smoke: false };
 }
 
+async function pickWithFallback({ ask, codePlan, log = message => console.error(message) }) {
+  try {
+    return await askParsed({
+      ask,
+      parse: content => parsePick(content, { mapped: codePlan.outcomes, productSource: codePlan.product }),
+    });
+  } catch (error) {
+    if (/^FEATURE_UNMAPPED:/.test(String(error?.message ?? ''))) throw error;
+    log(`pstack-verifier pick: AI picker unavailable (${error.message}); using the feature map.`);
+    return {
+      features: [],
+      dropped: [],
+      changedOutcomes: codePlan.outcomes,
+      changeKind: codePlan.product ? 'product' : 'tooling',
+      unmapped: false,
+      smoke: false,
+      reason: 'AI picker unavailable; journeys chosen from the feature map.',
+    };
+  }
+}
+
 function parseVerdict(content) {
   const parsed = parseJson(content);
   if (!parsed) throw new Error('the verifier answer is not JSON');
@@ -254,17 +275,29 @@ function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {})
   return ids.some(id => saysBug(tickets[id]));
 }
 
-function applyRules({ modelVerdict, features, conclusions, notDrivenReason, smoke = false, featureProof }) {
+function applyRules({ modelVerdict, features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '' }) {
   const notes = [];
   let verdict = 'PASS';
+  const knownRed = Array.isArray(redOnMain) ? redOnMain : [];
   const journeys = features.map(feature => {
     const conclusion = conclusions?.[feature] ?? null;
-    return { feature, conclusion, passed: conclusion === 'success' };
+    const passed = conclusion === 'success';
+    return { feature, conclusion, passed, redOnMain: !passed && knownRed.includes(feature) };
   });
-  const failed = journeys.filter(journey => !journey.passed);
+  const alreadyRed = journeys.filter(journey => journey.redOnMain);
+  const failed = journeys.filter(journey => !journey.passed && !journey.redOnMain);
   if (failed.length) {
     verdict = 'FAIL';
     notes.push(`Journey not passed: ${failed.map(journey => `${journey.feature} (${journey.conclusion ?? 'no result'})`).join(', ')}.`);
+  }
+  for (const journey of alreadyRed) {
+    notes.push(`Already red on main (${redOnMainUrl ? `nightly ${redOnMainUrl}` : 'nightly run link unavailable'}): ${journey.feature}; tracked as a ticket, not a PR block.`);
+  }
+  if (alreadyRed.length && verdict === 'PASS') {
+    verdict = 'PASS+NOTES';
+  }
+  if (redOnMainNote) {
+    notes.push(redOnMainNote);
   }
   if ((!features.length || smoke) && verdict === 'PASS') {
     verdict = 'PASS+NOTES';
@@ -325,8 +358,7 @@ function findOwnComment(comments, sha) {
   return comments.find(comment => String(comment.user?.login ?? '').replace(/\[bot\]$/, '') === AUTHOR && String(comment.body ?? '').includes(marker)) ?? null;
 }
 
-function jobConclusions(jobs, features) {
-  const prefix = 'journey';
+function jobConclusions(jobs, features, prefix = 'journey') {
   const result = {};
   for (const feature of features) {
     const matching = jobs.filter(job => String(job.name ?? '').startsWith(`${prefix} ${feature} `) || String(job.name ?? '') === `${prefix} ${feature}`);
@@ -340,9 +372,57 @@ function jobConclusions(jobs, features) {
   return result;
 }
 
+function redJourneys(conclusions) {
+  return Object.entries(conclusions ?? {})
+    .filter(([, conclusion]) => conclusion && conclusion !== 'success')
+    .map(([feature]) => feature)
+    .sort();
+}
+
+function writeRedJourneys(file, jobs) {
+  const red = redJourneys(jobConclusions(jobs, ALLOWLIST, 'nightly'));
+  fs.writeFileSync(file, `${JSON.stringify(red, null, 2)}\n`);
+  return red;
+}
+
+function latestNightlyRun(repo, run = gh) {
+  let runs;
+  try {
+    runs = JSON.parse(run(['run', 'list', '-w', 'android-full.yml', '-b', 'main', '-s', 'completed', '-L', '1', '--json', 'databaseId,url']));
+  } catch (error) {
+    return { id: '', url: '', reason: `the nightly run list failed (${oneLine(error.message, 200)})` };
+  }
+  const latest = Array.isArray(runs) ? runs[0] : null;
+  const id = latest?.databaseId;
+  if (!id) return { id: '', url: '', reason: 'no completed android-full run on main yet' };
+  return { id: String(id), url: String(latest.url ?? ''), reason: '' };
+}
+
+function downloadRedOnMain(repo, directory, run = gh) {
+  const nightly = latestNightlyRun(repo, run);
+  if (!nightly.id) return { journeys: [], url: '', note: `No journey counts as red on main: ${nightly.reason}.` };
+  try {
+    run(['run', 'download', nightly.id, '-R', repo, '-n', 'red-journeys', '-D', directory]);
+    const parsed = JSON.parse(fs.readFileSync(path.join(directory, 'red-journeys.json'), 'utf8'));
+    const journeys = Array.isArray(parsed) ? parsed.filter(name => typeof name === 'string' && name) : [];
+    return { journeys, url: nightly.url, note: '' };
+  } catch (error) {
+    return { journeys: [], url: nightly.url, note: `No journey counts as red on main: the latest nightly run ${nightly.url || nightly.id} has no readable red-journeys artifact (${oneLine(error.message, 200)}).` };
+  }
+}
+
+async function redOnMainReport(env) {
+  const repo = requireRepo(env);
+  const runId = String(env.RUN_ID ?? '');
+  if (!/^[0-9]+$/.test(runId)) throw new Error('RUN_ID must be a run number');
+  const red = writeRedJourneys(path.resolve(env.RED_JOURNEYS_FILE ?? 'red-journeys.json'), runJobs(repo, runId));
+  console.log(`pstack-verifier red-journeys: ${red.length} of ${ALLOWLIST.length} nightly journeys did not pass${red.length ? `: ${red.join(', ')}` : ''}`);
+  return red;
+}
+
 function requireKey(env) {
   if (!String(env.DEEPSEEK_API_KEY ?? '').trim()) {
-    throw new Error('The repo secret DEEPSEEK_API_KEY is empty or missing. The verifier cannot run without it.');
+    throw new Error('The repo secret DEEPSEEK_API_KEY is empty or missing. The AI picker and the DeepSeek judge cannot run without it.');
   }
   return env.DEEPSEEK_API_KEY.trim();
 }
@@ -541,7 +621,6 @@ async function pick(env) {
     return;
   }
   if (pr.head.repo?.full_name !== repo) throw new Error('Product changes from forks cannot be verified with repository secrets');
-  const key = requireKey(env);
   const mergeBase = fetchMergeBase(repo, pr.base.ref, head);
   const diff = fetchDiff(repo, number);
   if (!/^diff --git /m.test(diff)) throw new Error('no patch text came back for the pull request');
@@ -553,12 +632,12 @@ async function pick(env) {
     ? `Mapped by rule for these changed paths (they stand; add guards on top): ${JSON.stringify(codePlan.outcomes)}`
     : 'No changed path maps to a registered outcome by rule.';
   const user = `Directly edited recipes (must run): ${JSON.stringify(recipes)}\n${mapped}\nRequired candidates (rank repro first, then relevant guards): ${JSON.stringify(deterministic.features)}\n\nJourney catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
-  const picked = await askParsed({
+  const picked = await pickWithFallback({
+    codePlan,
     ask: error => {
       if (error) console.error(`pstack-verifier pick: invalid answer: ${error.message}`);
-      return callDeepSeek({ key, system: PICK_INSTRUCTIONS, user: error ? `${user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. Keep every outcome already mapped by rule. Only if no mapped outcome applies and the changed product source has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.` : user });
+      return callDeepSeek({ key: requireKey(env), system: PICK_INSTRUCTIONS, user: error ? `${user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. Keep every outcome already mapped by rule. Only if no mapped outcome applies and the changed product source has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.` : user });
     },
-    parse: content => parsePick(content, { mapped: codePlan.outcomes, productSource: codePlan.product }),
   });
   if (picked.unmapped) console.error(`pstack-verifier pick: the model also answered unmapped; the ${codePlan.outcomes.length} code-mapped outcome(s) stand.`);
   const plan = coverageGate.planChange(diff, picked.changedOutcomes, files);
@@ -649,7 +728,6 @@ async function judgeAnswer({ ask, diff, plan, features, directories, conclusions
 
 async function judge(env) {
   if (env.PICK_RESULT !== 'success') throw new Error(`the journey picker ended as ${env.PICK_RESULT || 'unknown'}, so there is no verdict`);
-  requireKey(env);
   const repo = requireRepo(env);
   const number = requireNumber(env);
   const sha = String(env.HEAD_SHA ?? '');
@@ -691,7 +769,9 @@ async function judge(env) {
   let featureProof;
   let directories;
   let model;
+  let red = { journeys: [], url: '', note: 'No journey counts as red on main: the nightly list was not read.' };
   try {
+    red = downloadRedOnMain(repo, path.join(scratch, 'red-on-main'));
     directories = downloadEvidence(repo, runId, features, scratch);
     const reported = JSON.parse(env.CHANGED_OUTCOMES || 'null');
     const plan = coverageGate.planChange(diff, reported);
@@ -710,7 +790,10 @@ async function judge(env) {
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
-  const ruled = applyRules({ modelVerdict: model.verdict, features, conclusions, notDrivenReason: env.PICK_REASON, smoke, featureProof });
+  const ruled = applyRules({
+    modelVerdict: model.verdict, features, conclusions, notDrivenReason: env.PICK_REASON, smoke, featureProof,
+    redOnMain: red.journeys, redOnMainUrl: red.url, redOnMainNote: red.note,
+  });
 
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {
@@ -744,16 +827,17 @@ async function judge(env) {
 
 module.exports = {
   JUDGE_INSTRUCTIONS, judgeContext, ALLOWLIST, MODEL, ENDPOINT, MARKER_PREFIX, VERDICTS, SMOKE_JOURNEY, PRODUCT_ASSERTION,
-  RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, parseVerdict, applyRules, parentResult, buildComment,
+  RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, pickWithFallback, parseVerdict, applyRules, parentResult, buildComment,
   saysBug, loadTicketTitles, isBugFix, noProductChange, judgeAnswer, journeyOnlyVerdict,
   artifactName, authorFamilies, chooseJudge, callClaude, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, callDeepSeek, doneWhen, journeyEvidence, journeyCatalog, requireKey, includeRequiredJourneys, journeyRunners,
+  redJourneys, writeRedJourneys, latestNightlyRun, downloadRedOnMain,
 };
 
 if (require.main === module) {
-  const commands = { pick, judge, nightly };
+  const commands = { pick, judge, nightly, 'red-journeys': redOnMainReport };
   const command = commands[process.argv[2]];
   if (!command) {
-    console.error('Usage: verifier.cjs pick|judge|nightly');
+    console.error('Usage: verifier.cjs pick|judge|nightly|red-journeys');
     process.exit(64);
   }
   command(process.env).catch(error => {

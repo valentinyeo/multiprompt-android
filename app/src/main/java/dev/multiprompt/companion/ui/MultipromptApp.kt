@@ -451,7 +451,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onSignOut = viewModel::signOutAccount,
             session = readerSession,
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label ?: readerSession.hostId,
-            mentionChats = ChatMention.chats(state.sessions, readerSession),
+            mentionChats = state.mentionChats(readerSession),
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             initialFontScale = viewModel.readerFontScale(readerSession),
