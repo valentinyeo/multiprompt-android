@@ -4041,7 +4041,7 @@ internal fun ReaderScreen(
                                 }
                                 dev.multiprompt.companion.model.ChatId.of(session)?.let { chatId ->
                                     KitMenuRow(
-                                        label = "Copy chat ID",
+                                        label = "Copy session ID",
                                         onClick = {
                                             menuExpanded = false
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
