@@ -999,7 +999,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             final = final,
             currentUpdatingHostIds = current.updatingHostIds,
         )
-        val sessions = merged.sessions.map { session ->
+        val sessions = RefreshMerge.stabilizeHostedIdentity(current.sessions, merged.sessions).map { session ->
             sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
         }
         val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())

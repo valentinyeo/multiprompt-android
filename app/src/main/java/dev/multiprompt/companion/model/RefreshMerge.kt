@@ -43,4 +43,12 @@ object RefreshMerge {
         }
         return Merged(sessions, cachedHostIds, updatingHostIds)
     }
+
+    fun stabilizeHostedIdentity(previous: List<TmuxSession>, incoming: List<TmuxSession>): List<TmuxSession> =
+        incoming.map { session ->
+            val prior = previous.firstOrNull { it.hostId == session.hostId && it.name == session.name } ?: session
+            if (!session.liveChat || prior.hostSessionId.isBlank() || session.hostSessionId.isBlank()) session
+            else if (session.hostSessionId == prior.hostSessionId || session.hostProvider != prior.hostProvider) session
+            else session.copy(hostSessionId = prior.hostSessionId)
+        }
 }
