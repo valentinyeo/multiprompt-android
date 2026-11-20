@@ -69,6 +69,7 @@ class InboxSplitPillSpacingTest {
         state.value = AppUiState(
             workspaceSplitIds = listOf(null) + folders(9).map { it.id },
             workspaces = folders(9),
+            allSplitOnRight = false,
         )
         render()
         compose.onNodeWithText("All").assertIsDisplayed()
