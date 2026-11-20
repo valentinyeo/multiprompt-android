@@ -2,7 +2,6 @@
   "introduced_from": "c268b21a596644451b4a147eed980276af4b9c32",
   "missing": [
     "android-reply-notification.reply-notification",
-    "ai-usage.scroll-ai-usage",
     "reader-more.sign-in-to-sync-sign-out",
     "reader-more.update",
     "inbox-menu.arrange-splits",
@@ -257,7 +256,6 @@
     "terminallinks.open-terminal-transcript-link",
     "skill-picker.retry-empty-skill-list",
     "skill-picker.retry-skill-list-with-results",
-    "chat-mentions.insert-chat-mention",
     "estimate-accuracy.scroll-estimate-accuracy",
     "session-history.dismiss-session-history",
     "session-history.scroll-session-history",

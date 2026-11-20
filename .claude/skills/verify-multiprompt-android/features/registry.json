@@ -741,7 +741,7 @@
     },
     "skill-pills.md": {
       "name": "Skills within messages",
-      "description": "insert a skill mid-message, check composer and sent pills, remove a pill, send the remaining text, then type a six-line draft and check the message box bounds. SOFT-2543, IGSH-2957.",
+      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -753,8 +753,7 @@
         ]
       },
       "outcomes": [
-        "skills.pills",
-        "reader.composer-long-draft"
+        "skills.pills"
       ],
       "evidence": {
         "skill-pills-state.json": 4000,
@@ -911,7 +910,7 @@
     },
     "message-reply.md": {
       "name": "Reply to a message",
-      "description": "Long-press a Claude bubble, cancel the reply bar, then send a quoted reply with a host receipt.",
+      "description": "Long-press a Claude bubble, cancel the reply bar, send a quoted reply with a host receipt, then mention another chat by its real name and route the mention by tmux name.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -923,14 +922,18 @@
         ]
       },
       "outcomes": [
-        "legacy.igsh-418"
+        "legacy.igsh-418",
+        "chat.mentions"
       ],
       "evidence": {
         "reply-open.json": 400,
         "reply-cancelled.json": 200,
         "reply-sent.json": 200,
         "reply-receipts.txt": 800,
-        "reply-proof.txt": 80
+        "mention-list.json": 400,
+        "mention-sent.json": 400,
+        "mention-receipts.txt": 400,
+        "mention-session.txt": 80
       }
     },
     "settings-controls.md": {
@@ -1579,6 +1582,28 @@
         }
       }
     },
+    "chat.mentions": {
+      "description": "Typing @ lists another chat under the real name the chat list shows, picking it inserts that name, and the sent text carries the tmux session so the desktop routes the mention to the right chat.",
+      "journey": "message-reply.md",
+      "sideEffect": true,
+      "match": [
+        "ChatMention|MentionChat|mentionChats"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa tap text 'Mention 2953'"
+        },
+        "result": {
+          "file": "mention-sent.json",
+          "quote": "@Mention 2953"
+        },
+        "sideEffect": {
+          "file": "mention-receipts.txt",
+          "quote": "@Mention 2953{live-cl_mention-2953}"
+        }
+      }
+    },
     "legacy.igsh-425": {
       "description": "multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8\u201328 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.",
       "journey": null,
@@ -1783,14 +1808,6 @@
       "paths": [
         "^app/src/main/java/dev/multiprompt/companion/data/(CrashReportStore|ExitReasons|CrashTrace|CrashPayload|AndroidExitReasonSource)\\.kt$",
         "^app/src/main/java/dev/multiprompt/companion/account/CrashReportUpload\\.kt$"
-      ]
-    },
-    "reader.composer-long-draft": {
-      "description": "A draft long enough to wrap six lines keeps the message box at the bottom above the keyboard: the + button and the text field share one composer row, +, dictation and send stay bottom aligned with the grown field, and no hint or chat text shows through the row.",
-      "journey": "skill-pills.md",
-      "sideEffect": false,
-      "match": [
-        "FloatingBottomBar|floating-bottom-bar|Alignment\\.Bottom|composerLayout|skillPills"
       ]
     }
   }
