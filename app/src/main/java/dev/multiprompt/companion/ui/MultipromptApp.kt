@@ -2189,7 +2189,7 @@ internal fun SessionsScreen(
                                 }
                                 key(id, displayedWorkspaceSplitIds) {
                                     Box(Modifier.onGloballyPositioned { coordinates ->
-                                        val origin = coordinates.positionInParent().x
+                                        val origin = coordinates.parentLayoutCoordinates?.localPositionOf(coordinates, Offset.Zero)?.x ?: 0f
                                         splitPillSpans[id] = origin to origin + coordinates.size.width
                                     }) {
                                         if (state.selectedWorkspaceId == id) {
