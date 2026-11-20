@@ -27,6 +27,20 @@ class ModelMenuTest {
   }
 
   @Test
+  fun theCurrentModelRowUsesLiveRuntimeNotStaleSettings() {
+    val settings = HostSettings("opus", "high", "acceptEdits", true)
+    val runtime = TmuxText.RuntimeDetails("Sonnet 4.5", "low")
+    assertEquals("Sonnet 4.5 · low", ModelMenu.menuRuntimeLabel(settings, runtime, null))
+  }
+
+  @Test
+  fun aPendingModelPickKeepsVersionAndLowercaseEffort() {
+    val settings = HostSettings("opus", "high", "acceptEdits", true)
+    val runtime = TmuxText.RuntimeDetails("Opus 5.5", "high")
+    assertEquals("Sonnet 5.5 · high", ModelMenu.menuRuntimeLabel(settings, runtime, "sonnet"))
+  }
+
+  @Test
   fun aFailedModelSwitchShowsAPlainFailureLine() {
     val line = ModelMenu.switchFailureLine("Could not change chat settings")
     assertEquals("Could not change chat settings", line)

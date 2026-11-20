@@ -36,7 +36,6 @@ import dev.multiprompt.companion.reader.ChatHistoryConnection
 import dev.multiprompt.companion.reader.ChatPollGate
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
-import dev.multiprompt.companion.reader.ModelMenu
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -79,9 +78,7 @@ class ReaderChromeTest {
     private lateinit var history: MutableStateFlow<ChatHistoryState>
     private lateinit var chat: ChatHistoryConnection
     private val messageCount = 20
-    private val previewRuntime = TmuxText.RuntimeDetails("Opus 5.5", "medium")
-    private val modelLabel = checkNotNull(previewRuntime.label)
-    private val menuCurrentLabel = checkNotNull(ModelMenu.menuRuntimeLabel(null, previewRuntime, null))
+    private val modelLabel = "Opus 5.5 · medium"
 
     @Before fun setup() {
         f = SessionActivityFixture()
@@ -90,7 +87,7 @@ class ReaderChromeTest {
             agent = AgentKind.CLAUDE, historyScript = byteArrayOf(), historyCache = cache)
         reader = f.field(connection, "_state")
         reader.value = ReaderState(status = ReaderStatus.Live, waitingForInput = true,
-            runtimeDetails = previewRuntime)
+            runtimeDetails = TmuxText.RuntimeDetails("Opus 5.5", "medium"))
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, f.session.name, f.session.workingDirectory)
         chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache, pollGate = f.field<ChatPollGate>(connection, "pollGate"))
         ReflectionHelpers.setField(connection, "historyIdentity", identity)
@@ -149,8 +146,8 @@ class ReaderChromeTest {
         screenshot()
         compose.onNodeWithContentDescription("Session actions").performClick()
         compose.onNodeWithText("Change ›").performScrollTo().performClick()
-        compose.onNodeWithText("Current: $menuCurrentLabel").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("Current: $menuCurrentLabel · waiting for input").assertDoesNotExist()
+        compose.onNodeWithText("Current: $modelLabel").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Current: $modelLabel · waiting for input").assertDoesNotExist()
     }
 
     @Test fun dictatingKeepsTheMessageBoxHeight() {
