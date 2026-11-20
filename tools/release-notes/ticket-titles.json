@@ -163,5 +163,6 @@
   "IGSH-2976": "A Maven Central hiccup no longer fails a phone test",
   "IGSH-2959": "Android: prompt boxes in chat are cut off and cannot be copied",
   "IGSH-2982": "Unit tests stop downloading Android files on their own",
-  "IGSH-2474": "Android: old messages come back after /clear"
+  "IGSH-2474": "Android: old messages come back after /clear",
+  "IGSH-2993": "A Google download hiccup no longer fails every library"
 }
