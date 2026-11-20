@@ -12,6 +12,7 @@ data class ChatHistoryMessage(
     val requestId: String = "",
     val pending: Boolean = false,
     val delivery: String? = null,
+    val notSentDetail: String? = null,
     val unknownId: String? = null,
     val cancellable: Boolean = false,
 ) {
@@ -88,6 +89,7 @@ data class ChatHistory(
             Card(ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
                 pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = if (notSent) NOT_SENT else null,
+                notSentDetail = if (notSent) NotSentReason.plainText(row.receipt) else null,
                 cancellable = cancellable(row, now, seen[row.id])),
                 host.sentRows[row.id].orEmpty().toSet() + row.id,
                 visible = row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED) ||
@@ -149,7 +151,8 @@ data class ChatHistory(
             val card = claimed[index]
             val phoneId = aliases[message.requestId].takeIf { message.role == "user" }
             val occurrence = when {
-                card != null -> message.copy(key = card.message.key, requestId = card.message.requestId, delivery = card.message.delivery)
+                card != null -> message.copy(key = card.message.key, requestId = card.message.requestId, delivery = card.message.delivery,
+                    notSentDetail = card.message.notSentDetail)
                 phoneId != null -> message.copy(key = "@shared:$phoneId", requestId = phoneId)
                 else -> message
             }
