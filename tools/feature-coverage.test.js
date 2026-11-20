@@ -39,7 +39,7 @@ if (args.includes('Accept: application/vnd.github.diff')) {
 }
 
 for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch'], [377, 'ai.usage'], [378, 'skills.pills'], [379, 'chat-table.expand'], [381, 'claude.clear-ranking']]) {
-  test(`real PR #${pr} is rejected despite its successful unrelated head journeys`, () => {
+  test(`real PR #${pr} reports its coverage gap as a note while its journeys pass`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));
     const diff = read(`tools/fixtures/feature-coverage/pr-${pr}.diff`);
     const features = [...fixture.verifierBody.matchAll(/^- `([^`]+)` parent: .+, head: passed$/gm)].map(match => match[1]);
@@ -50,17 +50,16 @@ for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reu
     const plan = gate.planChange(diff, []);
     assert.ok(plan.outcomes.includes(outcome));
     const conclusions = Object.fromEntries(features.map(feature => [feature, 'success']));
-    const args = { modelVerdict: 'PASS+NOTES', features, conclusions };
-    assert.equal(verifier.applyRules(args).verdict, 'PASS+NOTES');
+    const args = { features, conclusions };
+    assert.equal(verifier.applyRules(args).verdict, 'PASS');
     const featureProof = gate.featureErrors({ plan, conclusions, sha: fixture.headSha });
     const ruled = verifier.applyRules({ ...args, featureProof });
-    assert.equal(ruled.verdict, 'FAIL');
+    assert.equal(ruled.verdict, 'PASS');
     assert.match(ruled.notes.join('\n'), new RegExp(`FEATURE_NOT_EXERCISED: ${outcome}`));
-    console.log(`HISTORICAL_FEATURE_PROOF_REJECTED: PR #${pr} @ ${fixture.headSha}, previously PASS+NOTES, now FAIL for ${outcome}`);
   });
 }
 
-test('PR #376 unreachable Snippets row fails even when both unrelated journeys pass', () => {
+test('PR #376 unreachable Snippets row is reported as a note when both unrelated journeys pass', () => {
   const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-376.json'));
   assert.match(fixture.unreachableBody, /^pstack-verifier: FAIL/);
   const features = [...fixture.unreachableBody.matchAll(/^- `([^`]+)` parent: .+, head: passed$/gm)].map(match => match[1]);
@@ -68,7 +67,9 @@ test('PR #376 unreachable Snippets row fails even when both unrelated journeys p
   const conclusions = Object.fromEntries(features.map(feature => [feature, 'success']));
   const plan = gate.planChange(read('tools/fixtures/feature-coverage/pr-376.diff'), []);
   const featureProof = gate.featureErrors({ plan, conclusions, sha });
-  assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features, conclusions, featureProof }).verdict, 'FAIL');
+  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features, conclusions, featureProof });
+  assert.equal(ruled.verdict, 'PASS');
+  assert.match(ruled.notes.join('\n'), /FEATURE_NOT_EXERCISED: snippets\.save-reuse-delete/);
   assert.match(featureProof.errors.join(' '), /snippets.save-reuse-delete/);
 });
 
@@ -113,7 +114,9 @@ test('native-skills smoke does not cover /clear and name-first ranking', () => {
   assert.ok(plan.outcomes.includes('claude.clear-ranking'));
   const featureProof = gate.featureErrors({ plan, conclusions: { 'native-skills.md': 'success' }, sha });
   assert.match(featureProof.errors.join('\n'), /FEATURE_NOT_EXERCISED: claude.clear-ranking/);
-  assert.equal(verifier.applyRules({ modelVerdict: 'PASS+NOTES', features: ['native-skills.md'], conclusions: { 'native-skills.md': 'success' }, smoke: true, featureProof }).verdict, 'FAIL');
+  const ruled = verifier.applyRules({ features: ['native-skills.md'], conclusions: { 'native-skills.md': 'success' }, smoke: true, featureProof });
+  assert.equal(ruled.verdict, 'PASS+NOTES');
+  assert.match(ruled.notes.join('\n'), /FEATURE_NOT_EXERCISED: claude.clear-ranking/);
 });
 
 function withProof(run) {
@@ -139,9 +142,7 @@ test('matching successful proof requires action, resulting UI, independent recei
     const proof = gate.featureErrors(args);
     assert.deepEqual(proof.errors, []);
     assert.equal(proof.accepted[0].sha, sha);
-    for (const parent of ['passed', 'not passed', 'no result']) {
-      assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, parents: { 'session-reader.md': parent }, featureProof: proof }).verdict, 'PASS');
-    }
+    assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, featureProof: proof }).verdict, 'PASS');
   });
 });
 
@@ -211,7 +212,7 @@ test('PR #391 session-reader citations match multiline UI text and independent r
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('missing, fabricated, stale, cross-journey and unretained proof fails even with a model PASS', () => {
+test('missing, fabricated, stale, cross-journey and unretained proof is reported while only a failed journey fails', () => {
   const mutations = [
     args => { args.coverage = []; },
     args => { args.coverage[0].journey = 'native-skills.md'; },
@@ -231,7 +232,9 @@ test('missing, fabricated, stale, cross-journey and unretained proof fails even 
     mutate(args, directory);
     const featureProof = gate.featureErrors(args);
     assert.equal(featureProof.errors.length, 1, mutate.toString());
-    assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, featureProof }).verdict, 'FAIL');
+    const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, featureProof });
+    assert.equal(ruled.verdict, args.conclusions['session-reader.md'] === 'success' ? 'PASS' : 'FAIL', mutate.toString());
+    assert.ok(ruled.notes.includes(featureProof.errors[0]), mutate.toString());
   });
 });
 
@@ -263,7 +266,6 @@ test('chat search changes require their own phone journey even when the model om
       const picked = verifier.includeRequiredJourneys({ features, dropped: [], smoke: true }, plan);
       assert.ok(picked.features.includes(journey));
       assert.equal(picked.smoke, false);
-      assert.ok(picked.features.length <= verifier.MAX_JOURNEYS);
     }
     const proof = gate.featureErrors({ plan, sha, conclusions: { 'session-reader.md': 'success' } });
     assert.match(proof.errors.join('\n'), /FEATURE_NOT_EXERCISED: chat-search.open/);
@@ -302,7 +304,6 @@ for (const journey of ['chat-search.md', 'sessions.md']) test(`the real picker s
       const values = fs.readFileSync(output, 'utf8');
       const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
       assert.equal(selected[0], journey, values);
-      assert.ok(selected.length <= verifier.MAX_JOURNEYS);
       assert.match(values, /^smoke=no$/m);
       assert.deepEqual(JSON.parse(values.match(/^changed_outcomes=(.+)$/m)[1]), gate.registry.journeys[journey].outcomes);
     }
@@ -420,15 +421,14 @@ test('the real picker reserves changed signed recipes and drivers before consult
       const values = fs.readFileSync(output, 'utf8');
       const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
       assert.deepEqual(selected, paths.length === 3
-        ? ['hosts.md', 'session-pins.md', 'session-gestures.md']
+        ? ['hosts.md', 'session-gestures.md', 'session-pins.md', 'session-summaries.md']
         : ['session-gestures.md', 'session-pins.md', 'session-summaries.md']);
       const prompt = JSON.parse(fs.readFileSync(request, 'utf8')).messages[1].content;
       const recipes = JSON.parse(prompt.split('\n')[0].split(': ')[1]);
       assert.ok(recipes.includes('session-pins.md'));
       assert.equal(recipes.includes('hosts.md'), paths.length === 3);
-      assert.match(prompt, /Required candidates \(rank repro first, then relevant guards within the cap\):/);
+      assert.match(prompt, /Required candidates \(rank repro first, then relevant guards\):/);
       assert.match(prompt, /session-summaries\.md/);
-      if (paths.length === 3) assert.match(run.stdout, /deferred=\["session-summaries\.md"\]/);
       const runners = JSON.parse(values.match(/^runners=(.+)$/m)[1]);
       assert.equal(runners['session-pins.md'].feature, 'session-favorites.md');
       assert.equal(runners['session-pins.md'].pins_scroll, true);
@@ -506,12 +506,12 @@ test('signed, dedicated and manual recipes stay visible without entering the deb
   }
 });
 
-test('the real judge command fails a past search change despite model PASS and a green reader', () => {
+test('the real judge command reports a past search change coverage gap while its journeys pass', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-judge-'));
   try {
     const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-380.json'));
     const gh = path.join(directory, 'gh');
-    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst args = process.argv.slice(2);\nif (args[0] === 'run') {\n  const dir = args[args.indexOf('-D') + 1];\n  fs.mkdirSync(dir, {recursive:true});\n  fs.writeFileSync(path.join(dir, 'app-source-sha.txt'), process.env.HEAD_SHA);\n  fs.writeFileSync(path.join(dir, 'tooling-proof.txt'), process.env.MISSING_TOOLING ? '' : 'Node tests passed');\n} else if (args.some(arg => arg.includes('/jobs?'))) {\n  console.log(JSON.stringify([{jobs:[{name:'journey session-reader.md / verify',status:'completed',conclusion:'success'}]}]));\n} else if (args.includes('Accept: application/vnd.github.diff')) {\n  process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF, 'utf8'));\n} else {\n  console.log(JSON.stringify({number:380,title:'Find inside a chat',body:'Author model: openai/gpt-6.1-sol',head:{sha:process.env.HEAD_SHA}}));\n}\n`);
+    fs.writeFileSync(gh, `#!${process.execPath}\nconst fs = require('node:fs');\nconst path = require('node:path');\nconst args = process.argv.slice(2);\nif (args[0] === 'run') {\n  const dir = args[args.indexOf('-D') + 1];\n  fs.mkdirSync(dir, {recursive:true});\n  fs.writeFileSync(path.join(dir, 'app-source-sha.txt'), process.env.HEAD_SHA);\n  fs.writeFileSync(path.join(dir, 'tooling-proof.txt'), process.env.MISSING_TOOLING ? '' : 'Node tests passed');\n} else if (args.some(arg => arg.includes('/jobs?'))) {\n  console.log(JSON.stringify([{jobs:[{name:'journey session-reader.md / verify',status:'completed',conclusion:'success'}]}]));\n} else if (args.includes('Accept: application/vnd.github.diff')) {\n  process.stdout.write(fs.readFileSync(process.env.FIXTURE_DIFF, 'utf8'));\n} else {\n  console.log(JSON.stringify({number:380,title:'Find inside a chat',body:process.env.PR_BODY ?? 'Author model: openai/gpt-6.1-sol',head:{sha:process.env.HEAD_SHA}}));\n}\n`);
     fs.chmodSync(gh, 0o755);
     const stub = path.join(directory, 'model.cjs');
     fs.writeFileSync(stub, `global.fetch = async () => ({status:200,ok:true,json:async () => ({choices:[{finish_reason:'stop',message:{content:JSON.stringify({verdict:'PASS',summary:'The reader passed.',coverage:[],changed_outcomes:[]})}}]})});`);
@@ -540,27 +540,35 @@ test('the real judge command fails a past search change despite model PASS and a
     };
     const args = [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'];
     const result = spawnSync(process.execPath, args, options);
-    assert.equal(result.status, 1, result.stderr);
-    assert.match(result.stdout, /pstack-verifier: FAIL @/);
-    assert.match(result.stdout, /FEATURE_NOT_EXERCISED: chat-search.open/);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /pstack-verifier: PASS @/);
+    assert.match(result.stdout, /FEATURE_NOT_EXERCISED: chat-search\.open/);
     const recorded = JSON.parse(fs.readFileSync(report, 'utf8'));
     assert.equal(recorded.sha, fixture.headSha);
     assert.deepEqual(recorded.accepted, []);
     assert.ok(recorded.plan.outcomes.includes('chat-search.open'));
-    options.env.MISSING_TOOLING = '1';
-    const missing = spawnSync(process.execPath, args, options);
-    assert.equal(missing.status, 1);
-    assert.match(missing.stderr, /NON_UI_PROOF_MISSING/);
+    options.env.PR_BODY = 'No author line.';
+    const noJudge = spawnSync(process.execPath, args, options);
+    assert.equal(noJudge.status, 0, noJudge.stderr);
+    assert.match(noJudge.stdout, /pstack-verifier: PASS @/);
+    assert.match(noJudge.stdout, /No independent judge ran: AUTHOR_MODEL_MISSING/);
+    const failing = path.join(directory, 'model-failing.cjs');
+    fs.writeFileSync(failing, "global.fetch = async () => { throw new Error('DeepSeek answered 503'); };");
+    options.env.PR_BODY = 'Author model: openai/gpt-6.1-sol';
+    options.env.NODE_OPTIONS = `--require=${failing}`;
+    const down = spawnSync(process.execPath, args, options);
+    assert.equal(down.status, 0, down.stderr);
+    assert.match(down.stdout, /pstack-verifier: PASS @/);
+    assert.match(down.stdout, /Judge unavailable: /);
+    assert.match(down.stdout, /Only the journey results were checked\./);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
-test('pick and judge exchange required IDs and retain both tooling and outcome evidence', () => {
+test('pick and judge exchange required IDs and retain the outcome coverage', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(workflow, /changed_outcomes: \$\{\{ steps.pick.outputs.changed_outcomes \}\}/);
   assert.match(workflow, /CHANGED_OUTCOMES: \$\{\{ needs.pick.outputs.changed_outcomes \}\}/);
   assert.match(workflow, /name: verifier-feature-coverage/);
-  assert.match(workflow, /name: verifier-tooling-proof/);
-  assert.match(workflow, /node --test tools\/feature-coverage.test.js tools\/pstack-verifier.test.js/);
 });
 
 test('the real picker schedules snippets even when the model omits it or fills all three slots', () => {
@@ -598,7 +606,6 @@ test('the real picker schedules snippets even when the model omits it or fills a
         const values = fs.readFileSync(output, 'utf8');
         const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
         assert.equal(features[0], 'snippets.md', values);
-        assert.ok(features.length <= verifier.MAX_JOURNEYS);
         assert.match(values, /^smoke=no$/m);
         if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*snippets.save-reuse-delete/);
       }
@@ -676,7 +683,6 @@ test('the real picker schedules AI switch even when the model omits it or fills 
         const values = fs.readFileSync(output, 'utf8');
         const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
         assert.ok(features.includes('ai-switch.md'), values);
-        assert.ok(features.length <= verifier.MAX_JOURNEYS);
         assert.match(values, /^smoke=no$/m);
         if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*ai.switch/);
       }
@@ -724,7 +730,6 @@ test('the real picker schedules Claude remote control even when the model omits 
         const values = fs.readFileSync(output, 'utf8');
         const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
         assert.ok(features.includes('claude-remote-control.md'), values);
-        assert.ok(features.length <= verifier.MAX_JOURNEYS);
         assert.match(values, /^smoke=no$/m);
         if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*claude.remote-control/);
       }
@@ -797,7 +802,6 @@ test('the real picker schedules AI usage even when the model omits it or fills a
         const values = fs.readFileSync(output, 'utf8');
         const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
         assert.ok(features.includes('ai-usage.md'), values);
-        assert.ok(features.length <= verifier.MAX_JOURNEYS);
         assert.match(values, /^smoke=no$/m);
         if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*ai.usage/);
       }
@@ -868,7 +872,6 @@ test('skill-pill changes and recipe edits schedule their journey even when the p
         const values = fs.readFileSync(output, 'utf8');
         const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
         assert.ok(features.includes('skill-pills.md'), values);
-        assert.ok(features.length <= verifier.MAX_JOURNEYS);
         assert.match(values, /^smoke=no$/m);
         if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*skills.pills/);
       }
@@ -945,7 +948,6 @@ test('the real picker schedules chat table even when the model omits it or fills
         const values = fs.readFileSync(output, 'utf8');
         const features = JSON.parse(values.match(/^features=(.+)$/m)[1]);
         assert.ok(features.includes('chat-table.md'), values);
-        assert.ok(features.length <= verifier.MAX_JOURNEYS);
         assert.match(values, /^smoke=no$/m);
         if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*chat-table.expand/);
       }
@@ -995,8 +997,7 @@ test('the real picker schedules clear-ranking code and recipe edits even when th
     fs.writeFileSync(rankingDiff, productDiff('skills/NativeSkills.kt', 'val rank = score(skill.name, skill.description, query)'));
     const historicalPlan = gate.planChange(read('tools/fixtures/feature-coverage/pr-381.diff'), []);
     const historicalPick = verifier.includeRequiredJourneys({ features: ['clear-ranking.md'], dropped: [], smoke: true }, historicalPlan);
-    assert.deepEqual(historicalPick.features, ['clear-ranking.md', 'native-skills.md', 'claude-remote-control.md']);
-    assert.deepEqual(historicalPick.deferred, ['skill-pills.md']);
+    assert.deepEqual(historicalPick.features, ['native-skills.md', 'claude-remote-control.md', 'skill-pills.md', 'clear-ranking.md']);
     for (const diff of [rankingDiff, recipeDiff]) {
       for (const features of [[], ['native-skills.md', 'session-reader.md', 'terminal.md']]) {
         const output = path.join(directory, 'outputs');
@@ -1014,7 +1015,6 @@ test('the real picker schedules clear-ranking code and recipe edits even when th
         const values = fs.readFileSync(output, 'utf8');
         const selected = JSON.parse(values.match(/^features=(.+)$/m)[1]);
         assert.ok(selected.includes('clear-ranking.md'), values);
-        assert.ok(selected.length <= verifier.MAX_JOURNEYS);
         assert.match(values, /^smoke=no$/m);
         if (diff !== recipeDiff) assert.match(values, /changed_outcomes=.*claude.clear-ranking/);
       }

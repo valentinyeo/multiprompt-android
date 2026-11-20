@@ -42,15 +42,15 @@ test('a title without a ticket id is left to the PR title check', () => {
   }
 });
 
-test('the shipped allowlist is on, names whole ticket ids and reads back', () => {
+test('the shipped allowlist is off, names whole ticket ids and reads back', () => {
   const shipped = loadAllowlist(allowlistFile);
-  assert.equal(shipped.frozen, true);
+  assert.equal(shipped.frozen, false);
   for (const id of ['IGSH-2681', 'IGSH-2682', 'IGSH-2547', 'IGSH-2532', 'IGSH-2474', 'IGSH-2709', 'IGSH-2714', 'IGSH-2751', 'IGSH-2734', 'IGSH-2748', 'IGSH-2533', 'IGSH-2752', 'IGSH-2570', 'IGSH-2708', 'IGSH-2715', 'IGSH-2646', 'IGSH-2531', 'IGSH-2535', 'IGSH-2673']) {
     assert.ok(shipped.allowed.includes(id), id);
   }
   assert.equal(new Set(shipped.allowed).size, shipped.allowed.length);
   assert.equal(decide('IGSH-2752: A required check blocks feature PRs until phone testing is right', shipped).pass, true);
-  assert.equal(decide('IGSH-2706: Fix the inbox folder bar', shipped).pass, false);
+  assert.equal(decide('IGSH-2706: Fix the inbox folder bar', shipped).pass, true);
 });
 
 test('a broken allowlist fails loudly instead of allowing everything', () => {
@@ -66,13 +66,13 @@ test('a broken allowlist fails loudly instead of allowing everything', () => {
   assert.throws(() => loadAllowlist(write('{"frozen": true, "allowed": ["IGSH-2752 ", "nope"]}')), /not a whole id/);
 });
 
-test('the command line passes and fails on the real titles', () => {
+test('the command line lets every real title through while the freeze is off', () => {
   const pass = spawnSync(process.execPath, [tool, '--title', 'IGSH-2570: Android verification meets the checklist'], { encoding: 'utf8' });
   assert.equal(pass.status, 0, pass.stderr);
-  assert.match(pass.stdout, /FEATURE_FREEZE_ALLOWED: IGSH-2570/);
-  const fail = spawnSync(process.execPath, [tool], { encoding: 'utf8', env: { ...process.env, PR_TITLE: 'IGSH-2740: A new folder bar' } });
-  assert.equal(fail.status, 1);
-  assert.match(fail.stderr, /FEATURE_FREEZE_BLOCKED: IGSH-2740/);
+  assert.match(pass.stdout, /FEATURE_FREEZE_OFF: IGSH-2570/);
+  const feature = spawnSync(process.execPath, [tool], { encoding: 'utf8', env: { ...process.env, PR_TITLE: 'IGSH-2740: A new folder bar' } });
+  assert.equal(feature.status, 0, feature.stderr);
+  assert.match(feature.stdout, /FEATURE_FREEZE_OFF: IGSH-2740/);
   const missing = spawnSync(process.execPath, [tool], { encoding: 'utf8', env: { ...process.env, PR_TITLE: '' } });
   assert.equal(missing.status, 0);
   assert.match(missing.stdout, /has nothing to look up/);
