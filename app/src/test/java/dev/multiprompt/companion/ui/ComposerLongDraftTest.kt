@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.printToString
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ChatHistoryConnection
