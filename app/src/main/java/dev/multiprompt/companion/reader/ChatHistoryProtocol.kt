@@ -163,7 +163,11 @@ object ChatHistoryProtocol {
         require(rows.zipWithNext().all { (a, b) -> a.offset <= b.offset })
         val sid = fields[4]
         val hosted = hostedProvider(identity.agent, identity.sid)
-        val stableSid = if (hosted != null && identity.sid.isNotEmpty() && identity.tmux.isNotEmpty()) identity.sid else sid
+        val stableSid = if (hosted != null && identity.sid.isNotEmpty() && identity.tmux.isNotEmpty() && sid != identity.sid) {
+            identity.sid
+        } else {
+            sid
+        }
         return Page(stableSid, base, end, fields[7].toLong(), fields[8] == "1", fields[11].toLong(),
             fields[12], fields[13], oldest, rows, deliveries, held, pendingQuestions)
     }

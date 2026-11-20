@@ -44,11 +44,17 @@ object RefreshMerge {
         return Merged(sessions, cachedHostIds, updatingHostIds)
     }
 
-    fun stabilizeHostedIdentity(previous: List<TmuxSession>, incoming: List<TmuxSession>): List<TmuxSession> =
+    fun stabilizeHostedIdentity(
+        previous: List<TmuxSession>,
+        incoming: List<TmuxSession>,
+        hostListFinal: Boolean,
+    ): List<TmuxSession> =
         incoming.map { session ->
-            val prior = previous.firstOrNull { it.hostId == session.hostId && it.name == session.name } ?: session
-            if (!session.liveChat || prior.hostSessionId.isBlank() || session.hostSessionId.isBlank()) session
-            else if (session.hostSessionId == prior.hostSessionId || session.hostProvider != prior.hostProvider) session
+            val prior = previous.firstOrNull { it.hostId == session.hostId && it.name == session.name } ?: return@map session
+            if (!session.liveChat || session.hostProvider.isBlank()) return@map session
+            if (prior.hostSessionId.isBlank() || session.hostSessionId.isBlank()) return@map session
+            if (session.hostSessionId == prior.hostSessionId || session.hostProvider != prior.hostProvider) return@map session
+            if (hostListFinal) session
             else session.copy(hostSessionId = prior.hostSessionId)
         }
 }
