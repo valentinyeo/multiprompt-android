@@ -220,7 +220,7 @@ class ComposerLongDraftTest {
 
         val field = node(compose.onNode(hasSetTextAction()))
         val layout = textLayout(field)
-        assertTrue("the draft must fit to keep its pill: lines=${layout.lineCount}", !layout.didExceedMaxLines)
+        assertTrue("the draft must fit to keep its pill: lines=${layout.lineCount}", !layout.hasVisualOverflow)
 
         val bitmap = save(compose.onNode(hasSetTextAction()), "composer-pill")
         val surface = Kit.Surface.toArgb()
