@@ -700,7 +700,7 @@ class SessionReaderConnection(
     }
 
     private suspend fun <T> withFreshClient(block: suspend (SshClient) -> T): T {
-        val client = repository.connect(host)
+        val client = withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) }
         return try {
             block(client)
         } finally {

@@ -183,6 +183,8 @@ class ChatHistoryConnectionTest {
         @Volatile var online = true
         @Volatile var hangSnapshot = false
         @Volatile var rejectEngine = false
+        @Volatile var dropFirstSubmit = false
+        val retries = java.util.concurrent.CopyOnWriteArrayList<String>()
         val submissions = java.util.concurrent.CopyOnWriteArrayList<String>()
         val dismissals = java.util.concurrent.CopyOnWriteArrayList<String>()
         private val submitted = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
@@ -236,7 +238,8 @@ class ChatHistoryConnectionTest {
                         submissions.add(request.getString("text"))
                         val row = JSONObject().put("id", request.getString("message_id")).put("provider", "claude").put("sid", "sid1")
                             .put("text", request.getString("text")).put("position", submitted.size + 1).put("attempt", "attempt1")
-                            .put("state", "queued").put("deadline", JSONObject.NULL).put("receipt", JSONObject.NULL).put("epoch", 1).put("created", 1.0)
+                            .put("state", if (dropFirstSubmit) "failed" else "queued").put("deadline", JSONObject.NULL)
+                            .put("receipt", JSONObject.NULL).put("epoch", 1).put("created", 1.0)
                         submitted.add(row)
                         result(id, JSONObject().put("epoch", 1).put("seq", head).put("message", row))
                     }
@@ -246,6 +249,16 @@ class ChatHistoryConnectionTest {
                         val stored = submitted.firstOrNull { it.getString("id") == token } ?: error("Unknown message")
                         val row = JSONObject(stored.toString()).put("state", "cancelled")
                         submitted[submitted.indexOf(stored)] = row
+                        result(id, JSONObject().put("epoch", 1).put("seq", head).put("message", row))
+                    }
+                    "message_retry" -> {
+                        val token = request.getString("message_id")
+                        retries.add(token)
+                        val index = submitted.indexOfFirst { it.getString("id") == token }
+                        require(index >= 0) { "unknown message" }
+                        val row = JSONObject(submitted[index].toString()).put("state", "queued")
+                            .put("receipt", JSONObject.NULL).put("attempt", "attempt2")
+                        submitted[index] = row
                         result(id, JSONObject().put("epoch", 1).put("seq", head).put("message", row))
                     }
                     "message_events" -> {
@@ -359,6 +372,26 @@ class ChatHistoryConnectionTest {
                 chat.nudge()
             }
             assertEquals(listOf("/clear", "after dropped link"), fake.submissions.toList())
+        }
+    }
+
+    @Test
+    fun aSubmitTheChatDroppedWithoutAnAttemptIsQueuedAgainByItself(): Unit = runBlocking {
+        val fake = FakeHost().apply { dropFirstSubmit = true }
+        val preferences = RuntimeEnvironment.getApplication().getSharedPreferences("recover-${java.util.UUID.randomUUID()}", 0)
+        ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), journal = MessageJournal(preferences), gate = MessageGate(),
+            connectedExchange = { fake.connect(it) }, pollGate = ChatPollGate()).use { chat ->
+            chat.pollGate.acquire()
+            chat.start()
+            withTimeout(10_000L) { chat.state.first { it.ready } }
+            val admission = chat.submit("sent while the reply streamed")
+            assertTrue(admission is PromptAdmission.Recorded)
+            withTimeout(10_000L) { chat.state.first { it.replica?.messages?.values?.any { row -> row.state == MessageProtocol.State.FAILED } == true } }
+            withTimeout(10_000L) { while (fake.retries.isEmpty()) delay(20L) }
+            assertEquals(listOf("sent while the reply streamed"), fake.submissions.toList())
+            assertEquals(1, fake.retries.size)
+            withTimeout(10_000L) { chat.state.first { it.replica?.messages?.values?.any { row -> row.state == MessageProtocol.State.QUEUED } == true } }
         }
     }
 
