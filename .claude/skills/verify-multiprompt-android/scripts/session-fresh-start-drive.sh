@@ -64,9 +64,10 @@ fi
 assert_one_inbox_row inbox-after-relaunch
 "$mpa" tap desc "Robot $fixture_session"
 assert_chat after-relaunch
-"$mpa" tap desc 'Session actions'
-"$mpa" tap text 'Resync chat'
-assert_chat after-resync
+"$mpa" key back
+"$mpa" read --wait-text Inbox
+"$mpa" tap desc "Robot $fixture_session"
+assert_chat after-reopen
 fresh_fixture evidence > "$EVIDENCE/fresh-start-final-host.json"
 python3 - "$EVIDENCE" <<'PYPROOF'
 import json
