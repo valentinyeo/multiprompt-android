@@ -1,0 +1,1 @@
+Android: working dots move even with battery saver on

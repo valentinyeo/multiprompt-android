@@ -1,0 +1,1 @@
+Android: a sent message always shows the working dots until the reply

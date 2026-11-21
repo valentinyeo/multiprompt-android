@@ -1,0 +1,1 @@
+Android: keep one server link open for the chat list
