@@ -1,0 +1,1 @@
+Android: chats made on desktop show their real AI name

@@ -1,0 +1,1 @@
+Android: measure app start time with and without startup profile

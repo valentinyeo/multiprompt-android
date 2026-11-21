@@ -29,7 +29,7 @@ jobs:
         with:
           gradle-version: "9.5.1"
       - name: Build the app
-        run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug
+        run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug
 
   test:
     name: test
@@ -74,7 +74,7 @@ jobs:
 
       - name: Source files, comments and tool checks
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh source
 
       - name: Upload chat screenshots and JVM results
@@ -109,7 +109,7 @@ jobs:
           gradle-version: "9.5.1"
       - name: Debug unit tests
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh unit
       - uses: actions/upload-artifact@v4
         if: always()
@@ -144,7 +144,7 @@ jobs:
           gradle-version: "9.5.1"
       - name: Material 3 unit tests
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh m3
       - uses: actions/upload-artifact@v4
         if: always()
@@ -171,7 +171,7 @@ jobs:
           gradle-version: "9.5.1"
       - name: Android lint
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh lint
       - uses: actions/upload-artifact@v4
         if: always()

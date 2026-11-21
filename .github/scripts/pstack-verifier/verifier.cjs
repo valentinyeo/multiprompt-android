@@ -221,13 +221,17 @@ function saysBug(text) {
   return BUG_WORD.test(String(text ?? ''));
 }
 
-function loadTicketTitles(file = path.join(__dirname, '../../../tools/release-notes/ticket-titles.json')) {
+function loadTicketTitles(directory = path.join(__dirname, '../../../tools/release-notes/titles')) {
+  const titles = {};
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    for (const name of fs.readdirSync(directory).sort()) {
+      const match = /^((?:IGSH|HYCI)-[1-9]\d*)\.txt$/.exec(name);
+      if (match) titles[match[1]] = fs.readFileSync(path.join(directory, name), 'utf8').replace(/\n$/, '');
+    }
   } catch {
-    return {};
+    return titles;
   }
+  return titles;
 }
 
 function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {}) {

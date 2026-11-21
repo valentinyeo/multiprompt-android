@@ -1,0 +1,1 @@
+PR checks follow the pstack playbooks: one verifier, touched journeys only

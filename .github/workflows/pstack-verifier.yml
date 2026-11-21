@@ -43,7 +43,7 @@ jobs:
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
-            tools/release-notes/ticket-titles.json
+            tools/release-notes/titles
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -155,7 +155,7 @@ jobs:
           sparse-checkout: |
             .github/scripts
             .claude/skills/verify-multiprompt-android/features
-            tools/release-notes/ticket-titles.json
+            tools/release-notes/titles
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
