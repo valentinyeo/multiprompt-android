@@ -120,7 +120,7 @@ def apply_fresh_start(home):
     handover = where['root'] / (host_key(SID) + '.handover-' + uuid.uuid4().hex + '.json')
     write_json(handover, dict(text=MARKERS['handover'], provider='claude', sid=SID, at=datetime.datetime.now().timestamp()))
     state = reader['host_read'](where['state'])
-    updated = dict(state, native_session=NATIVE_AFTER, context_session=str(uuid.uuid4()), display_history=True)
+    updated = dict(state, native_session=NATIVE_AFTER, context_session=str(uuid.uuid4()))
     updated.pop('fresh_start', None)
     reader['host_write'](where['state'], updated)
     config = reader['host_read'](where['config'])
@@ -211,6 +211,22 @@ def console():
     os.execvp('sleep', ['sleep', 'infinity'])
 
 
+def emit(event):
+    print(json.dumps(event), flush=True)
+
+
+def claude():
+    boundary()
+    option = next((name for name in ('--session-id', '--resume') if name in sys.argv), None)
+    native = sys.argv[sys.argv.index(option) + 1] if option else SID
+    emit(dict(type='system', subtype='init', session_id=native, model='sonnet'))
+    for line in sys.stdin:
+        request = json.loads(line)
+        if request.get('type') == 'control_request':
+            emit(dict(type='control_response', response=dict(subtype='success', request_id=request['request_id'], response={})))
+    return 0
+
+
 def cache(host, host_id, hostname, port, username):
     name = f'{host_id}-{username}@{hostname}:{port}-{SID}.jsonl'
     payload = dict(name=name, sid=SID, session=TMUX, lines=cache_lines(), stale=MARKERS['old'])
@@ -219,11 +235,12 @@ def cache(host, host_id, hostname, port, username):
 
 
 COMMANDS = dict(plan=plan, check=check, cache=cache)
+FIXTURE_COMMANDS = ('plan', 'seed', 'check', 'console', 'apply-fresh-start', 'evidence', 'cache', 'visible')
 
 
 def main(argv):
     parser = argparse.ArgumentParser(description='Desktop Fresh start shape for one stable inbox row.')
-    parser.add_argument('command', choices=['plan', 'seed', 'check', 'console', 'apply-fresh-start', 'evidence', 'cache', 'visible'])
+    parser.add_argument('command', choices=FIXTURE_COMMANDS)
     parser.add_argument('--home', default=None)
     arguments = parser.parse_args(argv[1:])
     home = Path(arguments.home or HOME)
@@ -255,5 +272,10 @@ def main(argv):
     return 0
 
 
+def entry(argv):
+    first = argv[1] if len(argv) > 1 else ''
+    return main(argv) if first in FIXTURE_COMMANDS else claude()
+
+
 if __name__ == '__main__':
-    sys.exit(main(sys.argv))
+    sys.exit(entry(sys.argv))

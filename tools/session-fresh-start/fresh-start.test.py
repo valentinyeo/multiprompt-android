@@ -1,4 +1,5 @@
-import importlib.util
+import io
+import json
 import os
 import subprocess
 import sys
@@ -31,9 +32,14 @@ class FreshStartFixtureTest(unittest.TestCase):
     def test_fresh_start_chooses_native_after_and_hides_old_stale(self):
         payload = fixture.seed_before(self.home)
         fixture.write_json(self.home / 'session-fresh-start.json', payload)
-        with patch.object(subprocess, 'run', return_value=None):
+        with patch.dict(os.environ, dict(HOME=str(self.home))), \
+                patch.object(subprocess, 'run', return_value=None):
             fixture.apply_fresh_start(self.home)
-        visible = fixture.visible_transcript(self.home)['visible']
+        with patch.dict(os.environ, dict(HOME=str(self.home))):
+            visible = fixture.visible_transcript(self.home)['visible']
+        archive = list((self.home / '.local/state/multiprompt/agent-host').glob('*.history.jsonl'))
+        self.assertEqual(1, len(archive))
+        self.assertIn(fixture.MARKERS['old'], archive[0].read_text())
         self.assertNotIn(fixture.MARKERS['old'], visible)
         self.assertEqual(['HANDOVER_3000', 'FRESH_REPLY_3000'], visible[-2:])
 
@@ -48,6 +54,19 @@ class FreshStartFixtureTest(unittest.TestCase):
         tmux_start = setup.index('tmux new-session')
         self.assertLess(tmux_start, host_start)
         self.assertNotIn("cli('start'", console)
+
+    def test_claude_binary_serves_the_agent_host(self):
+        requests = io.StringIO(json.dumps(dict(type='control_request', request_id='req-3000')) + '\n')
+        output = io.StringIO()
+        with patch.dict(os.environ, dict(HOME=str(self.home))), \
+                patch.object(sys, 'argv', ['claude', '--session-id', fixture.SID]), \
+                patch.object(sys, 'stdin', requests), patch.object(sys, 'stdout', output):
+            self.assertEqual(0, fixture.entry(sys.argv))
+        events = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(fixture.SID, events[0]['session_id'])
+        self.assertEqual(dict(subtype='success', request_id='req-3000', response={}),
+                         events[1]['response'])
+        self.assertEqual('control_response', events[1]['type'])
 
     def test_inbox_counter_requires_exactly_one_row(self):
         xml = self.home / 'inbox.xml'
