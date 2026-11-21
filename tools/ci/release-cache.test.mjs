@@ -78,7 +78,9 @@ test('Gradle steps retry a busy repository through one wrapper', () => {
   for (const job of ['test', 'unit-tests', 'm3-unit-tests', 'lint']) {
     assert.match(jobBody(workflow, job), /GRADLE: tools\/ci\/gradle-retry\.sh/, `${job} must retry its Gradle step`);
   }
-  assert.match(readFileSync(new URL('../../tools/ci/gradle-retry.sh', import.meta.url), 'utf8'), /attempt.*-ge 3/);
+  const retry = readFileSync(new URL('../../tools/ci/gradle-retry.sh', import.meta.url), 'utf8');
+  assert.match(retry, /GRADLE_RETRY_ATTEMPTS:-6/);
+  assert.match(retry, /GRADLE_RETRY_WINDOW_SECONDS:-300/);
   assert.match(readFileSync(new URL('../../tools/check.sh', import.meta.url), 'utf8'), /tools\/ci\/gradle-retry\.test\.mjs/);
 });
 
