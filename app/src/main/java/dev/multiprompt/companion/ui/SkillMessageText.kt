@@ -45,9 +45,12 @@ internal class SkillPillText(private val spans: List<SkillSpan>) : VisualTransfo
     }
 }
 
+internal fun TextLayoutResult.scrollsInsideComposer(): Boolean =
+    multiParagraph.didExceedMaxLines || lineCount > ReaderComposerMaxLines
+
 @Composable
 internal fun Modifier.skillPills(spans: List<SkillSpan>, layout: TextLayoutResult?): Modifier {
-    if (spans.isEmpty() || layout == null || layout.hasVisualOverflow) return this
+    if (spans.isEmpty() || layout == null || layout.scrollsInsideComposer()) return this
     val padX = with(LocalDensity.current) { 2.dp.toPx() }
     val padY = with(LocalDensity.current) { 1.dp.toPx() }
     val stroke = with(LocalDensity.current) { Kit.OutlineWidth.toPx() }

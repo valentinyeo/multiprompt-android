@@ -4600,7 +4600,7 @@ internal fun ReaderScreen(
                         val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
-                        val pillsDrawn = laidOut != null && !laidOut.hasVisualOverflow
+                        val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
                         val composerGrown = (laidOut?.lineCount ?: 1) > 1
                         val skillText = remember(skillSpans, pillsDrawn) {
                             if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans)
@@ -4624,7 +4624,7 @@ internal fun ReaderScreen(
                             visualTransformation = skillText,
                             onTextLayout = { composerLayout = it },
                             minLines = 1,
-                            maxLines = 6,
+                            maxLines = ReaderComposerMaxLines,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                             readOnly = dictationActive,

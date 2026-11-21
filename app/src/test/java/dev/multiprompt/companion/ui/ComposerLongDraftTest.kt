@@ -231,8 +231,9 @@ class ComposerLongDraftTest {
         val layout = textLayout(field)
         val tokenStart = longDraft.indexOf(skill)
         assertTrue(
-            "a long draft scrolls inside the composer field: lines=${layout.lineCount}",
-            layout.hasVisualOverflow,
+            "a long draft scrolls inside the composer field: lines=${layout.lineCount} " +
+                "maxLines=$ReaderComposerMaxLines exceeded=${layout.multiParagraph.didExceedMaxLines}",
+            layout.scrollsInsideComposer(),
         )
         val first = layout.getBoundingBox(tokenStart)
         val last = layout.getBoundingBox(longDraft.length - 1)
@@ -245,7 +246,7 @@ class ComposerLongDraftTest {
         }
         val textRight = (micBounds.left - fieldBounds.left).toInt() - 4
         val (pillRows, pillPixels) = skillPillBandPixels(bitmap, textRight)
-        println("COMPOSER_PILL rows=$pillRows pixels=$pillPixels textRight=$textRight overflow=${layout.hasVisualOverflow}")
+        println("COMPOSER_PILL rows=$pillRows pixels=$pillPixels textRight=$textRight scrolls=${layout.scrollsInsideComposer()}")
 
         assertTrue(
             "the + button sits inside the composer row: attach=$attachBounds row=$barBounds",
@@ -290,7 +291,10 @@ class ComposerLongDraftTest {
 
         val field = node(compose.onNode(hasSetTextAction()))
         val layout = textLayout(field)
-        assertTrue("the draft must fit to keep its pill: lines=${layout.lineCount}", !layout.hasVisualOverflow)
+        assertTrue(
+            "the draft must fit to keep its pill: lines=${layout.lineCount}",
+            !layout.scrollsInsideComposer(),
+        )
 
         val mic = node(compose.onNodeWithContentDescription("Start dictation"))
         val bitmap = save(compose.onNode(hasSetTextAction()), "composer-pill")
