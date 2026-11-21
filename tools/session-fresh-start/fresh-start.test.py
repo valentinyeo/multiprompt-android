@@ -1,6 +1,7 @@
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -54,6 +55,17 @@ class FreshStartFixtureTest(unittest.TestCase):
         tmux_start = setup.index('tmux new-session')
         self.assertLess(tmux_start, host_start)
         self.assertNotIn("cli('start'", console)
+
+    def test_setup_script_resolves_the_repository_root(self):
+        setup = (
+            ROOT / '.claude/skills/verify-multiprompt-android/scripts/session-fresh-start-setup.sh'
+        )
+        root_line = next(line for line in setup.read_text().splitlines() if line.startswith('root='))
+        resolved = subprocess.run(
+            ['bash', '-c', f'scripts={shlex.quote(str(setup.parent))}; {root_line}; printf %s "$root"'],
+            capture_output=True, text=True, check=True).stdout
+        self.assertEqual(str(ROOT), resolved)
+        self.assertTrue(Path(resolved, 'tools/session-fresh-start/fixture.py').is_file())
 
     def test_claude_binary_serves_the_agent_host(self):
         requests = io.StringIO(json.dumps(dict(type='control_request', request_id='req-3000')) + '\n')

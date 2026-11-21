@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 [[ "${GITHUB_ACTIONS:-}" == true ]]
 scripts=$(cd "$(dirname "$0")" && pwd)
-root=$(cd "$scripts/../../.." && pwd)
+root=$(cd "$scripts/../../../.." && pwd)
 fixture_session=live-fresh-start-3000
 sudo install -m 755 "$root/tools/session-fresh-start/fixture.py" /home/verifyssh/session-fresh-start-fixture.py
 reader_source="$root/app/src/main/assets/chat_history_reader.py"
