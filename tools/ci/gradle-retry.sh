@@ -4,7 +4,11 @@ set -uo pipefail
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 
-backoff="${GRADLE_RETRY_BACKOFF_SECONDS:-15}"
+backoff="${GRADLE_RETRY_BACKOFF_SECONDS:-20}"
+max_backoff="${GRADLE_RETRY_MAX_BACKOFF_SECONDS:-90}"
+window="${GRADLE_RETRY_WINDOW_SECONDS:-300}"
+attempts_allowed="${GRADLE_RETRY_ATTEMPTS:-6}"
+SECONDS=0
 attempt=1
 
 while true; do
@@ -15,17 +19,34 @@ while true; do
     exit 0
   fi
 
-  if [[ "$attempt" -ge 3 ]]; then
-    echo "gradle-retry: gave up after $attempt attempts" >&2
+  if ! grep -Eqi 'status code 429|too many requests|could not resolve|could not get|read timed out|connect timed out|sockettimeoutexception|connection reset|timed out waiting|status code 5[0-9][0-9]' "$log"; then
     exit "$status"
   fi
 
-  if ! grep -Eqi 'status code 429|too many requests|could not resolve|could not get|read timed out|connect timed out|sockettimeoutexception|connection reset|timed out waiting' "$log"; then
+  if [[ "$attempt" -ge "$attempts_allowed" ]]; then
+    echo "gradle-retry: gave up after $attempt attempts in ${SECONDS}s" >&2
     exit "$status"
   fi
 
-  echo "gradle-retry: network failure on attempt $attempt, retrying in ${backoff}s" >&2
-  sleep "$backoff"
-  backoff=$((backoff * 2))
+  remaining=$((window - SECONDS))
+  if [[ "$remaining" -le 0 ]]; then
+    echo "gradle-retry: gave up after $attempt attempts, past the ${window}s retry window" >&2
+    exit "$status"
+  fi
+
+  wait_seconds=$((backoff * (1 << (attempt - 1))))
+  if [[ "$wait_seconds" -gt "$max_backoff" ]]; then
+    wait_seconds="$max_backoff"
+  fi
+  jitter=$((wait_seconds / 5))
+  if [[ "$jitter" -gt 0 ]]; then
+    wait_seconds=$((wait_seconds + RANDOM % (jitter + 1)))
+  fi
+  if [[ "$wait_seconds" -gt "$remaining" ]]; then
+    wait_seconds="$remaining"
+  fi
+
+  echo "gradle-retry: network failure on attempt $attempt, retrying in ${wait_seconds}s" >&2
+  sleep "$wait_seconds"
   attempt=$((attempt + 1))
 done
