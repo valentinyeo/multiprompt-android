@@ -54,11 +54,10 @@ class HostRequestTest {
 
     @Test fun aRequestOpenedBeforeConnectComesBackFromTheReplayedEvents() {
         val replica = MessageReplica(1, 4)
-        val replayed = replica.replayHost(page(0, 6,
+        val replayed = replica.replayHost(page(0, 4,
             1L to event("turn.started", "t1"),
             2L to event("approval.request", "t1", JSONObject().put("request_id", "req_1").put("tool", "Bash").put("title", "Run rm -rf build")),
-            4L to event("text.delta", "t1", JSONObject().put("text", "waiting"), "m1"),
-            6L to event("approval.resolved", "t1", JSONObject().put("request_id", "req_1").put("decision", "accept"))).events)
+            4L to event("text.delta", "t1", JSONObject().put("text", "waiting"), "m1")).events)
         assertEquals(4, replayed.cursor)
         val open = requireNotNull(replayed.host.request)
         assertEquals("approval", open.kind)
@@ -67,6 +66,14 @@ class HostRequestTest {
         assertEquals(listOf("Approve", "Always allow this session", "Decline"), card.options.map { it.label })
         assertEquals(false, card.other)
         assertEquals(listOf("waiting"), replayed.host.spoken.map { it.text })
+    }
+
+    @Test fun answeredApprovalStaysClosedWhenResolutionIsPastTheMessageCursor() {
+        val replica = MessageReplica(1, 5_000)
+        val replayed = replica.replayHost(page(3_977, 5_001,
+            4_980L to event("approval.request", "t1", JSONObject().put("request_id", "req_1").put("tool", "Bash").put("title", "Run rm -rf build")),
+            5_001L to event("approval.resolved", "t1", JSONObject().put("request_id", "req_1").put("decision", "accept"))).events)
+        assertNull(replayed.host.request)
     }
 
     @Test fun aPlanOffersImplementAndFeedback() {

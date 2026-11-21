@@ -1,7 +1,10 @@
 {
+  "IGSH-3006": "Android: update prompt shows three times on the Update screen",
   "IGSH-2969": "Android: message to a busy chat shows Not sent with no reason",
+  "IGSH-2480": "Android: tap a session name in a chat to open it",
   "IGSH-2974": "Android repo passes the pstack check",
   "IGSH-2972": "App screen edits stop failing the control list check",
+  "IGSH-2968": "Android: chat list pills at the bottom spread too far apart",
   "IGSH-2953": "Android: @mention list shows cryptic names instead of chat names",
   "IGSH-2884": "Break-it runs nightly and only chat-history journeys open the big chat",
   "IGSH-2903": "Android verification back to what pstack asks for",
@@ -62,6 +65,7 @@
   "IGSH-1885": "Android: undelivered messages show Not sent with Send again",
   "IGSH-1888": "Android: server runners show in their own group",
   "IGSH-1532": "Android: show each live message once",
+  "IGSH-1937": "Android: long chats open from saved state",
   "IGSH-1942": "Android: plus menu is short, model and effort open on tap",
   "IGSH-2289": "Android: jump button shows how many new messages",
   "IGSH-2285": "Android: take control of the server screen",
@@ -164,5 +168,6 @@
   "IGSH-2959": "Android: prompt boxes in chat are cut off and cannot be copied",
   "IGSH-2982": "Unit tests stop downloading Android files on their own",
   "IGSH-2957": "Android: message box breaks when a draft has several lines",
-  "IGSH-2993": "A Google download hiccup no longer fails every library"
+  "IGSH-2993": "A Google download hiccup no longer fails every library",
+  "IGSH-2996": "Android: chats stay listed after a long chat starts fresh"
 }
