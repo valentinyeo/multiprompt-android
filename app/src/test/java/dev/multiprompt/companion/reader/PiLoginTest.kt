@@ -38,7 +38,7 @@ class PiLoginTest {
             (PiLogin.outcome(reply("busy", "login_busy"), 5) as MessageActionResult.Rejected).reason,
         )
         assertEquals(
-            PiLogin.UNAVAILABLE,
+            "Pi login failed: this live chat is unavailable",
             (PiLogin.outcome(reply("refused", "invalid_provider"), 5) as MessageActionResult.Rejected).reason,
         )
         assertEquals(
