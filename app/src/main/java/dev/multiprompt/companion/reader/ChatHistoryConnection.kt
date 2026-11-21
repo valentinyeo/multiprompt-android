@@ -339,11 +339,11 @@ class ChatHistoryConnection(
         val deferredCommands = java.util.ArrayDeque<Command>()
         job = pollGate.launchIn(scope) {
             val restoreGeneration = generation
-            runCatching { cache.restore(cacheKey) }.getOrNull()?.let {
+            runCatching { cache.restore(cacheKey) }.getOrNull()?.let { restored ->
                 synchronized(this@ChatHistoryConnection) {
-                    if (generation == restoreGeneration && freshSid == null) {
-                        val unresolved = runCatching { pending(it.sid) }
-                        _state.value = ChatHistoryState(it, loaded = true, unresolved = unresolved.getOrNull() ?: _state.value.unresolved,
+                    if (generation == restoreGeneration && freshSid == null && !ChatHistory.olderThan(_state.value.history, restored)) {
+                        val unresolved = runCatching { pending(restored.sid) }
+                        _state.value = ChatHistoryState(restored, loaded = true, unresolved = unresolved.getOrNull() ?: _state.value.unresolved,
                             messageError = if (unresolved.isFailure) "Local storage failure; messages cannot be safely sent" else null)
                     }
                 }
