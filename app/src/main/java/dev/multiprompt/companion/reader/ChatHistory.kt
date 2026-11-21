@@ -258,11 +258,11 @@ data class ChatHistory(
         }
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
         val mergedDeliveries = previousDeliveries + page.deliveries + previousDeliveries.filterValues { it in terminal }
-        return if (mode == "older") {
-            copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
-        } else {
-            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
+        if (mode == "older") {
+            return copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
         }
+        val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
+        return if (mode == "tail" && olderThan(this, next)) this else next
     }
 
     companion object {
@@ -278,5 +278,14 @@ data class ChatHistory(
 
         fun cancellable(row: MessageProtocol.Row, now: Double?, seen: Double? = null): Boolean =
             row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT) && !notSent(row, now, seen)
+
+        fun olderThan(shown: ChatHistory, incoming: ChatHistory): Boolean {
+            val shownNewest = newestSeconds(shown) ?: return false
+            val incomingNewest = newestSeconds(incoming) ?: return false
+            return incomingNewest < shownNewest
+        }
+
+        private fun newestSeconds(history: ChatHistory): Double? =
+            history.rows.mapNotNull { LegacyMessageIdentity.seconds(it.timestamp) }.maxOrNull()
     }
 }
