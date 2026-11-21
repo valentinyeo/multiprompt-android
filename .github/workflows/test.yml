@@ -49,6 +49,9 @@ jobs:
       - name: No code comments
         run: node tools/strip-comments.mjs --check
 
+      - name: No direct model calls in CI scripts
+        uses: valentinyeo/token-ladder/.github/actions/lint-direct-model-calls@main
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
