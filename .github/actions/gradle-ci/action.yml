@@ -1,0 +1,15 @@
+name: Shared Gradle cache setup
+description: Pins Gradle 9.5.1 with strict home cache; read-only restores the Android tests build job cache
+inputs:
+  read-only:
+    description: When true, restore cache from GRADLE_BUILD_ACTION_CACHE_KEY_JOB without writing
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: "9.5.1"
+        gradle-home-cache-strict-match: true
+        cache-read-only: ${{ inputs.read-only == 'true' }}
