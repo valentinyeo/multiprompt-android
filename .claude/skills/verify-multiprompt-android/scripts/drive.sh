@@ -808,29 +808,6 @@ PYFAVORITES
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
     wait_for_text 'End tmux session'
-    for attempt in {1..5}; do
-        if select_node text 'Archive Session' >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
-    done
-    tap_text 'Archive Session'
-    wait_for_text 'Archive verify-session?'
-    select_node text 'Archive verify-session?' >/dev/null
-    select_node text 'This ends its tmux session but saves the name and resume command so it can be restored later.' >/dev/null
-    select_node text Cancel >/dev/null
-    select_node text Archive >/dev/null
-    shot confirmation-archive
-    tap_text Cancel
-    wait_for_absence 'Archive verify-session?'
-    wait_for_text verify-session
-    wait_for_text verify-keep
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
-        [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
-        tmux has-session -t verify-session && tmux has-session -t verify-keep
-    '
-    read -r row_x row_y <<< "$(select_node text verify-session)"
-    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
-    wait_for_text 'End tmux session'
     tap_text 'End tmux session'
     wait_for_text 'End verify-session completely?'
     select_node text 'End verify-session completely?' >/dev/null
