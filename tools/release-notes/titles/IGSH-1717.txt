@@ -1,0 +1,1 @@
+Android: three dots tick while the agent works

@@ -251,6 +251,7 @@ import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.reader.HostChange
+import dev.multiprompt.companion.reader.ModelMenu
 import dev.multiprompt.companion.reader.PiModel
 import dev.multiprompt.companion.reader.PiModels
 import dev.multiprompt.companion.reader.MessageActionResult
@@ -3196,7 +3197,16 @@ internal fun ReaderScreen(
         mutableFloatStateOf(initialFontScale)
     }
     val previewRuntimeDetails = remember(session.preview) { TmuxText.runtimeDetails(session.preview) }
-    val runtimeDetails = reader.runtimeDetails.takeIf { it.model != null } ?: previewRuntimeDetails
+    val streamRuntime = ModelMenu.displayRuntime(reader.runtimeDetails, reader.output)
+    val runtimeDetails = streamRuntime.takeIf { it.model != null } ?: previewRuntimeDetails
+    val hostSettingsNow = connection.hostSettings()
+    val settingsProviderKey = HostChange.providerOf(session.agent) ?: "claude"
+    val menuRuntimeLabel = ModelMenu.menuRuntimeLabel(
+        hostSettingsNow,
+        runtimeDetails,
+        reader.pendingModelFamily,
+        settingsProviderKey,
+    )
     val transcriptTransform = rememberTransformableState { _, zoomChange, _, _ ->
         val nextScale = (transcriptZoom * zoomChange).coerceIn(0.75f, 5f)
         transcriptZoom = nextScale
@@ -3908,7 +3918,7 @@ internal fun ReaderScreen(
                 botColor = draftStore.botColor(session),
                 botPicture = draftStore.shownBotPicture(session),
                 session = session,
-                modelLabel = runtimeDetails.label,
+                modelLabel = menuRuntimeLabel ?: runtimeDetails.label,
                 statusLabel = statusLabel,
                 onModelCommand = sendModelCommand,
                 onOpenTerminal = onOpenTerminal,
@@ -4173,10 +4183,13 @@ internal fun ReaderScreen(
                             }
                             ReaderMenuPage.MODEL -> {
                                 KitMenuRow(
-                                    label = "Current: ${runtimeDetails.label ?: "Unknown"}",
+                                    label = "Current: ${menuRuntimeLabel ?: runtimeDetails.label ?: "Unknown"}",
                                     enabled = false,
                                     onClick = {},
                                 )
+                                ModelMenu.switchFailureLine(reader.modelSwitchFailure)?.let { failure ->
+                                    KitMenuRow(label = failure, enabled = false, onClick = {})
+                                }
                                 KitMenuRow(
                                     label = "Open model picker (/model)",
                                     onClick = { menuExpanded = false; sendModelCommand("/model") },
@@ -4503,7 +4516,8 @@ internal fun ReaderScreen(
                                         }
                                     }
                                 } else if (piModelMenu) {
-                                    val currentModel = connection.hostSettings()?.model?.takeIf { it.isNotEmpty() } ?: runtimeDetails.model
+                                    val currentModel = runtimeDetails.model
+                                        ?: connection.hostSettings()?.model?.takeIf { it.isNotEmpty() }
                                     LaunchedEffect(connection) { connection.loadPiModels() }
                                     KitMenuRow(
                                         label = PiModels.SECTION,
@@ -4548,8 +4562,10 @@ internal fun ReaderScreen(
                                                 attachMenuExpanded = false
                                                 if (hostSettings == null) change.command?.let(sendModelCommand)
                                                 else readerScope.launch {
+                                                    if (change.key == "model") connection.markModelPick(change.value)
                                                     val applied = connection.changeHost(change) == MessageActionResult.Applied
                                                     if (applied) onSessionInteraction()
+                                                    else if (change.key == "model") connection.markModelPickFailed(change.failure)
                                                     android.widget.Toast.makeText(context, if (applied) change.notice else change.failure, android.widget.Toast.LENGTH_SHORT).show()
                                                 }
                                             },
@@ -4612,12 +4628,24 @@ internal fun ReaderScreen(
                                         val sections = HostChange.sections(hostSettings != null, settingsProvider)
                                         if (sections.isNotEmpty()) KitDivider()
                                         sections.forEach { (title, changes) ->
-                                            val current = changes.firstOrNull { it.active(hostSettings, runtimeDetails.model, runtimeDetails.effort) }?.label
+                                            val current = if (title == "Model") {
+                                                ModelMenu.modelRowLabel(
+                                                    hostSettings,
+                                                    runtimeDetails,
+                                                    reader.pendingModelFamily,
+                                                    settingsProviderKey,
+                                                )
+                                            } else {
+                                                changes.firstOrNull { it.active(hostSettings, runtimeDetails.model, runtimeDetails.effort) }?.label
+                                            }
                                             KitMenuRow(
                                                 label = title,
                                                 trailingText = listOfNotNull(current, "›").joinToString(" "),
                                                 onClick = { attachMenuSection = title },
                                             )
+                                        }
+                                        ModelMenu.switchFailureLine(reader.modelSwitchFailure)?.let { failure ->
+                                            KitMenuRow(label = failure, enabled = false, onClick = {})
                                         }
                                     }
                                 }

@@ -1,0 +1,1 @@
+After switching AI a reply shows once, not twice

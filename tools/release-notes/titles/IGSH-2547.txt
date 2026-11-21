@@ -1,0 +1,1 @@
+Android: Poteto chat stuck on Loading conversation while online

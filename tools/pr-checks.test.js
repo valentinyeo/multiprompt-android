@@ -68,14 +68,17 @@ test('failed, cancelled, neutral and unexpectedly skipped jobs never pass', asyn
   }
 });
 
-test('skipped required checks cannot pass; only unused journey branches may skip', async () => {
+test('skipped required checks cannot pass; only the unexpanded journey matrix may skip', async () => {
   const { checkStatus } = await gate;
   const pr = await green();
   for (const check of pr.statusCheckRollup) {
     assert.throws(() => checkStatus({ ...pr, statusCheckRollup: pr.statusCheckRollup.map(c => c === check ? { ...c, conclusion: 'SKIPPED' } : c) }), /Checks not green/, check.name);
   }
-  for (const name of ['journey native-skills.md', 'parent journey native-skills.md']) {
+  for (const name of ['journey ${{ matrix.feature }}', 'parent journey ${{ matrix.feature }}']) {
     assert.equal(checkStatus({ ...pr, statusCheckRollup: [...pr.statusCheckRollup, { __typename: 'CheckRun', name, status: 'COMPLETED', conclusion: 'SKIPPED' }] }).ready, true);
+  }
+  for (const name of ['journey native-skills.md', 'parent journey native-skills.md', 'journey native-skills.md / verify']) {
+    assert.throws(() => checkStatus({ ...pr, statusCheckRollup: [...pr.statusCheckRollup, { __typename: 'CheckRun', name, status: 'COMPLETED', conclusion: 'SKIPPED' }] }), /Checks not green/, name);
   }
 });
 
@@ -255,9 +258,9 @@ test('one wait owns a PR; lock is released on success and failure', async () => 
   assert.equal(await withWaitLock(pr, async () => 'released'), 'released');
 });
 
-test('verifier journey jobs may skip when nothing was picked, but never fail', async () => {
+test('only an unexpanded journey matrix may skip, and a journey never fails', async () => {
   const { checkStatus } = await gate;
-  for (const name of ['journey ${{ matrix.feature }}', 'parent journey ${{ matrix.feature }}', 'journey room-order.md / verify']) {
+  for (const name of ['journey ${{ matrix.feature }}', 'parent journey ${{ matrix.feature }}', 'journey ${{ matrix.feature }} / verify']) {
     const pr = await green();
     pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], name, conclusion: 'SKIPPED' });
     assert.equal(checkStatus(pr).ready, true, name);
@@ -267,4 +270,71 @@ test('verifier journey jobs may skip when nothing was picked, but never fail', a
   const pr = await green();
   pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], name: 'journeys-extra', conclusion: 'SKIPPED' });
   assert.throws(() => checkStatus(pr), /Checks not green/);
+});
+
+test('a picked journey that skipped blocks the merge', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], name: 'journey chat-shared.md / verify', conclusion: 'SKIPPED' });
+  assert.throws(() => checkStatus(pr), /Checks not green: journey chat-shared\.md \/ verify/);
+});
+
+test('a journey red on main is tolerated when pstack-verifier passed', async () => {
+  const { checkStatus, reportToleratedRedOnMain } = await gate;
+  const pr = await green();
+  const nightly = 'https://github.com/example/actions/runs/1';
+  const redOnMain = { journeys: ['session-gestures.md', 'chat-shared.md'], url: nightly };
+  pr.statusCheckRollup.push(
+    { __typename: 'CheckRun', name: 'journey session-gestures.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+    { __typename: 'CheckRun', name: 'journey chat-shared.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+  );
+  const status = checkStatus(pr, { redOnMain });
+  assert.equal(status.ready, true);
+  assert.deepEqual(status.toleratedRedOnMain.sort(), ['chat-shared.md', 'session-gestures.md']);
+  const lines = [];
+  reportToleratedRedOnMain(status, line => lines.push(line));
+  assert.match(lines.join('\n'), /Red on main tolerated \(nightly https:\/\/github\.com\/example\/actions\/runs\/1\): chat-shared\.md, session-gestures\.md/);
+});
+
+test('a failed journey still blocks when it is not red on main', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey chat-table.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+  assert.throws(
+    () => checkStatus(pr, { redOnMain: { journeys: ['session-gestures.md'], url: 'https://github.com/example/actions/runs/1' } }),
+    /Checks not green: journey chat-table\.md \/ verify/,
+  );
+});
+
+test('tolerated red-on-main journeys are reported even when another journey still blocks', async () => {
+  const { checkStatus, reportToleratedRedOnMain } = await gate;
+  const pr = await green();
+  const redOnMain = { journeys: ['session-gestures.md'], url: 'https://github.com/example/actions/runs/1' };
+  pr.statusCheckRollup.push(
+    { __typename: 'CheckRun', name: 'journey session-gestures.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+    { __typename: 'CheckRun', name: 'journey chat-table.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+  );
+  let thrown;
+  try {
+    checkStatus(pr, { redOnMain });
+  } catch (error) {
+    thrown = error;
+  }
+  assert.ok(thrown);
+  assert.deepEqual(thrown.toleratedRedOnMain, ['session-gestures.md']);
+  const lines = [];
+  reportToleratedRedOnMain(thrown, line => lines.push(line));
+  assert.match(lines.join('\n'), /session-gestures\.md/);
+});
+
+test('a red-on-main journey still blocks when pstack-verifier did not pass', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+  verifier.conclusion = 'FAILURE';
+  pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-gestures.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+  assert.throws(
+    () => checkStatus(pr, { redOnMain: { journeys: ['session-gestures.md'], url: 'https://github.com/example/actions/runs/1' } }),
+    /Checks not green: (?:journey session-gestures\.md \/ verify|pstack-verifier)/,
+  );
 });

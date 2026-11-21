@@ -1,0 +1,1 @@
+Android: blue dot shows for every new reply

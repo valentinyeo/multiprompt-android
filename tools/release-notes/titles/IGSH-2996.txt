@@ -1,0 +1,1 @@
+Android: chats stay listed after a long chat starts fresh

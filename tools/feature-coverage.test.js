@@ -291,7 +291,6 @@ for (const journey of ['chat-search.md', 'sessions.md']) test(`the real picker s
           ...process.env,
           PATH: `${directory}:${process.env.PATH}`,
           NODE_OPTIONS: `--require=${stub}`,
-          DEEPSEEK_API_KEY: 'test-only',
           REPO: 'example/repo',
           PR_NUMBER: '397',
           EVENT_HEAD_SHA: sha,
@@ -323,7 +322,7 @@ test('the real picker corrects outcome IDs once and keeps the code-mapped outcom
     const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
       cwd: root, encoding: 'utf8', env: {
         ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
-        DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
+        REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
         FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request, FIRST_OUTCOME: 'host-restart.md',
       },
     });
@@ -360,7 +359,7 @@ test('the real picker maps the PR #425 shared-reader files by rule and survives 
     const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
       cwd: root, encoding: 'utf8', env: {
         ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
-        DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
+        REPO: 'example/repo', PR_NUMBER: '425', EVENT_HEAD_SHA: sha,
         FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request,
       },
     });
@@ -387,7 +386,7 @@ test('the real picker still fails a genuinely unmapped product file', () => {
     const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
       cwd: root, encoding: 'utf8', env: {
         ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
-        DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '449', EVENT_HEAD_SHA: sha,
+        REPO: 'example/repo', PR_NUMBER: '449', EVENT_HEAD_SHA: sha,
         FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request,
       },
     });
@@ -413,7 +412,7 @@ test('the real picker reserves changed signed recipes and drivers before consult
       const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'pick'], {
         cwd: root, encoding: 'utf8', env: {
           ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
-          DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '429', EVENT_HEAD_SHA: sha,
+          REPO: 'example/repo', PR_NUMBER: '481', EVENT_HEAD_SHA: sha,
           FIXTURE_DIFF: diff, GITHUB_OUTPUT: output, REQUEST_FILE: request,
         },
       });
@@ -523,7 +522,6 @@ test('the real judge command reports a past search change coverage gap while its
         ...process.env,
         PATH: `${directory}:${process.env.PATH}`,
         NODE_OPTIONS: `--require=${stub}`,
-        DEEPSEEK_API_KEY: 'test-only',
         PICK_RESULT: 'success',
         REPO: 'example/repo',
         PR_NUMBER: '380',
@@ -542,32 +540,19 @@ test('the real judge command reports a past search change coverage gap while its
     const result = spawnSync(process.execPath, args, options);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /pstack-verifier: PASS @/);
-    assert.match(result.stdout, /FEATURE_NOT_EXERCISED: chat-search\.open/);
+    assert.match(result.stdout, /FEATURE_NOT_EXERCISED: required journey chat-search\.md was not scheduled/);
     const recorded = JSON.parse(fs.readFileSync(report, 'utf8'));
     assert.equal(recorded.sha, fixture.headSha);
     assert.deepEqual(recorded.accepted, []);
     assert.ok(recorded.plan.outcomes.includes('chat-search.open'));
-    options.env.PR_BODY = 'No author line.';
-    const noJudge = spawnSync(process.execPath, args, options);
-    assert.equal(noJudge.status, 0, noJudge.stderr);
-    assert.match(noJudge.stdout, /pstack-verifier: PASS @/);
-    assert.match(noJudge.stdout, /No independent judge ran: AUTHOR_MODEL_MISSING/);
-    const failing = path.join(directory, 'model-failing.cjs');
-    fs.writeFileSync(failing, "global.fetch = async () => { throw new Error('DeepSeek answered 503'); };");
-    options.env.PR_BODY = 'Author model: openai/gpt-6.1-sol';
-    options.env.NODE_OPTIONS = `--require=${failing}`;
-    const down = spawnSync(process.execPath, args, options);
-    assert.equal(down.status, 0, down.stderr);
-    assert.match(down.stdout, /pstack-verifier: PASS @/);
-    assert.match(down.stdout, /Judge unavailable: /);
-    assert.match(down.stdout, /Only the journey results were checked\./);
+    assert.match(result.stdout, /Head journey results decide this check/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('pick and judge exchange required IDs and retain the outcome coverage', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  assert.match(workflow, /changed_outcomes: \$\{\{ steps.pick.outputs.changed_outcomes \}\}/);
-  assert.match(workflow, /CHANGED_OUTCOMES: \$\{\{ needs.pick.outputs.changed_outcomes \}\}/);
+  assert.match(workflow, /changed_outcomes: \$\{\{ steps\.pick-retry\.outputs\.changed_outcomes \|\| steps\.pick\.outputs\.changed_outcomes \|\| steps\.pick-request\.outputs\.changed_outcomes \}\}/);
+  assert.match(workflow, /CHANGED_OUTCOMES: \$\{\{ needs\.pick\.outputs\.changed_outcomes \}\}/);
   assert.match(workflow, /name: verifier-feature-coverage/);
 });
 
@@ -592,8 +577,7 @@ test('the real picker schedules snippets even when the model omits it or fills a
             ...process.env,
             PATH: `${directory}:${process.env.PATH}`,
             NODE_OPTIONS: `--require=${stub}`,
-            DEEPSEEK_API_KEY: 'test-only',
-            REPO: 'example/repo',
+              REPO: 'example/repo',
             PR_NUMBER: '376',
             EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff,
@@ -669,8 +653,7 @@ test('the real picker schedules AI switch even when the model omits it or fills 
             ...process.env,
             PATH: `${directory}:${process.env.PATH}`,
             NODE_OPTIONS: `--require=${stub}`,
-            DEEPSEEK_API_KEY: 'test-only',
-            REPO: 'example/repo',
+              REPO: 'example/repo',
             PR_NUMBER: '373',
             EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff,
@@ -716,8 +699,7 @@ test('the real picker schedules Claude remote control even when the model omits 
             ...process.env,
             PATH: `${directory}:${process.env.PATH}`,
             NODE_OPTIONS: `--require=${stub}`,
-            DEEPSEEK_API_KEY: 'test-only',
-            REPO: 'example/repo',
+              REPO: 'example/repo',
             PR_NUMBER: '366',
             EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff,
@@ -788,8 +770,7 @@ test('the real picker schedules AI usage even when the model omits it or fills a
             ...process.env,
             PATH: `${directory}:${process.env.PATH}`,
             NODE_OPTIONS: `--require=${stub}`,
-            DEEPSEEK_API_KEY: 'test-only',
-            REPO: 'example/repo',
+              REPO: 'example/repo',
             PR_NUMBER: '377',
             EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff,
@@ -858,8 +839,7 @@ test('skill-pill changes and recipe edits schedule their journey even when the p
             ...process.env,
             PATH: `${directory}:${process.env.PATH}`,
             NODE_OPTIONS: `--require=${stub}`,
-            DEEPSEEK_API_KEY: 'test-only',
-            REPO: 'example/repo',
+              REPO: 'example/repo',
             PR_NUMBER: '378',
             EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff,
@@ -934,8 +914,7 @@ test('the real picker schedules chat table even when the model omits it or fills
             ...process.env,
             PATH: `${directory}:${process.env.PATH}`,
             NODE_OPTIONS: `--require=${stub}`,
-            DEEPSEEK_API_KEY: 'test-only',
-            REPO: 'example/repo',
+              REPO: 'example/repo',
             PR_NUMBER: '379',
             EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff,
@@ -1006,7 +985,7 @@ test('the real picker schedules clear-ranking code and recipe edits even when th
           cwd: root, encoding: 'utf8',
           env: {
             ...process.env, PATH: `${directory}:${process.env.PATH}`, NODE_OPTIONS: `--require=${stub}`,
-            DEEPSEEK_API_KEY: 'test-only', REPO: 'example/repo', PR_NUMBER: '381', EVENT_HEAD_SHA: fixture.headSha,
+            REPO: 'example/repo', PR_NUMBER: '381', EVENT_HEAD_SHA: fixture.headSha,
             FIXTURE_DIFF: diff, MODEL_FEATURES: JSON.stringify(features), CHANGE_KIND: diff === recipeDiff ? 'tooling' : 'product',
             GITHUB_OUTPUT: output,
           },

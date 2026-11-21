@@ -1,19 +1,26 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ticketPrefix = /^((?:IGSH|HYCI)-[1-9]\d*):\s+\S/;
+const titleFile = /^((?:IGSH|HYCI)-[1-9]\d*)\.txt$/;
 const filler = /checks and fixes|no visible change|no source changes|^(?:fix(?:es)?|update[sd]?|misc|cleanup|wip|chore)\.?$/i;
 
-export function loadCatalog(file = new URL('./ticket-titles.json', import.meta.url)) {
-  return JSON.parse(readFileSync(file, 'utf8'));
+export function loadCatalog(directory = new URL('./titles/', import.meta.url)) {
+  const dir = directory instanceof URL ? fileURLToPath(directory) : directory;
+  const catalog = {};
+  for (const name of readdirSync(dir).sort()) {
+    if (!titleFile.test(name)) throw new Error(`tools/release-notes/titles/${name} must be named after its ticket, like IGSH-1684.txt`);
+    catalog[name.replace(/\.txt$/, '')] = readFileSync(path.join(dir, name), 'utf8').replace(/\n$/, '');
+  }
+  return catalog;
 }
 
 export function ticketTitle(id, catalog) {
   const title = Object.hasOwn(catalog, id) ? catalog[id] : undefined;
   if (typeof title !== 'string' || !title.trim() || title !== title.trim() || /[\x00-\x1f\x7f]/.test(title)) {
-    throw new Error(`${id} needs its exact ticket title in tools/release-notes/ticket-titles.json`);
+    throw new Error(`${id} needs its exact ticket title in tools/release-notes/titles/${id}.txt`);
   }
   if (filler.test(title)) throw new Error(`${id} title is filler: ${title}`);
   return title;

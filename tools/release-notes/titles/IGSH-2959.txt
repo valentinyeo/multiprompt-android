@@ -1,0 +1,1 @@
+Android: prompt boxes in chat are cut off and cannot be copied
