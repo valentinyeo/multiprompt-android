@@ -1,0 +1,1 @@
+Android: chat list ties sort like desktop

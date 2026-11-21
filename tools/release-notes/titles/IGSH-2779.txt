@@ -1,0 +1,1 @@
+Phone chat shows only my messages and no AI replies

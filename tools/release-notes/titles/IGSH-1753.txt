@@ -1,0 +1,1 @@
+Android chat: one height for every control, smaller send button
