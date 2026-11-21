@@ -5367,7 +5367,7 @@ process.exitCode = await run(['spawn', '--name', 'Headless fixture', '--folder',
         self.assertFalse(reader.host_owned(self.provider, self.sid))
         self.assertEqual(reader.host_status(self.provider, self.sid)['owner'], 'terminal')
         self.assertFalse(reader.host_paths(self.provider, self.sid)['socket'].exists())
-        handle = reader.host_lock(self.provider, self.sid)
+        handle = self.wait_for(lambda: reader.host_lock(self.provider, self.sid))
         self.assertIsNotNone(handle, 'handover must release the owner lock')
         reader.host_release(handle)
 
