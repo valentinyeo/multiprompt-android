@@ -1,0 +1,1 @@
+Android: take back a waiting message the bot already received

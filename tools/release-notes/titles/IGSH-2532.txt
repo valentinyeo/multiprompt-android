@@ -1,0 +1,1 @@
+Android chat shows each message once, with its reply

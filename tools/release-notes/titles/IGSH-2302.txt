@@ -1,0 +1,1 @@
+Android: send a smaller terminal picture over the network

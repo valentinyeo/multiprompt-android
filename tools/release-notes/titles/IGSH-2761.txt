@@ -1,0 +1,1 @@
+AI usage sheet cuts off the Codex block below the navigation bar

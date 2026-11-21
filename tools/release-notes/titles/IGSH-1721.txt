@@ -1,0 +1,1 @@
+Android: type /rename and a name to rename the chat

@@ -1087,8 +1087,8 @@ test('drive.sh prints a product-assertion marker and keeps setup failures separa
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'pick'), /change_kind: \$\{\{ steps\.pick\.outputs\.change_kind \}\}/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /CHANGE_KIND: \$\{\{ needs\.pick\.outputs\.change_kind \}\}/);
-  assert.match(jobBlock(workflow, 'pick'), /tools\/release-notes\/ticket-titles\.json/);
-  assert.match(jobBlock(workflow, 'pstack-verifier'), /tools\/release-notes\/ticket-titles\.json/);
+  assert.match(jobBlock(workflow, 'pick'), /^\s+tools\/release-notes\/titles$/m);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /^\s+tools\/release-notes\/titles$/m);
 });
 
 test('verify.yml pins the parent app source to a full sha and takes it through app_ref', () => {

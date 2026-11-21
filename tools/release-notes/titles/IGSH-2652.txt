@@ -1,0 +1,1 @@
+The verifier fails planted bugs and passes clean builds

@@ -1,0 +1,1 @@
+Android: restored chats keep their original assistant

@@ -1,0 +1,1 @@
+Coverage-growth rules stop blocking Android PRs
