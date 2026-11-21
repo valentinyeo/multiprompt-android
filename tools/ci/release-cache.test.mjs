@@ -23,9 +23,13 @@ const gradleWorkflows = () =>
       return source.includes('gradle/actions/setup-gradle@v4') || source.includes('./.github/actions/gradle-ci');
     });
 
-test('shared Gradle setup pins 9.5.1, uses strict home cache, and gates read-only restores', () => {
+test('shared Gradle setup pins 9.5.1, writes a strict home cache, and lets readers fall back', () => {
   assert.match(gradleCi, /gradle-version:\s*"9\.5\.1"/);
-  assert.match(gradleCi, /gradle-home-cache-strict-match:\s*true/);
+  assert.match(
+    gradleCi,
+    /gradle-home-cache-strict-match: \$\{\{ inputs\.read-only != 'true' \}\}/,
+    'only cache writers may pin the exact key'
+  );
   assert.match(gradleCi, /cache-read-only: \$\{\{ inputs\.read-only == 'true' \}\}/);
 });
 
