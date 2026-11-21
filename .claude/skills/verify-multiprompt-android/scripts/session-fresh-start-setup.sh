@@ -4,6 +4,7 @@ scripts=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$scripts/../../../.." && pwd)
 fixture_session=live-fresh-start-3000
 sudo install -m 755 "$root/tools/session-fresh-start/fixture.py" /home/verifyssh/session-fresh-start-fixture.py
+sudo install -m 644 "$root/tools/verify-seed.py" /home/verifyssh/verify-seed.py
 reader_source="$root/app/src/main/assets/chat_history_reader.py"
 if [[ -n "${APP_REF:-}" ]]; then
     [[ "$(git -C app-source rev-parse HEAD)" == "$APP_REF" ]]
