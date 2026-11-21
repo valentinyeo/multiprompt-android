@@ -1,0 +1,1 @@
+Android: message box breaks when a draft has several lines

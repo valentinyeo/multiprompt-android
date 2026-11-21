@@ -23,16 +23,37 @@ process.exit(${apiStatus});
   }
 }
 
+function protectionWithContexts(contexts, strict) {
+  return { required_status_checks: { contexts, strict } };
+}
+
 test('live required contexts must equal the merge helper list, regardless of order', async () => {
   const { requiredChecks } = await import('./pr-checks.mjs');
-  const run = await check({ required_status_checks: { contexts: [...requiredChecks].reverse() } });
+  const run = await check(protectionWithContexts([...requiredChecks].reverse(), false));
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /8 required checks match/);
+  assert.match(run.stdout, /required_status_checks\.strict is false/);
+});
+
+test('required_status_checks.strict accepts true until the flag is flipped', async () => {
+  const { requiredChecks } = await import('./pr-checks.mjs');
+  const run = await check(protectionWithContexts(requiredChecks, true));
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /required_status_checks\.strict is still true/);
+});
+
+test('required_status_checks.strict rejects missing or unknown values', async () => {
+  const { requiredChecks } = await import('./pr-checks.mjs');
+  for (const strict of [undefined, null, 'yes', 2]) {
+    const run = await check(protectionWithContexts(requiredChecks, strict));
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stderr, /required_status_checks\.strict must be false/);
+  }
 });
 
 test('the audited 13-context protection fails with every missing check named', async () => {
   const contexts = ['build', 'unit-tests', 'm3-unit-tests', 'lint', 'test', 'image-preview-emulator', 'reply-notifications-emulator', 'session-rows-emulator', 'message-actions-emulator', 'approved-style-emulator', 'secret-scan', 'no-paid-ai', 'session-pins-emulator'];
-  const run = await check({ required_status_checks: { contexts } });
+  const run = await check(protectionWithContexts(contexts, false));
   assert.equal(run.status, 1);
   for (const name of ['pstack-verifier']) {
     assert.ok(run.stderr.includes(name), run.stderr);
@@ -41,7 +62,7 @@ test('the audited 13-context protection fails with every missing check named', a
 
 test('unexpected contexts also fail instead of accepting a superset', async () => {
   const { requiredChecks } = await import('./pr-checks.mjs');
-  const run = await check({ required_status_checks: { contexts: [...requiredChecks, 'obsolete-check'] } });
+  const run = await check(protectionWithContexts([...requiredChecks, 'obsolete-check'], false));
   assert.equal(run.status, 1);
   assert.match(run.stderr, /unexpected \[obsolete-check\]/);
 });
@@ -52,7 +73,7 @@ test('missing or malformed required contexts and failed API calls never pass', a
     assert.equal(run.status, 1);
   }
   const { requiredChecks } = await import('./pr-checks.mjs');
-  assert.equal((await check({ required_status_checks: { contexts: requiredChecks } }, ['--check'], 1)).status, 1);
+  assert.equal((await check(protectionWithContexts(requiredChecks, false), ['--check'], 1)).status, 1);
 });
 
 test('only the read-only --check command is accepted', async () => {
@@ -65,11 +86,11 @@ test('only the read-only --check command is accepted', async () => {
 
 test('the lead can remove known retired checks after merge, without a worker protection write', async () => {
   const { requiredChecks, retiringChecks } = await import('./pr-checks.mjs');
-  const run = await check({ required_status_checks: { contexts: [...requiredChecks, ...retiringChecks] } });
+  const run = await check(protectionWithContexts([...requiredChecks, ...retiringChecks], false));
   assert.equal(run.status, 0, run.stderr);
   assert.match(run.stdout, /8 target required checks present; lead must remove retired checks after merge/);
   assert.match(run.stdout, /phone-routing/);
-  const missing = await check({ required_status_checks: { contexts: [...requiredChecks.filter(name => name !== 'pstack-verifier'), ...retiringChecks] } });
+  const missing = await check(protectionWithContexts([...requiredChecks.filter(name => name !== 'pstack-verifier'), ...retiringChecks], false));
   assert.equal(missing.status, 1);
   assert.match(missing.stderr, /missing \[pstack-verifier\]/);
 });
