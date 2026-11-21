@@ -112,13 +112,12 @@ export function checkStatus(pr, { redOnMain = { journeys: [], url: '' } } = {}) 
 
 export async function waitForChecks(inspect, { wait = false, now = Date.now, pause = setTimeout, report = console.error, loadRedOnMain = null } = {}) {
   const deadline = now() + timeoutMs;
-  let head, base;
+  let head;
   while (true) {
     if (now() >= deadline) throw new Error('Check wait exceeded thirty minutes');
     const pr = await inspect();
-    if (head && (pr.headRefOid !== head || pr.baseRefOid !== base)) throw new Error('PR head or base changed; stop this wait');
+    if (head && pr.headRefOid !== head) throw new Error('PR head changed; stop this wait');
     head = pr.headRefOid;
-    base = pr.baseRefOid;
     const redOnMain = loadRedOnMain ? loadRedOnMain() : { journeys: [], url: '' };
     let status;
     try {
