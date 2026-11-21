@@ -66,6 +66,8 @@ data class ReaderState(
     val alternateOn: Boolean = false,
     val transcript: List<TranscriptMessage>? = null,
     val aiRestartRequestedAtMillis: Long = 0,
+    val pendingModelFamily: String? = null,
+    val modelSwitchFailure: String? = null,
 )
 
 internal fun transcriptAfterUpdate(
@@ -320,8 +322,26 @@ class SessionReaderConnection(
 
     fun sendRuntimeCommand(command: String): Boolean {
         val sent = requests.trySend(Request.RuntimeCommand(command)).isSuccess
-        if (sent) awaitModelSwitchConfirmation(command)
+        if (sent) {
+            modelFamilyFromCommand(command)?.let(::markModelPick)
+            awaitModelSwitchConfirmation(command)
+        }
         return sent
+    }
+
+    fun markModelPick(family: String) {
+        _state.update { it.copy(pendingModelFamily = family, modelSwitchFailure = null) }
+    }
+
+    fun markModelPickFailed(message: String) {
+        _state.update { it.copy(modelSwitchFailure = message, pendingModelFamily = null) }
+    }
+
+    private fun modelFamilyFromCommand(command: String): String? {
+        val trimmed = command.trim()
+        if (!trimmed.startsWith("/model")) return null
+        val tail = trimmed.removePrefix("/model").trim().lowercase()
+        return tail.split(Regex("\\s+")).firstOrNull()?.takeIf { it.isNotBlank() }
     }
 
     fun cancelQueued(messageId: String, held: List<QueuedMessages.SentPrompt> = emptyList()): Boolean {
@@ -382,7 +402,14 @@ class SessionReaderConnection(
         confirmation.begin()
         scope.launch {
             delay(MODEL_CONFIRM_TIMEOUT_MS + 1)
-            confirmation.expire()
+            if (confirmation.expire()) {
+                _state.update { current ->
+                    current.copy(
+                        modelSwitchFailure = "Model switch did not finish; try again",
+                        pendingModelFamily = null,
+                    )
+                }
+            }
         }
     }
 
@@ -553,12 +580,17 @@ class SessionReaderConnection(
                 return@streamSession
             }
             _state.update { current ->
-                val liveDetails = if (frame.details.model != null) {
-                    frame.details
-                } else {
-                    current.runtimeDetails
-                }
                 val merged = TmuxText.mergeSnapshot(current.output, frame.output)
+                val parsed = TmuxText.runtimeDetails(merged)
+                val liveDetails = when {
+                    frame.details.model != null -> frame.details
+                    parsed.model != null -> parsed
+                    else -> current.runtimeDetails
+                }
+                val settings = hostSettings()
+                val resolvedFamily = HostSettings.family(liveDetails.model)
+                    ?: HostSettings.family(settings?.model?.takeIf { it.isNotEmpty() })
+                val clearedPending = current.pendingModelFamily != null && resolvedFamily == current.pendingModelFamily
                 current.copy(
                     output = merged,
                     screenOutput = frame.screenOutput,
@@ -571,6 +603,8 @@ class SessionReaderConnection(
                     alternateOn = frame.alternateOn,
                     eta = frame.eta?.toEta(System.currentTimeMillis()),
                     hookState = frame.hookState,
+                    pendingModelFamily = if (clearedPending) null else current.pendingModelFamily,
+                    modelSwitchFailure = if (clearedPending) null else current.modelSwitchFailure,
                 )
             }
         }
