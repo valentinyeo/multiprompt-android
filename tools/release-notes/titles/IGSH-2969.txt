@@ -1,0 +1,1 @@
+Android: message to a busy chat shows Not sent with no reason

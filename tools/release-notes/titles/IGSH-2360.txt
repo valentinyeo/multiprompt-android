@@ -1,0 +1,1 @@
+Android: Stop button in place of Send while the AI works

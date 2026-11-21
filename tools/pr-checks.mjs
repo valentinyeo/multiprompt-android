@@ -27,6 +27,7 @@ export const retiringChecks = [
   'approved-style-emulator',
   'pick journeys',
 ];
+export const emptyJourneyMatrix = /^(?:parent )?journey \$\{\{ matrix\.feature \}\}(?: \/ .*)?$/;
 export const intervalMs = 300_000;
 export const timeoutMs = 1_800_000;
 
@@ -49,7 +50,7 @@ export function checkStatus(pr) {
   }
   checks.push(...Array.from(latestRuns.values(), ({ check }) => check));
   const failed = checks.filter(check => check.__typename === 'CheckRun'
-    ? check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS' && !(check.conclusion === 'SKIPPED' && /^(?:parent )?journey /.test(check.name))
+    ? check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS' && !(check.conclusion === 'SKIPPED' && emptyJourneyMatrix.test(check.name ?? ''))
     : check.__typename === 'StatusContext' ? !['SUCCESS', 'PENDING', 'EXPECTED'].includes(check.state) : true);
   if (failed.length) throw new Error(`Checks not green: ${failed.map(check => check.name ?? check.context ?? 'unknown check').join(', ')}`);
   const missing = requiredChecks.filter(name => !checks.some(check => check.__typename === 'CheckRun' && check.name === name));

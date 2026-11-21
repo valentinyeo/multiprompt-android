@@ -1,0 +1,1 @@
+Android: update prompt shows three times on the Update screen
