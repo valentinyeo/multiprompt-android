@@ -37,6 +37,18 @@ class FreshStartFixtureTest(unittest.TestCase):
         self.assertNotIn(fixture.MARKERS['old'], visible)
         self.assertEqual(['HANDOVER_3000', 'FRESH_REPLY_3000'], visible[-2:])
 
+    def test_fixture_setup_starts_tmux_before_host_start(self):
+        setup = (
+            ROOT / '.claude/skills/verify-multiprompt-android/scripts/session-fresh-start-setup.sh'
+        ).read_text()
+        console = (HERE / 'fixture.py').read_text()
+        self.assertIn('HOME=/home/verifyssh tmux new-session', setup)
+        self.assertIn('session-fresh-start-reader.py host start', setup)
+        host_start = setup.index('host start')
+        tmux_start = setup.index('tmux new-session')
+        self.assertLess(tmux_start, host_start)
+        self.assertNotIn("cli('start'", console)
+
     def test_inbox_counter_requires_exactly_one_row(self):
         xml = self.home / 'inbox.xml'
         session = 'live-fresh-start-3000'

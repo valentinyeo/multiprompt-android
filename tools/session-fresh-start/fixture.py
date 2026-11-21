@@ -206,7 +206,7 @@ def console():
     manifest = seed_before(HOME)
     write_json(HOME / 'session-fresh-start.json', manifest)
     assert cli('enable', 'claude', SID, '--tmux', TMUX, '--cwd', str(CWD))['status'] == 'enabled'
-    assert cli('start', 'claude', SID)['status'] in ('started', 'already')
+    subprocess.run(['tmux', 'set-option', '-t', TMUX, '@mp_host_sid', SID], check=True)
     print('Claude Code\n' + MARKERS['ready'] + '\nReady', flush=True)
     os.execvp('sleep', ['sleep', 'infinity'])
 
