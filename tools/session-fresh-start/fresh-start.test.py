@@ -18,6 +18,14 @@ import inbox as inbox_tool
 import fixture
 
 
+def row(session, title, top, clickable='true', enabled='true'):
+    return (
+        f'<node clickable="{clickable}" enabled="{enabled}" bounds="[0,{top}][1080,{top + 179}]">'
+        f'<node content-desc="Robot {session}" bounds="[42,{top + 27}][168,{top + 153}]" />'
+        f'<node text="{title}" bounds="[200,{top + 34}][485,{top + 87}]" class="android.widget.TextView" />'
+        '</node>')
+
+
 class FreshStartFixtureTest(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -88,14 +96,45 @@ class FreshStartFixtureTest(unittest.TestCase):
         payload = json.loads(output)
         self.assertIn('OLD_STALE_3000', payload['stale'])
 
-    def test_inbox_counter_requires_exactly_one_row(self):
+    def inbox_xml(self, rows):
         xml = self.home / 'inbox.xml'
+        body = ''.join(rows)
+        xml.write_text(f'''<hierarchy>{body}</hierarchy>''')
+        return xml
+
+    def test_inbox_counter_requires_exactly_one_row(self):
         session = 'live-fresh-start-3000'
-        xml.write_text(f'''<hierarchy>
-  <node text="{session}" bounds="[40,400][900,520]" class="android.widget.TextView" />
-  <node text="{session}" bounds="[40,900][900,1020]" class="android.widget.TextView" />
-</hierarchy>''')
+        xml = self.inbox_xml([row(session, 'verify-session', 400), row(session, 'verify-session', 900)])
         self.assertEqual(2, len(inbox_tool.session_rows(xml, session)))
+
+    def test_inbox_row_is_found_by_avatar_not_window_title(self):
+        session = 'live-fresh-start-3000'
+        xml = self.inbox_xml([row(session, 'verify-session', 400)])
+        self.assertEqual(
+            [dict(session=session, description='Robot ' + session, bounds='[0,400][1080,579]', top=400)],
+            inbox_tool.session_rows(xml, session))
+        self.assertEqual(0, inbox_tool.main(['inbox.py', str(xml), session]))
+
+    def test_inbox_counter_ignores_disabled_rows(self):
+        session = 'live-fresh-start-3000'
+        xml = self.inbox_xml([row(session, 'verify-session', 400, clickable='false', enabled='false')])
+        self.assertEqual(0, len(inbox_tool.session_rows(xml, session)))
+
+    def test_inbox_counter_rejects_a_duplicate_row(self):
+        session = 'live-fresh-start-3000'
+        xml = self.inbox_xml([
+            row(session, 'verify-session', 400),
+            row('c0030000-3000-4000-8000-000000003002', 'verify-session', 900)])
+        self.assertEqual(1, len(inbox_tool.session_rows(xml, session)))
+        self.assertEqual(1, inbox_tool.main(['inbox.py', str(xml), session]))
+
+    def test_drive_script_reaches_the_row_by_avatar(self):
+        drive = (
+            ROOT / '.claude/skills/verify-multiprompt-android/scripts/session-fresh-start-drive.sh'
+        ).read_text()
+        self.assertIn('tap desc "Robot $fixture_session"', drive)
+        self.assertNotIn('tap text "$fixture_session"', drive)
+        self.assertNotIn('read --wait-text "$fixture_session"', drive)
 
 
 if __name__ == '__main__':

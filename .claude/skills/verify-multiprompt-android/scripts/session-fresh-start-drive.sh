@@ -48,16 +48,16 @@ seed_stale_cache
 fresh_fixture apply-fresh-start > "$EVIDENCE/fresh-start-applied.json"
 fresh_fixture evidence > "$EVIDENCE/fresh-start-host.json"
 assert_one_inbox_row inbox-after-fresh-start
-"$mpa" tap text "$fixture_session"
+"$mpa" tap desc "Robot $fixture_session"
 assert_chat open
 "$mpa" key back
 "$mpa" read --wait-text Inbox
 assert_one_inbox_row inbox-after-open
 "$mpa" launch --force-stop --wait-text Inbox
 "$mpa" tap text All
-"$mpa" read --wait-text "$fixture_session"
+"$mpa" read --select desc --value "Robot $fixture_session" --timeout 30
 assert_one_inbox_row inbox-after-relaunch
-"$mpa" tap text "$fixture_session"
+"$mpa" tap desc "Robot $fixture_session"
 assert_chat after-relaunch
 "$mpa" tap desc 'Session actions'
 "$mpa" tap text 'Resync chat'
@@ -74,7 +74,8 @@ assert 'OLD_STALE_3000' not in transcript, transcript
 assert transcript[-2:] == ['HANDOVER_3000', 'FRESH_REPLY_3000'], transcript
 assert host['tmux_sid'] == host['sid']
 inbox = json.loads((root / 'fresh-start-inbox-inbox-after-fresh-start.json').read_text())
-assert inbox['text'] == 'live-fresh-start-3000', inbox
+assert inbox['session'] == 'live-fresh-start-3000', inbox
+assert inbox['description'] == 'Robot live-fresh-start-3000', inbox
 (root / 'fresh-start-state.json').write_text(json.dumps(dict(inbox=inbox, transcript=transcript), indent=2) + '\n')
 PYPROOF
 printf 'FRESH_START_ONE_ROW_AND_NEW_TRANSCRIPT_3000\n'
