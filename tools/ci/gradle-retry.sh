@@ -8,15 +8,29 @@ backoff="${GRADLE_RETRY_BACKOFF_SECONDS:-20}"
 max_backoff="${GRADLE_RETRY_MAX_BACKOFF_SECONDS:-90}"
 window="${GRADLE_RETRY_WINDOW_SECONDS:-300}"
 attempts_allowed="${GRADLE_RETRY_ATTEMPTS:-6}"
+modules="${GRADLE_MODULES_CACHE:-${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2}"
+args=("$@")
+repaired=0
 SECONDS=0
 attempt=1
 
 while true; do
-  "${GRADLE_BIN:-gradle}" "$@" 2>&1 | tee "$log"
+  "${GRADLE_BIN:-gradle}" "${args[@]}" 2>&1 | tee "$log"
   status="${PIPESTATUS[0]}"
 
   if [[ "$status" -eq 0 ]]; then
     exit 0
+  fi
+
+  if grep -Eqi 'could not find [^ ]+\.(jar|aar)|could not read|does not exist.*caches' "$log"; then
+    if [[ "$repaired" -eq 0 ]]; then
+      echo "gradle-retry: restored download cache is incomplete, clearing $modules and retrying with --refresh-dependencies" >&2
+      rm -rf "$modules"
+      args+=("--refresh-dependencies")
+      repaired=1
+      continue
+    fi
+    exit "$status"
   fi
 
   if ! grep -Eqi 'status code 429|too many requests|could not resolve|could not get|read timed out|connect timed out|sockettimeoutexception|connection reset|timed out waiting|status code 5[0-9][0-9]' "$log"; then
