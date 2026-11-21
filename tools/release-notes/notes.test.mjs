@@ -11,7 +11,6 @@ const catalog = {
   'IGSH-1684': 'Multibot Android: every update note line names its ticket',
   'IGSH-1694': 'Rooms on the phone',
   'HYCI-12': 'Android checks finish in ten minutes',
-  'SOFT-3024': 'Buttons and pills share one size',
   'IGSH-9': 'Checks and fixes, no visible change',
 };
 const tool = fileURLToPath(new URL('./notes.mjs', import.meta.url));
@@ -26,10 +25,8 @@ test('every line shows ticket number plus exact ticket title, once per ticket', 
   assert.deepEqual(noteLines([
     'IGSH-1694: Tapping a room opens it (#267)',
     'HYCI-12: drop the extra build (#270)',
-    'SOFT-3024: Buttons and pills share one size (#510)',
     'IGSH-1694: Rooms show from every server (#269)',
-  ], catalog), ['- IGSH-1694 Rooms on the phone', '- HYCI-12 Android checks finish in ten minutes',
-  '- SOFT-3024 Buttons and pills share one size']);
+  ], catalog), ['- IGSH-1694 Rooms on the phone', '- HYCI-12 Android checks finish in ten minutes']);
 });
 
 test('a commit without its ticket is refused', () => {
@@ -84,11 +81,11 @@ test('the shipped titles directory holds one valid file per ticket and no shared
   const shipped = loadCatalog();
   assert.ok(Object.keys(shipped).length > 0);
   for (const id of Object.keys(shipped)) {
-    assert.match(id, /^(?:IGSH|HYCI|SOFT)-[1-9]\d*$/);
+    assert.match(id, /^(?:IGSH|HYCI)-[1-9]\d*$/);
     assert.deepEqual(noteLines([`${id}: x`], shipped), [`- ${id} ${shipped[id]}`]);
   }
   const directory = fileURLToPath(new URL('./titles/', import.meta.url));
-  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI|SOFT)-[1-9]\d*\.txt$/);
+  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI)-[1-9]\d*\.txt$/);
   assert.throws(() => readdirSync(fileURLToPath(new URL('./ticket-titles.json', import.meta.url))), /ENOENT/);
 });
 
