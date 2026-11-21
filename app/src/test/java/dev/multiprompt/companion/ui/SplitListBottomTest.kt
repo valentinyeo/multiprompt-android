@@ -14,6 +14,7 @@ import dev.multiprompt.companion.account.AccountLayout
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
+import dev.multiprompt.companion.model.Workspace
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -42,6 +43,8 @@ class SplitListBottomTest {
             signedIn = true,
             accountLayout = layout,
             accountHosts = mapOf(0 to host),
+            workspaces = listOf(Workspace("Other", "Other", host.id, "/tmp")),
+            workspaceSplitIds = listOf(null, "Other"),
             sessionWorkspaceIds = layout.tabs.associate { SessionReadStore.key(host.id, it.session) to "Other" },
             selectedWorkspaceId = null,
             newestSessionsAtBottom = true,
