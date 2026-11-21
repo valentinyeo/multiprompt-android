@@ -518,7 +518,13 @@ fi
 tap_text 'Trust and connect'
 wait_for_text Inbox
 tap_text All
-if ! wait_for_text verify-session; then
+if [[ "$feature" == session-fresh-start.md ]]; then
+    if ! wait_for_text live-fresh-start-3000; then
+        printf 'Trusted host did not expose live-fresh-start-3000 in All\n' | tee -a "$EVIDENCE/trust-retries.txt"
+        shot trust-retry-1
+        exit 1
+    fi
+elif ! wait_for_text verify-session; then
     printf 'Trusted host did not expose verify-session in All\n' | tee -a "$EVIDENCE/trust-retries.txt"
     shot trust-retry-1
     exit 1
@@ -1636,6 +1642,10 @@ if [[ "$feature" == sessions.md ]]; then
     cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-back-to-folder.xml"
     sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-after-agent-picker.txt"
     cmp "$EVIDENCE/sessions-before-agent-picker.txt" "$EVIDENCE/sessions-after-agent-picker.txt"
+    exit 0
+fi
+if [[ "$feature" == session-fresh-start.md ]]; then
+    source "$scripts/session-fresh-start-drive.sh"
     exit 0
 fi
 tap_text verify-session
