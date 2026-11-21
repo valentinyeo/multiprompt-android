@@ -135,7 +135,8 @@ class SessionReaderConnection(
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
     private val pollGate = ChatPollGate()
 
-    fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
+    fun matches(host: HostProfile, agent: AgentKind, hostSessionId: String): Boolean =
+        this.host == host && this.agent == agent && this.hostSessionId == hostSessionId
 
     val sharedMessages: Boolean get() = ChatHistoryProtocol.messageProvider(agent, hostSessionId) != null
 

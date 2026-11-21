@@ -174,6 +174,14 @@ class ChatHistoryMergeTest {
         assertEquals("/a\n€", query.getString("cwd"))
         assertFalse(ChatHistoryProtocol.command("safe".toByteArray()).contains("safe"))
         assertTrue(query.getBoolean("no_jump"))
+        val hosted = JSONObject(
+            ChatHistoryProtocol.request(
+                2,
+                ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "live-test", "/work", "721fb507-2781-4e48-8b6d-debd6e2da3f3"),
+                ChatHistory(),
+            ),
+        )
+        assertFalse(hosted.getBoolean("no_jump"))
     }
     @Test
     fun heldMessagesUseReceiptBoundaryAndKeepDuplicateIdentities() {
