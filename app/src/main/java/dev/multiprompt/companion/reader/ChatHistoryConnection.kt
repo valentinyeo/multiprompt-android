@@ -456,7 +456,7 @@ class ChatHistoryConnection(
                                         val carried = hostCarry?.takeIf { it.first == page.sid }?.second?.takeIf { it.epoch == fresh.epoch && it.cursor <= fresh.cursor }
                                         var built = fresh.copy(host = carried?.host ?: HostStream())
                                         var after = carried?.cursor ?: maxOf(0L, built.cursor - HOST_REPLAY_TAIL)
-                                        while (provider in HOST_REPLAY_PROVIDERS && after < built.cursor) {
+                                        while (provider == "claude" && after < built.cursor) {
                                             requestId++
                                             val replay = MessageProtocol.events(exchange(MessageProtocol.request(requestId, messageScope, "message_events", JSONObject().put("after", after))), requestId, messageScope, after)
                                             if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }
@@ -890,7 +890,6 @@ class ChatHistoryConnection(
 
     companion object {
         const val HOST_REPLAY_TAIL = 1_024L
-        private val HOST_REPLAY_PROVIDERS = setOf("claude", "codex")
 
         fun cacheKey(host: HostProfile, identity: ChatHistoryProtocol.Identity): String =
             listOf(host.id, host.hostname, host.port.toString(), host.username,
