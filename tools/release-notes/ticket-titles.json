@@ -1,4 +1,12 @@
 {
+  "IGSH-2969": "Android: message to a busy chat shows Not sent with no reason",
+  "IGSH-2480": "Android: tap a session name in a chat to open it",
+  "IGSH-2974": "Android repo passes the pstack check",
+  "IGSH-2972": "App screen edits stop failing the control list check",
+  "IGSH-2968": "Android: chat list pills at the bottom spread too far apart",
+  "IGSH-2953": "Android: @mention list shows cryptic names instead of chat names",
+  "IGSH-2884": "Break-it runs nightly and only chat-history journeys open the big chat",
+  "IGSH-2903": "Android verification back to what pstack asks for",
   "IGSH-2771": "Failed release cannot poison later releases",
   "IGSH-2760": "Phone tests stop before the emulator starts",
   "IGSH-2754": "One phone test CLI replaces 34 loose test scripts",
@@ -147,5 +155,17 @@
   "IGSH-2748": "PR checker randomly refuses the chat fix as unmapped",
   "IGSH-2715": "Phone tests use real-shaped chats and a daily live chat probe",
   "IGSH-2781": "Chat phone tests use real-size chats and check the screen",
-  "IGSH-2779": "Phone chat shows only my messages and no AI replies"
+  "IGSH-2779": "Phone chat shows only my messages and no AI replies",
+  "IGSH-2840": "App crashes on Valentin's phone after update 0.1.609",
+  "IGSH-2906": "Coverage-growth rules stop blocking Android PRs",
+  "IGSH-2960": "Android PR checks work when the AI picker is out of credit",
+  "IGSH-2907": "Tests already broken on main become tickets, not PR blocks",
+  "IGSH-2761": "AI usage sheet cuts off the Codex block below the navigation bar",
+  "IGSH-2967": "Phone tests stop failing on missing Kotlin build files",
+  "IGSH-2962": "Android: new versions take 21 minutes to reach the phone",
+  "IGSH-2976": "A Maven Central hiccup no longer fails a phone test",
+  "IGSH-2959": "Android: prompt boxes in chat are cut off and cannot be copied",
+  "IGSH-2982": "Unit tests stop downloading Android files on their own",
+  "IGSH-2993": "A Google download hiccup no longer fails every library",
+  "IGSH-2996": "Android: chats stay listed after a long chat starts fresh"
 }

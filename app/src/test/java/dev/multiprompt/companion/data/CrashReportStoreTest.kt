@@ -66,11 +66,25 @@ class CrashReportStoreTest {
             assertEquals("${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})", captured.androidVersion)
             assertEquals("IGSH-429 test crash", captured.summary)
             assertTrue(captured.stackTrace.contains("java.lang.RuntimeException: IGSH-429 test crash"))
-            assertTrue(captured.uploadStackTrace.startsWith("java.lang.RuntimeException\n"))
-            assertFalse(captured.uploadStackTrace.contains("IGSH-429 test crash"))
+            assertTrue(captured.uploadStackTrace.startsWith("java.lang.RuntimeException: IGSH-429 test crash\n"))
             assertTrue(captured.uploadStackTrace.contains("CrashReportStoreTest.kt:"))
             assertTrue(captured.capturedAtEpochSeconds > 0)
             assertTrue(delegated)
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
+    }
+
+    @Test fun safeExceptionMessageReachesTheUploadTrace() {
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
+            store.install()
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread.currentThread(),
+                IllegalArgumentException("Can't represent a size of 300000 in Constraints"))
+            val captured = store.load()!!
+            assertTrue(captured.uploadStackTrace.startsWith(
+                "java.lang.IllegalArgumentException: Can't represent a size of 300000 in Constraints\n"))
         } finally {
             Thread.setDefaultUncaughtExceptionHandler(original)
         }
@@ -208,6 +222,104 @@ class CrashReportStoreTest {
         store.loadPending().forEach { uploader.upload(it, store::markUploaded) }
         assertEquals(0, requests)
         assertEquals(listOf(report), CrashReportStore(context).loadPending())
+    }
+
+    private fun exits(vararg records: ExitRecord): List<ExitRecord> = records.toList()
+
+    private fun exitRecord(
+        timestampMillis: Long = 1_794_000_000_000L,
+        pid: Int = 4242,
+        reason: Int = ExitReasons.ANR,
+        trace: String? = "----- pid 4242 -----\n  at android.os.MessageQueue.nativePollOnce(Native Method)",
+    ) = ExitRecord(timestampMillis, pid, reason, "Input dispatching timed out", 100, 2048L, 8192L, trace)
+
+    @Test fun startupCollectionQueuesEachReportableExitWithItsStatusSummary() {
+        val recorded = listOf(
+            exitRecord(timestampMillis = 1_794_000_000_000L, pid = 1, reason = ExitReasons.ANR),
+            exitRecord(timestampMillis = 1_794_000_001_000L, pid = 2, reason = ExitReasons.LOW_MEMORY, trace = null),
+            exitRecord(timestampMillis = 1_794_000_002_000L, pid = 3, reason = ExitReasons.CRASH_NATIVE, trace = null),
+            exitRecord(timestampMillis = 1_794_000_003_000L, pid = 4, reason = ExitReasons.CRASH, trace = null),
+            exitRecord(timestampMillis = 1_794_000_004_000L, pid = 5, reason = ExitReasons.SIGNALED, trace = null),
+            exitRecord(timestampMillis = 1_794_000_005_000L, pid = 6, reason = ExitReasons.EXCESSIVE_RESOURCE_USAGE, trace = null),
+            exitRecord(timestampMillis = 1_794_000_006_000L, pid = 7, reason = 1, trace = null),
+        )
+        val collected = CrashReportStore(context, ExitReasonSource { recorded })
+        collected.scheduleExitCollection()
+        collected.awaitExitCollection()
+        assertEquals(listOf(
+            "ANR: Input dispatching timed out",
+            "Low memory kill: Input dispatching timed out",
+            "Native crash: Input dispatching timed out",
+            "Java crash: Input dispatching timed out",
+            "Signaled exit: Input dispatching timed out",
+            "Excessive resource usage: Input dispatching timed out",
+        ), collected.loadPending().map(CrashReport::summary))
+        val anr = collected.loadPending().first()
+        assertEquals("main", anr.threadName)
+        assertEquals(1_794_000_000L, anr.capturedAtEpochSeconds)
+        assertTrue(anr.exitDetail.contains("reason=ANR (6)"))
+        assertEquals("at android.os.MessageQueue.nativePollOnce(Native Method)\n" +
+            "reason=ANR (6)\ndescription=Input dispatching timed out\nimportance=100\npss=2048kB\nrss=8192kB",
+            CrashPayload.stackTrace(anr))
+        assertNull(store.loadForDisplay())
+        assertNull(collected.loadForDisplay())
+    }
+
+    @Test fun repeatedStartupsDoNotQueueTheSameExitTwice() {
+        val recorded = listOf(exitRecord())
+        val first = CrashReportStore(context, ExitReasonSource { recorded })
+        first.scheduleExitCollection()
+        first.awaitExitCollection()
+        assertEquals(1, first.loadPending().size)
+
+        val second = CrashReportStore(context, ExitReasonSource { recorded })
+        second.scheduleExitCollection()
+        second.awaitExitCollection()
+        assertEquals(1, second.loadPending().size)
+
+        val newer = listOf(exitRecord(timestampMillis = 1_794_000_100_000L, pid = 900))
+        val third = CrashReportStore(context, ExitReasonSource { newer })
+        third.scheduleExitCollection()
+        third.awaitExitCollection()
+        assertEquals(2, third.loadPending().size)
+    }
+
+    @Test fun queuedExitSurvivesRecreationAndIsUploadedOnceWithTheServiceContract() {
+        val recorded = listOf(exitRecord(), exitRecord(timestampMillis = 1_794_000_000_500L, pid = 55, reason = ExitReasons.SIGNALED, trace = null))
+        val collected = CrashReportStore(context, ExitReasonSource { recorded })
+        collected.scheduleExitCollection()
+        collected.awaitExitCollection()
+        val bodies = mutableListOf<JSONObject>()
+        val uploader = uploader(AccountHttp { _, _, _, body ->
+            bodies += JSONObject(body.toString())
+            AccountReply(201, JSONObject().put("stored", true))
+        })
+        CrashReportStore(context, ExitReasonSource { emptyList() }).loadPending().forEach {
+            uploader.upload(it, collected::markUploaded)
+        }
+        assertEquals(2, bodies.size)
+        bodies.forEach { body ->
+            assertEquals(setOf("id", "captured_at", "app_version", "android_version", "thread", "summary", "stack_trace"),
+                body.keys().asSequence().toSet())
+            assertTrue(body.getString("stack_trace").isNotEmpty())
+        }
+        assertEquals("ANR: Input dispatching timed out", bodies.first().getString("summary"))
+        assertEquals("Signaled exit: Input dispatching timed out", bodies.last().getString("summary"))
+        assertTrue(collected.loadPending().isEmpty())
+        collected.awaitExitCollection()
+        assertTrue(collected.loadPending().isEmpty())
+    }
+
+    @Test fun uncaughtExceptionStillUsesTheVisibleSingleSlot() {
+        val original = Thread.getDefaultUncaughtExceptionHandler()
+        try {
+            Thread.setDefaultUncaughtExceptionHandler { _, _ -> }
+            CrashReportStore(context, ExitReasonSource { exits(exitRecord()) }).install()
+            Thread.getDefaultUncaughtExceptionHandler()!!.uncaughtException(Thread("main"), RuntimeException("IGSH-2840 crash"))
+            assertNotNull(store.loadForDisplay())
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(original)
+        }
     }
 
     private fun uploader(http: AccountHttp, signedIn: Boolean = true): CrashReportUpload {

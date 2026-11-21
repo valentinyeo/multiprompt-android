@@ -1035,6 +1035,11 @@ if [[ "$feature" == message-reply.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == crash-report.md ]]; then
+    source "$scripts/crash-report-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0

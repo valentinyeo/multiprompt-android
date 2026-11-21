@@ -235,6 +235,12 @@ else
 fi
 sudo -u verifyssh tmux set-window-option -t "$fixture_session" automatic-rename off
 sudo -u verifyssh tmux rename-window -t "$fixture_session" verify-session
+if [[ "${VERIFY_FEATURE:-}" == message-reply.md ]]; then
+    sudo -u verifyssh tmux new-session -d -s live-cl_mention-2953 -x 100 -y 32 'exec sleep infinity'
+    sudo -u verifyssh tmux set-window-option -t live-cl_mention-2953 automatic-rename off
+    sudo -u verifyssh tmux rename-window -t live-cl_mention-2953 'Mention 2953'
+    sudo -u verifyssh tmux display-message -p -t '=live-cl_mention-2953:' '#{session_name}|#{window_name}' > "$EVIDENCE/mention-session.txt"
+fi
 if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
     sudo -u verifyssh tmux set-option -t verify-session @mp_host_sid copy-chat-id-2371
     sudo -u verifyssh tmux new-session -d -s verify-name -x 100 -y 32 'python3 -u /home/verifyssh/console.py /home/verifyssh/name-receipts.txt'
@@ -260,7 +266,7 @@ if [[ "${VERIFY_FEATURE:-}" == session-favorites.md ]]; then
         tmux has-session -t verify-keep
     '
 fi
-if [[ "${VERIFY_FEATURE:-}" == device-approval.md || "${VERIFY_FEATURE:-}" == screencast-account.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == device-approval.md || "${VERIFY_FEATURE:-}" == screencast-account.md || "${VERIFY_FEATURE:-}" == crash-report.md ]]; then
     for name in pending-device denied-device; do
         ssh-keygen -q -t ed25519 -N '' -C "$name" -f "$FIXTURE/$name"
         ssh-keygen -lf "$FIXTURE/$name.pub" -E sha256 | awk '{print $2}' > "$EVIDENCE/$name-fingerprint.txt"

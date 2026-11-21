@@ -2,14 +2,14 @@
 
 Desktop owns the reader and connectors.
 Desktop also owns the test files.
-Source: [Desktop master](https://github.com/valentinyeo/multiprompt/tree/605597a163923914989a0cae06f727a83afbcd5a).
-Commit: `605597a163923914989a0cae06f727a83afbcd5a`.
-The reader SHA-256 is `13ff821c39e8e81b700016b054c92f03a474c6b7ca9e52e03979e17bb2b7012c`.
+Source: [Desktop master](https://github.com/valentinyeo/multiprompt/tree/f821d627aed08c62b4d0c47bb76ca1c58896b75b).
+Commit: `f821d627aed08c62b4d0c47bb76ca1c58896b75b`.
+The reader SHA-256 is `b7aa106a54cee586a64c4e9309fb887679d9275f1fdd7c46544b0f03b59bf1b6`.
 The Claude module SHA-256 is `7b181305096a39c3ac4276607a3177177f23ca0a88535c96604c2b3f393d1729`.
 The Codex module SHA-256 is `07e448dc7d5a849cbbf4b914ce375e147f9343906f213bcda00a7d7663757a31`.
 Android copies Desktop's ordered base64 prefix.
-Bundle length: 501543 bytes.
-Bundle SHA-256: `1331a99fec06fd45db0cfcebd8bf803c81e8dc129512613a4f46c5bac139d19d`.
+Bundle length: 510392 bytes.
+Bundle SHA-256: `b99d07bc32278e6a6bc8749bb3f4ab3cd2977b8ecae0e6796179282684ce9921`.
 
 `tools/sync-chat-reader.sh --check` verifies all three assets against Desktop.
 Locally, set `MULTIPROMPT_DESKTOP_REPO` to the Desktop repository.

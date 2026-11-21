@@ -35,7 +35,7 @@ class CrashReportUploadLifecycleTest {
     private lateinit var model: MainViewModel
     @Volatile private var crashStatus = 201
     @Volatile private var layoutStatus = 200
-    private val trace = "java.lang.IllegalStateException: private message\n" +
+    private val trace = "java.lang.IllegalStateException: \"private message\"\n" +
         "\tat dev.multiprompt.companion.MainViewModel.load(MainViewModel.kt:42)"
 
     @After fun close() {

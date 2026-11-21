@@ -37,4 +37,22 @@ sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reply-receipts.txt"
 grep -Fx '> REPLY_BUBBLE_418' "$EVIDENCE/reply-receipts.txt"
 grep -Fx 'REPLY_BODY_418' "$EVIDENCE/reply-receipts.txt"
 "$mpa" proof --name reply-sent --require-text REPLY_BODY_418 --require-text REPLY_DELIVERED_418 --forbid-text Replying --forbid-text 'Not sent' --forbid-text 'Send again' --forbid-text Remove --forbid-desc 'Cancel reply' --note MESSAGE_REPLY_JOURNEY_OK --proof-file "$EVIDENCE/reply-proof.txt"
+grep -Fx 'live-cl_mention-2953|Mention 2953' "$EVIDENCE/mention-session.txt"
+"$mpa" fill 'Message verify-session' '@Mention'
+"$mpa" read --wait-text 'Mention 2953'
+"$mpa" screenshot mention-list
+"$mpa" proof --name mention-list --require-text 'Mention 2953' --forbid-text 'live-cl_mention-2953' --note MENTION_LIST_NAMED_BY_CHAT --proof-file "$EVIDENCE/mention-proof.txt"
+"$mpa" tap text 'Mention 2953'
+"$mpa" read --wait-text '@Mention 2953'
+"$mpa" tap desc 'Send prompt'
+for attempt in {1..30}; do
+    if sudo grep -Fx '@Mention 2953{live-cl_mention-2953}' /home/verifyssh/receipts.txt; then break; fi
+    sleep 1
+done
+sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/mention-receipts.txt"
+grep -Fx '@Mention 2953{live-cl_mention-2953}' "$EVIDENCE/mention-receipts.txt"
+"$mpa" read --select editor-value --value composer --extra ''
+"$mpa" read --wait-text '@Mention 2953'
+"$mpa" screenshot mention-sent
+"$mpa" proof --name mention-sent --require-text '@Mention 2953' --forbid-text 'live-cl_mention-2953' --forbid-text '{live-cl_mention-2953}' --note MENTION_ROUTES_TO_SESSION --proof-file "$EVIDENCE/mention-sent-proof.txt"
 step=$((step + 4))

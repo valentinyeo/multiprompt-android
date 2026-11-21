@@ -46,6 +46,12 @@ class ApprovalFixture:
         if path == "/v1/secrets/screencast2" and method == "GET" and self.screencast:
             self.receipt(action="screencast_key_fetch", authenticated=True, status=200)
             return 200, dict(key=self.upload_key)
+        if path == "/v1/crash-reports" and method == "POST":
+            with (self.home / "crash-reports.jsonl").open("a") as output:
+                output.write(json.dumps(body) + "\n")
+            self.receipt(action="crash_report", crash_id=body.get("id"), summary=body.get("summary"),
+                         thread=body.get("thread"), stack_trace=body.get("stack_trace"))
+            return 201, dict(stored=True)
         if path == "/v1/layout":
             if method == "PUT":
                 if body.get("base_revision") != self.layout["revision"]:

@@ -47,14 +47,33 @@ jobs:
           script=.claude/skills/verify-multiprompt-android/scripts/control_map.py
           before=0
           python3 -B "$script" check > maintenance-evidence/source-before.txt 2>&1 || before=$?
+          live=0
+          CONTROL_MAP_LIVE=1 python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py > maintenance-evidence/control-tests.txt 2>&1 || live=$?
+          cat maintenance-evidence/control-tests.txt
           python3 -B "$script" locations
           after=0
           python3 -B "$script" check > maintenance-evidence/source-after.txt 2>&1 || after=$?
           registry=0
           node .github/scripts/pstack-verifier/coverage.cjs check > maintenance-evidence/registry.txt 2>&1 || registry=$?
           printf '{"before":%s,"after":%s,"registry":%s}\n' "$before" "$after" "$registry" > maintenance-evidence/source-result.json
+          printf 'control map tool tests exit=%s\n' "$live" > maintenance-evidence/control-tests-result.txt
           cp .claude/skills/verify-multiprompt-android/features/controls.json maintenance-evidence/controls.json
           cat maintenance-evidence/source-before.txt maintenance-evidence/source-after.txt
+      - name: Report coverage ratchets against last week
+        continue-on-error: true
+        run: |
+          mkdir -p maintenance-evidence
+          base=$(git rev-list -1 --before='7 days ago' HEAD || true)
+          base=${base:-HEAD^}
+          first=$(git log --reverse --format=%H -- .claude/skills/verify-multiprompt-android/features/control-gaps.json | head -n 1 || true)
+          if [ -n "$first" ] && git merge-base --is-ancestor "$base" "$first"; then base=$first; fi
+          set +e
+          BASE_SHA="$base" node .github/scripts/pstack-verifier/coverage.cjs check 2>&1 | tee maintenance-evidence/ratchet-registry.txt
+          registry=$?
+          python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.py check --base "$base" 2>&1 | tee maintenance-evidence/ratchet-controls.txt
+          controls=$?
+          printf 'ratchet base=%s registry=%s controls=%s\n' "$base" "$registry" "$controls" | tee maintenance-evidence/ratchet-result.txt
+          [ "$registry" -eq 0 ] && [ "$controls" -eq 0 ]
       - uses: actions/upload-artifact@v4
         if: always()
         with:

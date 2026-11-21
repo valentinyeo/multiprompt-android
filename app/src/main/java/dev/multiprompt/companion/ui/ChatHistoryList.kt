@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.reader.ChatMention
+import dev.multiprompt.companion.reader.MentionChat
 import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.ssh.TmuxText
@@ -97,6 +98,8 @@ internal fun ChatHistoryView(
     findQuery: String = "",
     findIndex: Int = 0,
     onFindCount: (Int) -> Unit = {},
+    mentionChats: List<MentionChat> = emptyList(),
+    onSessionLink: ((String) -> Unit)? = null,
 ) {
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
@@ -218,6 +221,8 @@ internal fun ChatHistoryView(
             findQuery = findQuery,
             findIndex = findIndex,
             onFindCount = onFindCount,
+            mentionChats = mentionChats,
+            onSessionLink = onSessionLink,
         )
 
     }
@@ -260,6 +265,8 @@ internal fun ChatHistoryList(
     findQuery: String = "",
     findIndex: Int = 0,
     onFindCount: (Int) -> Unit = {},
+    mentionChats: List<MentionChat> = emptyList(),
+    onSessionLink: ((String) -> Unit)? = null,
 ) {
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
@@ -396,6 +403,7 @@ internal fun ChatHistoryList(
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 val messageIndex = presentation.messages.lastIndex - index
                 HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
+                    mentionChats = mentionChats, onSessionLink = onSessionLink,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
@@ -404,6 +412,7 @@ internal fun ChatHistoryList(
                         { emoji -> onReaction(message, emoji) }
                     } else null,
                     delivery = message.delivery?.takeIf { it in FAILURE_LABELS || it == PendingPrompts.WAITING_LABEL },
+                    notSentDetail = message.notSentDetail?.takeIf { message.delivery == ChatHistory.NOT_SENT },
                     onCancel = if (message.role == "user" && (message.delivery == "Queued" || message.cancellable) && message.requestId.isNotEmpty() && onCancelPending != null) {
                         { onCancelPending(message) }
                     } else null,
@@ -441,6 +450,8 @@ private fun HistoryBubble(
     gate: ReplySwipeGate,
     onReply: (String, Boolean) -> Unit,
     skills: List<NativeSkill> = emptyList(),
+    mentionChats: List<MentionChat> = emptyList(),
+    onSessionLink: ((String) -> Unit)? = null,
     messageId: String = "",
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
@@ -451,6 +462,7 @@ private fun HistoryBubble(
     onReaction: ((ChatReactions.Emoji) -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
     delivery: String? = null,
+    notSentDetail: String? = null,
     findHits: List<ChatFind.Hit> = emptyList(),
     activeHit: ChatFind.Hit? = null,
 ) {
@@ -501,6 +513,11 @@ private fun HistoryBubble(
             } else if (delivery != null) {
                 Text(delivery, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
                     color = chatHintColor(sunlight))
+                val detail = notSentDetail?.takeIf { delivery == ChatHistory.NOT_SENT }
+                if (detail != null) {
+                    Text(detail, fontFamily = chatFontFamily(), fontSize = if (LocalReaderStyle.current) ReaderMetaTextSize * fontScale else (fontSize.value - 3f).coerceAtLeast(8f).sp,
+                        color = chatHintColor(sunlight), modifier = Modifier.padding(top = 2.dp))
+                }
             }
             if (isUser) {
                 val painted = reply?.body ?: text
@@ -527,6 +544,8 @@ private fun HistoryBubble(
                     imagePreviews = true,
                     matchHits = findHits,
                     activeHit = activeHit,
+                    mentionChats = mentionChats,
+                    onSessionLink = onSessionLink,
                 )
             }
         }

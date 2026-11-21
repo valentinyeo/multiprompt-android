@@ -1,9 +1,5 @@
 package dev.multiprompt.companion.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -11,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.unit.dp
 import dev.multiprompt.companion.AiUsageState
@@ -36,10 +31,7 @@ internal fun AiUsageSheet(state: AiUsageState, onDismiss: () -> Unit) {
             state.loading -> Text("Loading usage", style = Kit.Hint, color = Kit.TextMuted)
             error != null -> Text(error, style = Kit.Hint, color = Kit.TextMuted)
             state.plans.isEmpty() -> Text("No usage yet", style = Kit.Hint, color = Kit.TextMuted)
-            else -> Column(
-                Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+            else -> KitSheetScrollColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 state.plans.forEach { plan ->
                     val view = plan.presentation(now, zone)
                     KitPlanBlock(

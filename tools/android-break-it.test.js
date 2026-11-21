@@ -226,32 +226,35 @@ test('a broken or timed-out replay and evidence from a different APK fail', t =>
   assert.ok(fixture.inspect().errors.length);
 });
 
-test('repro-first success and a model PASS cannot override broken or missing stress proof', t => {
+test('a stressed replay is carried by its journey result, not by a second verdict rule', t => {
   const fixture = retained(t);
-  const options = { modelVerdict: 'PASS', bugFix: true, features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' }, parents: { 'ai-switch.md': 'product assertion' } };
-  assert.equal(verifier.applyRules(options).verdict, 'FAIL');
-  const passed = verifier.applyRules({ ...options, stressProof: fixture.inspect() });
-  assert.equal(passed.verdict, 'PASS');
-  assert.ok(passed.notes.some(line => line.includes('break-it/stream-send.txt')));
+  const options = { features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' } };
+  const complete = fixture.inspect();
+  assert.ok(complete.evidence.some(line => line.includes('break-it/stream-send.txt')));
+  assert.equal(verifier.applyRules({ ...options, stressProof: complete }).verdict, 'PASS');
   fs.rmSync(path.join(fixture.dir, 'rotate.png'));
-  assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'FAIL');
-});
-
-test('break-it tooling changes exercise the real stress gate without inventing an Android parent repro', t => {
-  const fixture = retained(t);
-  const options = { modelVerdict: 'PASS', bugFix: false, stressRequired: true, features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' }, parents: { 'ai-switch.md': 'passed' } };
-  assert.equal(verifier.applyRules(options).verdict, 'FAIL');
+  assert.ok(fixture.inspect().errors.length);
   assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'PASS');
 });
 
-test('tooling proof selects its complete adapter without dropping journeys for Android repairs', () => {
+test('break-it tooling changes never add a pull request journey', () => {
   const picked = { features: ['native-skills.md'], dropped: [], smoke: true };
   const diff = 'diff --git a/tools/android-break-it/drive.sh b/tools/android-break-it/drive.sh\n';
   const tooling = verifier.includeRequiredJourneys(picked, { product: false, outcomes: [] }, diff);
-  assert.deepEqual(tooling.features, ['ai-switch.md']);
+  assert.deepEqual(tooling.features, []);
   assert.equal(tooling.smoke, false);
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: ['claude.skills-model-effort'] }, diff).features, ['native-skills.md']);
   assert.deepEqual(verifier.includeRequiredJourneys(picked, { product: true, outcomes: [] }, diff).features, []);
+});
+
+test('the nightly android-full run schedules the break-it replay', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/android-full.yml'), 'utf8');
+  const start = workflow.indexOf('  nightly-journeys:');
+  assert.ok(start >= 0);
+  const end = workflow.indexOf('\n  baseline-profile:', start);
+  const job = workflow.slice(start, end < 0 ? undefined : end);
+  assert.match(job, /uses: \.\/\.github\/workflows\/verify\.yml/);
+  assert.match(job, /^ {6}break_it: true$/m);
 });
 
 test('the probe seed enables the same host history that the real reader resolves', () => {

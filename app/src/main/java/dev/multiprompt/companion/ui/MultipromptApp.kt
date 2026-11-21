@@ -174,6 +174,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -451,7 +452,8 @@ private fun AppScreens(viewModel: MainViewModel) {
             onSignOut = viewModel::signOutAccount,
             session = readerSession,
             hostLabel = state.hosts.firstOrNull { it.id == readerSession.hostId }?.label ?: readerSession.hostId,
-            mentionChats = ChatMention.chats(state.sessions, readerSession),
+            mentionChats = state.mentionChats(readerSession),
+            onOpenMentionedSession = viewModel::openMentionedSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             initialFontScale = viewModel.readerFontScale(readerSession),
@@ -1328,6 +1330,26 @@ internal fun SessionsScreen(
     val splitScrollState = rememberScrollState()
     val hostLabels = state.hosts.associate { it.id to it.label }
     val displayedWorkspaceSplitIds = state.visibleWorkspaceSplitIds
+    val splitBarWidth = remember { intArrayOf(0) }
+    val splitPillSpans = remember { mutableMapOf<String?, Pair<Float, Float>>() }
+    val splitRevealInset = with(LocalDensity.current) { Kit.ScreenEdge.toPx() }
+    LaunchedEffect(state.selectedWorkspaceId, displayedWorkspaceSplitIds) {
+        var frames = 0
+        while (splitPillSpans[state.selectedWorkspaceId] == null && frames < 3) {
+            withFrameNanos { }
+            frames++
+        }
+        val span = splitPillSpans[state.selectedWorkspaceId] ?: return@LaunchedEffect
+        if (splitBarWidth[0] == 0) return@LaunchedEffect
+        val scroll = splitScrollState.value
+        val far = splitBarWidth[0] - 2 * splitRevealInset
+        val target = when {
+            span.first < scroll -> span.first
+            span.second > scroll + far -> span.second - far
+            else -> scroll.toFloat()
+        }.toInt().coerceIn(0, splitScrollState.maxValue)
+        if (target != scroll) splitScrollState.animateScrollTo(target)
+    }
     val arrangedWorkspaceSplitIds = displayedWorkspaceSplitIds.filterNot { it == FAVORITES_SPLIT_ID || it == FREQUENT_SPLIT_ID }
     LaunchedEffect(searchVisible) {
         if (searchVisible) searchFocusRequester.requestFocus()
@@ -2133,8 +2155,8 @@ internal fun SessionsScreen(
         bottomBar = {
             if (!LocalMaterial3.current) {
                 FloatingBottomBar {
-                    Row(
-                        Modifier.padding(horizontal = Kit.ScreenEdge, vertical = Kit.ControlGap)
+                    Box(
+                        Modifier.fillMaxWidth()
                             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                             .drawWithContent {
                                 drawContent()
@@ -2149,23 +2171,31 @@ internal fun SessionsScreen(
                                     blendMode = BlendMode.DstIn,
                                 )
                             }
+                            .onGloballyPositioned { splitBarWidth[0] = it.size.width }
                             .horizontalScroll(splitScrollState),
-                        horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
-                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        displayedWorkspaceSplitIds.forEach { id ->
-                            val name = when (id) {
-                                null -> "All"
-                                FAVORITES_SPLIT_ID -> "Favorites"
-                                FREQUENT_SPLIT_ID -> "Frequent"
-                                else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
-                            }
-                            key(id, displayedWorkspaceSplitIds) {
-                                Box(Modifier.findPin(state.selectedWorkspaceId == id).padding(horizontal = Kit.ScreenEdge)) {
-                                    if (state.selectedWorkspaceId == id) {
-                                        KitPrimaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true })
-                                    } else {
-                                        KitSecondaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = false })
+                        Row(
+                            Modifier.padding(horizontal = Kit.ScreenEdge, vertical = Kit.ControlGap),
+                            horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            displayedWorkspaceSplitIds.forEach { id ->
+                                val name = when (id) {
+                                    null -> "All"
+                                    FAVORITES_SPLIT_ID -> "Favorites"
+                                    FREQUENT_SPLIT_ID -> "Frequent"
+                                    else -> state.workspaces.firstOrNull { it.id == id }?.name.orEmpty()
+                                }
+                                key(id, displayedWorkspaceSplitIds) {
+                                    Box(Modifier.onGloballyPositioned { coordinates ->
+                                        val origin = coordinates.parentLayoutCoordinates?.localPositionOf(coordinates, Offset.Zero)?.x ?: 0f
+                                        splitPillSpans[id] = origin to origin + coordinates.size.width
+                                    }) {
+                                        if (state.selectedWorkspaceId == id) {
+                                            KitPrimaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = true })
+                                        } else {
+                                            KitSecondaryButton(name, onClick = { onSelectWorkspace(id) }, modifier = Modifier.semantics { selected = false })
+                                        }
                                     }
                                 }
                             }
@@ -3037,6 +3067,7 @@ internal fun ReaderScreen(
     unreadMessageKey: String? = null,
     onMarkUnreadFrom: (String) -> Unit = {},
     mentionChats: List<MentionChat> = emptyList(),
+    onOpenMentionedSession: (String) -> Unit = {},
     unreadSinceEpochSeconds: Long? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
@@ -4775,6 +4806,8 @@ internal fun ReaderScreen(
                 findQuery = if (searchOpen) searchQuery else "",
                 findIndex = searchIndex,
                 onFindCount = { historyFindCount = it },
+                mentionChats = mentionChats,
+                onSessionLink = onOpenMentionedSession,
                 bottomPadding = padding.calculateBottomPadding(),
                 modifier = Modifier.padding(horizontal = ReaderScreenPadding)
                     .transformable(state = transcriptTransform, canPan = { false })
@@ -4997,6 +5030,8 @@ internal fun ReaderScreen(
                                     imagePreviews = true,
                                     matchHits = hits,
                                     activeHit = active,
+                                    mentionChats = mentionChats,
+                                    onSessionLink = onOpenMentionedSession,
                                 )
                             }
                         }

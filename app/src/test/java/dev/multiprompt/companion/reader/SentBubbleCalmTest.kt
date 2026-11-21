@@ -34,6 +34,12 @@ class SentBubbleCalmTest {
         assertTrue(!failed.pending)
     }
 
+    @Test fun aFailedHostCopyKeepsTheRefusalDetailWhenReceiptCarriesAReason() {
+        val row = MessageProtocol.Row(id, "claude", sid, "calm text", 1, "attempt", MessageProtocol.State.FAILED, null, "host_draft_present", 1, 1.0)
+        val failed = history().projectMessages(MessageReplica(1, 1, mapOf(id to row))).single()
+        assertEquals("Chat was busy typing, try again", failed.notSentDetail)
+    }
+
     @Test fun anUnknownSubmitCarriesNoLabel() {
         val entry = MessageJournal.Entry("unknown123456789012", "account", MessageProtocol.Scope("claude", sid, "calm"),
             "submit", "othermessage123456", "first try", 1, "attempt", true)

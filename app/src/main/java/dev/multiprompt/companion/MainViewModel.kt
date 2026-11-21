@@ -37,6 +37,8 @@ import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
 import dev.multiprompt.companion.reader.ChatHistoryPrefetch
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.ChatMention
+import dev.multiprompt.companion.reader.MentionChat
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.SwitchAi
@@ -167,6 +169,8 @@ data class AppUiState(
     val newSession: NewSessionPicker? = null,
 ) {
     val inboxSessions: List<TmuxSession> get() = AccountHostMap.withAccountSessions(sessions, accountLayout, accountHosts)
+
+    fun mentionChats(current: TmuxSession): List<MentionChat> = ChatMention.chats(inboxSessions, current)
     val showFrequentSplit: Boolean get() = accountLayout?.settings?.get("frequent") ?: true
     val showFavoritesSplit: Boolean get() = accountLayout?.settings?.get("favorites") ?: true
     val showAllSplit: Boolean get() = accountLayout?.settings?.get("all") ?: true
@@ -495,6 +499,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun uploadCrashReport() {
         viewModelScope.launch(Dispatchers.IO) {
+            crashReportStore.awaitExitCollection()
             crashReportStore.loadPending().forEach { report ->
                 syncAuth.uploadCrashReport(report, crashReportStore::markUploaded)
             }
@@ -994,7 +999,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             final = final,
             currentUpdatingHostIds = current.updatingHostIds,
         )
-        val sessions = merged.sessions.map { session ->
+        val sessions = RefreshMerge.stabilizeHostedIdentity(current.sessions, merged.sessions, final).map { session ->
             sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
         }
         val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
@@ -1764,6 +1769,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
         }
+    }
+
+    fun openMentionedSession(sessionName: String) {
+        val session = _state.value.sessions.firstOrNull { it.name == sessionName }
+            ?: _state.value.inboxSessions.firstOrNull { it.name == sessionName }
+            ?: return
+        openExistingSession(session)
     }
 
     fun openExistingSession(session: TmuxSession) {

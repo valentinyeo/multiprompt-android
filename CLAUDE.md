@@ -14,7 +14,7 @@ A single Android app (`dev.multiprompt.companion`) that SSHes straight into publ
 ./gradlew testDebugUnitTest --tests '*TmuxParserTest*'   # single test class
 ```
 
-Start time with and without the baseline profile: dispatch `startup-time.yml` (`gh workflow run startup-time.yml --ref <branch> -f runs=10`). One emulator job builds the release APK with a throwaway key, runs `tools/startup-time/measure.sh`, and writes the medians and the difference in milliseconds to the job summary and the `startup-time-report` artifact. It never runs on pull requests and is not a required check.
+Start time with and without the baseline profile: dispatch `startup-time.yml` (`gh workflow run startup-time.yml --ref <branch> -f runs=10`). One emulator job builds the release APK with a throwaway key, runs `tools/startup-time/measure.sh`, and writes the medians and the difference in milliseconds to the job summary and the `startup-time-report` artifact. It never runs on pull requests and does not gate merges.
 
 Emulator scroll-under proof: `tools/top-fade-proof.sh`. GitHub runs it in `top-fade.yml`. Dispatch with `release_smoke=true` to verify the published APK.
 
@@ -25,12 +25,13 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | Rule | Enforced by |
 |---|---|
 | Every PR builds, unit-tests and lints without unrelated phone jobs | `test.yml` runs build and `tools/check.sh source/unit/m3/lint`; `tools/ci/pr-workflows.test.mjs` checks workflow ownership |
-| Every PR gets one independent verdict, including tooling-only changes. At most three touched journeys run, with edited repro recipes first; remaining guards are named as deferred to nightly `android-full`. Code maps registry recipes and the shared chat reader paths to outcomes before the picker model adds guards | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js`; tooling retains hosted parent/head rule proof |
-| The judge is a model family no PR author used. Each PR body names every author with `Author model: <family>/<model>`; a missing, unknown or all-families-used author list fails | `authorFamilies` and `chooseJudge` in `verifier.cjs`, `tools/pstack-verifier.test.js` |
+| Every PR runs a head phone journey for each feature it touches, and nothing else | `pstack-verifier.yml`, `verifier.cjs` and `tools/pstack-verifier.test.js` |
+| A journey red in the latest nightly run on main never blocks a PR; the verify chat files a ticket for it | the `red-journeys` artifact from `android-full.yml`, `applyRules` in `verifier.cjs` and `tools/pstack-verifier.test.js` |
+| Independent PR verification | [pstack shipping step 1](https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/shipping.md); `pstack-verifier.yml`, `verifier.cjs`, `tools/pstack-verifier.test.js` |
 | Reuse base proof only for the same source SHA, journey and unchanged driver inputs | `parent-cache.cjs`, retained base artifacts and `tools/parent-cache.test.js` |
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
 | An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |
-| Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, `coverage.cjs` ratchet in `test.yml`, and structured artifact validation in `pstack-verifier` |
+| Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, the `coverage.cjs` ratchet in `maintain-verification.yml`, and structured artifact validation in `pstack-verifier` |
 | Retrying a check replaces only its own per-run proof artifact | `overwrite: true` on proof uploads; PR #392 `c2f673c6` HTTP 409 replay in `tools/pstack-verifier.test.js` |
 | Table readiness recognises the icon-only Close description without text or exported test tags | retained phone-screen and expand-handshake replays in `tools/chat-table/ui.test.py`, run by `verify.yml` |
 | One registry owns verification recipes, picker eligibility and dispatch options | `coverage.cjs check` in `tools/check.sh` and `test.yml` |
@@ -44,24 +45,22 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | Merged branches do not linger on GitHub | repo setting: delete branch on merge |
 | A release reads the Gradle cache and never writes it, so one failed release cannot poison every retry. Test workflows keep writing it | `cache-read-only: true` on the release `setup-gradle` step, checked by `tools/ci/release-cache.test.mjs` in `tools/check.sh source` |
 | Every PR title starts with its ticket, like `IGSH-1684: what changed`; add that ticket's exact Hypertask title to `tools/release-notes/ticket-titles.json`. Update notes show one `IGSH-N exact title` line per ticket, never filler | `tools/release-notes/notes.mjs` in `test.yml` and `release.yml` |
-| Feature work stays frozen until phone testing meets the checklist. A PR whose title ticket is not in `tools/freeze/allowed-tickets.json` fails while `"frozen"` is true; only chat repair, faster checks and test setup work get added to that list | `tools/freeze/check.mjs` in the required `test` job of `test.yml` |
-| The Android feature map gets weekly source and registered-journey coverage; drift opens one correction PR, never auto-merges | `maintain-verification.yml`, `control_map.py check/locations` and the registry-driven hosted journey matrix |
+| The Android feature map gets weekly source and registered-journey coverage; drift opens one correction PR, never auto-merges. Pull requests never run the control list check | `maintain-verification.yml`, `control_map.py check/locations` and `control_map.test.py` with `CONTROL_MAP_LIVE=1`, its weekly base comparison, and the registry-driven hosted journey matrix |
 | No keys in Git; whole history rescanned weekly | `secret-scan` in `gitleaks.yml`, required on `main` |
 
 ## Release and install
 
 - **Release:** merge the PR to `main`: `gh pr merge <n> --squash --delete-branch`. `release.yml` lints, tests, signs and republishes `android-latest`. Watch it: `gh run watch $(gh run list -w release.yml -L 1 --json databaseId -q ".[0].databaseId") --exit-status`. Trigger another release without a code change: `gh workflow run release.yml` (optionally add `-f version_name=0.2.0`).
-- **Release proof:** both channels wait for a recorded `robot-faces.md` journey on the signed release APK; `release-proof` retains the MP4, XML, SSH receipts and SHA-256, which must match the installed and published `android-latest` APK.
+- **Release gate:** both channels wait for `Launch signed M3 APK`, which installs the signed M3 build and checks that `MainActivity` resumes before anything is published.
 - **Prove it:** `node tools/release-status.mjs` passes only when the live `android-latest` manifest serves the local `origin/main` ref (`--commit <sha>` for another commit).
 - **Trust the download:** `node tools/verify-published.mjs android-m3-latest` (or `android-latest`) fetches the manifest, downloads that APK, and fails unless the size, sha256, package, version and Multi Bot label all match.
 - **Install:** the release app schedules an hourly background manifest check and notifies for a newer version: "multiprompt <version> is ready". Tap it to open Update, then tap "Download and update" to download, verify and install (Android may require install permission or confirmation). The Update screen also works directly. No adb or Play Store step. Debug builds (`./gradlew installDebug`, package suffix `.debug`) never receive release updates.
 
 ## Git workflow
 
-- `main` targets exactly eight required checks in `tools/pr-checks.mjs`: `build`, `test`, `unit-tests`, `m3-unit-tests`, `lint`, `secret-scan`, `no-paid-ai`, `pstack-verifier`. The lead removes the ten named retired checks after this workflow PR merges. `node tools/branch-protection.mjs --check` accepts only the target checks and that known transition, reports remaining retired checks, and never writes settings. Updated base required; administrators cannot bypass. Never push directly.
-- Before merge: `node tools/pr-checks.mjs <PR> --wait`. Recheck once with `node tools/pr-checks.mjs <PR>`. Missing checks never pass. Failed checks and unexpected skips stop immediately. Only unused journey branches may skip. The verifier and cheap required checks must succeed. Ticket closure requires merged, complete-green proof.
+- Follow [pstack shipping step 1](https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/shipping.md). Wait on CI with `node tools/pr-checks.mjs <PR> --wait`, then merge with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`. Merge-gating check names are in `tools/pr-checks.mjs`; compare branch protection with `node tools/branch-protection.mjs --check`. Never push directly to `main`.
 - One wait per PR; five-minute polls; thirty-minute maximum. Head/base changes stop the wait. Never use bare `gh pr checks --watch` or `gh-green` as complete-check proof.
-- Emergency regression: revert the bad change first through a PR with the same verifier and cheap checks. Restore service before attempting a forward fix. Never bypass the signed-APK release proof or branch protection.
+- Emergency regression: revert the bad change first through a PR with the same verifier and cheap checks. Restore service before attempting a forward fix. Never bypass the signed launch gate or branch protection.
 - Merge the checked head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`.
 - Never finish a task with changes parked in a branch, in the stash, or as untracked files. A task is done when its PR is merged and its branch deleted.
 
@@ -91,7 +90,7 @@ Data flow for the core feature:
 
 ### Security invariants — do not relax these
 
-- **Host keys fail closed.** `SshRepository.PinningHostKeyVerifier` pins type + SHA-256 fingerprint from `HostProfile`. An unknown or changed key throws `SshProblem.HostKeyRequired` and the UI makes the user compare and trust it explicitly. Never auto-accept.
+- **Host keys reject unknown or changed fingerprints.** `SshRepository.PinningHostKeyVerifier` pins type + SHA-256 fingerprint from `HostProfile`. An unknown or changed key throws `SshProblem.HostKeyRequired` and the UI makes the user compare and trust it explicitly. Never auto-accept.
 - **Public-key auth only.** No password auth, no arbitrary remote-command box in the UI.
 - **Everything interpolated into a remote command goes through `TmuxParser.shellQuote`.** There is a test asserting it blocks injection.
 - **Reader commands are allowlisted.** Prompt content must travel through SSH stdin and tmux buffer/paste operations, never inside a shell command.
