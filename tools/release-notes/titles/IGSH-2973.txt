@@ -1,0 +1,1 @@
+Gesture phone test stops rebuilding an old copy of the chat bubble
