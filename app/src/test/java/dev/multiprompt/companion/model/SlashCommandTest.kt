@@ -25,6 +25,12 @@ class SlashCommandTest {
         assertEquals(Route.UNAVAILABLE, SlashCommand.route(true, "/workflows"))
     }
 
+    @Test fun loginSendsOnAPiLiveChat() {
+        assertEquals(Route.SEND, SlashCommand.decide(true, "/login", false))
+        assertEquals(Route.SEND, SlashCommand.decide(true, "/login anthropic", false))
+        assertEquals(Route.SEND, SlashCommand.route(true, "/login"))
+    }
+
     @Test fun otherMessagesSendAsBefore() {
         assertEquals(Route.SEND, SlashCommand.route(true, "/planning"))
         assertEquals(Route.SEND, SlashCommand.route(true, "/custom-skill hello"))

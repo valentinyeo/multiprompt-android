@@ -2,6 +2,7 @@
   "IGSH-3006": "Android: update prompt shows three times on the Update screen",
   "IGSH-2969": "Android: message to a busy chat shows Not sent with no reason",
   "IGSH-2480": "Android: tap a session name in a chat to open it",
+  "IGSH-2347": "Android: sign in to Pi from a chat",
   "IGSH-2974": "Android repo passes the pstack check",
   "IGSH-2972": "App screen edits stop failing the control list check",
   "IGSH-2968": "Android: chat list pills at the bottom spread too far apart",

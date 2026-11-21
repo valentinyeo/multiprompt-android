@@ -222,6 +222,10 @@ class ChatHistoryConnection(
         runCatching { action("host", "pi:${model.reference}", line = { id, sid -> PiModels.line(id, sid, model) }) }
             .getOrElse { if (it is CancellationException) throw it else MessageActionResult.Unknown }
 
+    suspend fun piLogin(providerId: String?): MessageActionResult =
+        runCatching { action("host", "pi-login", line = { id, sid -> PiLogin.loginLine(id, sid, providerId) }) }
+            .getOrElse { if (it is CancellationException) throw it else MessageActionResult.Unknown }
+
     fun interruptHost(fallback: () -> Unit = {}): Boolean {
         val host = _state.value.replica?.host ?: return false
         val approval = host.request?.takeIf { it.kind == "approval" && it.id !in _hostClosed.value }
