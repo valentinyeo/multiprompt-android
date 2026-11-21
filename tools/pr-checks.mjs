@@ -76,16 +76,20 @@ export function checkStatus(pr, { redOnMain = { journeys: [], url: '' } } = {}) 
     if (!previous || timestamp >= previous.timestamp) latestRuns.set(key, { check, timestamp });
   }
   checks.push(...Array.from(latestRuns.values(), ({ check }) => check));
-  const verifierGreen = checks.some(check => check.__typename === 'CheckRun'
-    && check.name === 'pstack-verifier' && check.status === 'COMPLETED' && check.conclusion === 'SUCCESS');
+  const verifier = checks.find(check => check.__typename === 'CheckRun' && check.name === 'pstack-verifier');
+  const verifierGreen = verifier?.status === 'COMPLETED' && verifier.conclusion === 'SUCCESS';
+  const verifierPending = verifier != null && verifier.status !== 'COMPLETED';
   const redOnMainSet = new Set(Array.isArray(redOnMain.journeys) ? redOnMain.journeys : []);
   const toleratedRedOnMain = [];
   const failed = checks.filter(check => {
     if (!checkFailed(check)) return false;
     const match = journeyVerifyCheck.exec(check.name ?? '');
-    if (match && verifierGreen && redOnMainSet.has(match[1])) {
-      toleratedRedOnMain.push(match[1]);
-      return false;
+    if (match && redOnMainSet.has(match[1])) {
+      if (verifierGreen) {
+        toleratedRedOnMain.push(match[1]);
+        return false;
+      }
+      if (verifierPending) return false;
     }
     return true;
   });
