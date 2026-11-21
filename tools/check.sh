@@ -28,6 +28,8 @@ source_checks() {
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py
   python3 -B tools/session-gestures/scroll.test.py
+  python3 -B tools/session-gestures/reveal.test.py
+  python3 -B tools/session-row-menu.test.py
   python3 -B tools/send-frame.test.py
   python3 -B tools/working-dots/check.test.py
   bash tools/check-canonical-chat-reader.sh

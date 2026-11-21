@@ -3,7 +3,6 @@
 Dispatch `verify.yml` with `feature=session-gestures.md`, `released_chat=true`
 and `expected_commit=<published commit>`. Add `candidate=true` before merging.
 
-The same regression must reject the original reply handler on GitHub.
 The signed APK opens two ephemeral SSH sessions through the real host form.
 Swipe both ways without changing the session. Scroll wide code left, then
 right without opening a reply. Swipe a message to reply ten times, cancelling
