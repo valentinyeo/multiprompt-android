@@ -138,6 +138,11 @@ def plan(root, mode, value, direction="forward", search_axis=None):
         raise Unreachable("label missing or disabled; no unique active scroll container")
     label = matches[0]
     target = next((n for n in chain(label) if n.get("clickable") == "true"), label)
+    if mode == "desc" and value.startswith("Robot "):
+        session = value.removeprefix("Robot ")
+        text_labels = [n for n in target.iter("node") if n.get("text") == session and enabled(n)]
+        if len(text_labels) == 1:
+            label = text_labels[0]
     if target is label and label.get("clickable") != "true" and mode not in ("field", "editor") and any(n.get("package", "").startswith("dev.multiprompt.companion") for n in chain(label)):
         raise Unreachable("app label has no enabled clickable ancestor")
     rect = bounds(target)
