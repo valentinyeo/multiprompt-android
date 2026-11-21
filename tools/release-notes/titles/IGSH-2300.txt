@@ -1,0 +1,1 @@
+Android: pause updates for chats that are not on screen

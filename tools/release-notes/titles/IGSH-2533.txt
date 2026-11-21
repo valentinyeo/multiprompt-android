@@ -1,0 +1,1 @@
+Android old-screen check stops breaking on every change

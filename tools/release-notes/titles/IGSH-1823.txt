@@ -1,0 +1,1 @@
+Android: chats recover when one message gets stuck
