@@ -16,7 +16,7 @@ The hosted fixture enables a supervised Claude chat on `live-fresh-start-3000` w
 2. From **Inbox**, seed an older on-device cache file that still contains `OLD_STALE_3000`, then replay desktop **Fresh start** on the fixture: same tmux session name, new Claude conversation id, archived pre-fresh transcript, handover `HANDOVER_3000`, divider, and live reply `FRESH_REPLY_3000`.
 3. Require exactly one enabled inbox row named `live-fresh-start-3000`; forbid a second row, blank row, or renamed duplicate tied to the new native id alone.
 4. Open the chat. Require `HANDOVER_3000` before `FRESH_REPLY_3000`. Forbid `OLD_STALE_3000`, `HOST_GHOST_STALE_3000`, and any ghost row preview carrying the old reply.
-5. Return to **Inbox**, force-stop and relaunch the app, reopen **All**, and repeat the single-row and on-screen transcript checks.
+5. Return to **Inbox**, force-stop and relaunch the app, re-enter **Use without account (debug)** if the sign-in gate shows, wait for the `Robot live-fresh-start-3000` row, reopen **All**, and repeat the single-row and on-screen transcript checks.
 6. Open the chat, choose **Session actions → Resync chat**, and require the same order and absence of stale text.
 
 `session-fresh-start-host.json` and `fresh-start-state.json` retain independent host transcript choice, tmux `@mp_host_sid`, and rendered phone order. `fresh-start-inbox-*.json` records the exact enabled row bounds per phase.
@@ -28,6 +28,8 @@ The hosted fixture enables a supervised Claude chat on `live-fresh-start-3000` w
 `session-fresh-start-fixture.py check` replays seed and fresh-start without the phone. `tools/session-fresh-start/fresh-start.test.py` runs in `tools/check.sh source`.
 
 ## Gotchas
+
+Relaunch shows the sign-in gate: the debug build keeps the saved host but not the **Use without account (debug)** choice, so `session-fresh-start-drive.sh` taps that button again and waits for the row avatar, not for the **Inbox** label. The avatar is the row; the label is only the bucket name in the top bar.
 
 SOFT-2996: inbox rows must stay keyed to the host tmux chat name, never Claude's own session id. The fixture keeps `@mp_host_sid` on `live-fresh-start-3000` across the rotation and leaves the old native jsonl on disk like a long desktop chat. Plain `/clear` and desktop **Fresh start** both replace the live transcript; this journey simulates **Fresh start** only, but the row-identity rule is the same.
 
