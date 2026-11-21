@@ -55,24 +55,29 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             compose.onNodeWithText("claude-reader", useUnmergedTree = true).assertIsDisplayed()
             val back = compose.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot
             val menu = compose.onNodeWithContentDescription("Session actions").fetchSemanticsNode().boundsInRoot
-            assertEquals(44f, back.width, 0.01f)
-            assertEquals(44f, back.height, 0.01f)
-            assertEquals(44f, menu.width, 0.01f)
+            assertEquals(Kit.ControlHeight.value, back.width, 0.01f)
+            assertEquals(Kit.ControlHeight.value, back.height, 0.01f)
+            assertEquals(Kit.ControlHeight.value, menu.width, 0.01f)
             assertEquals(back.top, menu.top, 0.01f)
             val send = compose.onNodeWithContentDescription("Send prompt").fetchSemanticsNode().boundsInRoot
-            assertEquals(28f, send.width, 0.01f)
-            assertEquals(28f, send.height, 0.01f)
+            assertEquals(Kit.ControlInnerSize.value, send.width, 0.01f)
+            assertEquals(Kit.ControlInnerSize.value, send.height, 0.01f)
             val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
-            assertEquals("composer=$field", 44f, field.height, 0.01f)
-            assertEquals("send=$send composer=$field", 8f, field.right - send.right, 0.01f)
+            assertEquals("composer=$field", Kit.ControlInnerSize.value, field.height, 0.01f)
+            assertEquals("send=$send composer=$field", Kit.InnerInset.value, send.left - field.right, 0.01f)
             assertEquals("send=$send composer=$field", field.center.y, send.center.y, 0.01f)
             listOf("Archive", "Remind", "Wait").forEach { label ->
                 compose.onNodeWithText(label).assertDoesNotExist()
             }
             val mic = compose.onNodeWithContentDescription("Start dictation").fetchSemanticsNode().boundsInRoot
             val attach = compose.onNodeWithContentDescription("Attach").fetchSemanticsNode().boundsInRoot
-            assertTrue("microphone=$mic composer=$field", mic.left >= field.left && mic.right <= field.right && mic.top >= field.top && mic.bottom <= field.bottom)
-            assertTrue("attach=$attach composer=$field", attach.right < field.left)
+            assertEquals("microphone=$mic", Kit.ControlInnerSize.value, mic.width, 0.01f)
+            assertEquals("attach=$attach field=$field", Kit.InnerInset.value, field.left - attach.right, 0.01f)
+            assertEquals("microphone=$mic field=$field", Kit.InnerInset.value, mic.left - field.right, 0.01f)
+            assertEquals("microphone=$mic send=$send", Kit.InnerInset.value, send.left - mic.right, 0.01f)
+            listOf(attach, mic).forEach { circle ->
+                assertEquals("circle=$circle field=$field", field.center.y, circle.center.y, 0.01f)
+            }
         } else {
             val tab = compose.onNodeWithText("All").fetchSemanticsNode()
             val row = compose.onNodeWithText("claude-reader").fetchSemanticsNode()
