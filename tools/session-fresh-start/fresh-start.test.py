@@ -80,6 +80,14 @@ class FreshStartFixtureTest(unittest.TestCase):
                          events[1]['response'])
         self.assertEqual('control_response', events[1]['type'])
 
+    def test_cache_command_emits_one_json_object(self):
+        with patch.dict(os.environ, dict(HOME=str(self.home))):
+            output = subprocess.run(
+                [sys.executable, str(HERE / 'fixture.py'), 'cache'],
+                capture_output=True, text=True, check=True).stdout
+        payload = json.loads(output)
+        self.assertIn('OLD_STALE_3000', payload['stale'])
+
     def test_inbox_counter_requires_exactly_one_row(self):
         xml = self.home / 'inbox.xml'
         session = 'live-fresh-start-3000'

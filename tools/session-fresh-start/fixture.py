@@ -229,9 +229,7 @@ def claude():
 
 def cache(host, host_id, hostname, port, username):
     name = f'{host_id}-{username}@{hostname}:{port}-{SID}.jsonl'
-    payload = dict(name=name, sid=SID, session=TMUX, lines=cache_lines(), stale=MARKERS['old'])
-    print(json.dumps(payload, indent=2))
-    return payload
+    return dict(name=name, sid=SID, session=TMUX, lines=cache_lines(), stale=MARKERS['old'])
 
 
 COMMANDS = dict(plan=plan, check=check, cache=cache)
@@ -267,7 +265,7 @@ def main(argv):
                           indent=2))
     elif arguments.command == 'visible':
         print(json.dumps(visible_transcript(home), indent=2))
-    else:
+    elif arguments.command == 'cache':
         print(json.dumps(cache(home, 'fixture-host', '10.0.2.2', '2222', 'verifyssh'), indent=2))
     return 0
 
