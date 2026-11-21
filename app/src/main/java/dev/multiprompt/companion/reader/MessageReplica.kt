@@ -19,9 +19,13 @@ data class MessageReplica(
         return next
     }
 
-    fun replayHost(events: List<MessageProtocol.Event>): MessageReplica =
-        copy(host = events.filter { it.seq <= cursor }.map { it.item }.filterIsInstance<MessageProtocol.Item.Host>()
-            .fold(host) { stream, item -> stream.apply(item.event) })
+    fun replayHost(events: List<MessageProtocol.Event>): MessageReplica {
+        val resolved = events.mapNotNull { (it.item as? MessageProtocol.Item.Host)?.event?.resolved }.toSet()
+        val replayed = events.filter { it.seq <= cursor }.map { it.item }.filterIsInstance<MessageProtocol.Item.Host>()
+            .fold(host) { stream, item -> stream.apply(item.event) }
+        val request = replayed.request?.takeIf { it.id !in resolved }
+        return copy(host = replayed.copy(request = request))
+    }
 
     private fun applyItem(item: MessageProtocol.Item): MessageReplica = when (item) {
         is MessageProtocol.Item.Message -> copy(messages = messages + (item.row.id to item.row))
