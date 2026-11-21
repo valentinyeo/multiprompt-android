@@ -272,7 +272,8 @@ data class ChatHistory(
             return copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions, clearedAt = cleared)
         }
         val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions, cleared)
-        return if (mode == "tail" && !replaced && olderThan(this, next)) this else next
+        val staleTail = mode == "tail" && !replaced && olderThan(this, next)
+        return if (staleTail) this else next
     }
 
     companion object {
@@ -291,10 +292,6 @@ data class ChatHistory(
 
         private fun seconds(nanos: Long): Double = if (nanos > 0) nanos / 1_000_000_000.0 else 0.0
 
-        // A tail whose newest row is older than what is on screen is a stale snapshot or a
-        // restored cache, and must not wipe the newer history. A same-session tail with a new
-        // inode is a /clear or a session restart instead: it is allowed to be shorter and
-        // older looking, because the rows before the boundary are meant to disappear.
         fun olderThan(shown: ChatHistory, incoming: ChatHistory): Boolean {
             val shownNewest = newestSeconds(shown) ?: return false
             val incomingNewest = newestSeconds(incoming) ?: return false
