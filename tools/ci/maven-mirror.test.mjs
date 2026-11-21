@@ -10,7 +10,7 @@ const mirror =
 
 const block = label => {
   const pattern = new RegExp(
-    `${label}\\s*\\{[\\s\\S]*?repositories\\s*\\{([\\s\\S]*?)\\n\\s*\\}`,
+    `${label}\\s*\\{[\\s\\S]*?repositories\\s*\\{([\\s\\S]*?)\\n    \\}`,
     'm'
   );
   const match = settings.match(pattern);
@@ -36,6 +36,23 @@ test('settings.gradle.kts lists the Maven Central mirror after mavenCentral()', 
       mirrorIndex === central + 1,
       `${label} must list the mirror immediately after mavenCentral()`
     );
+  }
+});
+
+test('Google Maven serves only Google groups so one Google timeout cannot fail other libraries', () => {
+  for (const label of ['pluginManagement', 'dependencyResolutionManagement']) {
+    const body = block(label);
+    assert.ok(!/\bgoogle\(\)/.test(body), `${label} must not use an unscoped google()`);
+    const scoped = body.match(/google\s*\{\s*content\s*\{([\s\S]*?)\}\s*\}/);
+    assert.ok(scoped, `${label} must scope google() with content { }`);
+    const groups = [...scoped[1].matchAll(/includeGroupByRegex\("([^"]+)"\)/g)].map(m => new RegExp(`^${m[1].replaceAll('\\\\', '\\')}$`));
+    const google = name => groups.some(g => g.test(name));
+    for (const name of ['androidx.browser', 'com.android.tools.build', 'com.google.android.material']) {
+      assert.ok(google(name), `${label} must send ${name} to Google Maven`);
+    }
+    for (const name of ['org.jetbrains.kotlin', 'org.connectbot', 'com.squareup.okhttp3', 'org.jetbrains.kotlin.plugin.compose']) {
+      assert.ok(!google(name), `${label} must keep ${name} off Google Maven`);
+    }
   }
 });
 

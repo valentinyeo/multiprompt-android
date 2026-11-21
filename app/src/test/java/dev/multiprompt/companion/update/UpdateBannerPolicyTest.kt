@@ -32,4 +32,66 @@ class UpdateBannerPolicyTest {
         val afterRestart = stored
         assertFalse(UpdateBannerPolicy.shouldShow(availableVersionCode = 100_050, dismissedVersionCode = afterRestart))
     }
+
+    @Test fun updateScreenHidesEveryBannerEvenWhenAnUpdateIsReady() {
+        val release = UpdateRelease(
+            versionCode = 100_050,
+            versionName = "0.1.632",
+            apkUrl = "https://example.com/app.apk",
+            sha256 = "0".repeat(64),
+            sizeBytes = 1,
+            notes = "",
+        )
+        assertFalse(
+            UpdateBannerPolicy.shouldShowBanner(
+                onUpdateScreen = true,
+                state = UpdateState.Available(release),
+                dismissedVersionCode = 0,
+            ),
+        )
+    }
+
+    @Test fun oneBannerElsewhereWhenAnUpdateIsReady() {
+        val release = UpdateRelease(
+            versionCode = 100_050,
+            versionName = "0.1.632",
+            apkUrl = "https://example.com/app.apk",
+            sha256 = "0".repeat(64),
+            sizeBytes = 1,
+            notes = "",
+        )
+        assertTrue(
+            UpdateBannerPolicy.shouldShowBanner(
+                onUpdateScreen = false,
+                state = UpdateState.Available(release),
+                dismissedVersionCode = 0,
+            ),
+        )
+    }
+
+    @Test fun dismissedUpdateStaysOffSessionsButUpdateScreenStaysBannerFree() {
+        val release = UpdateRelease(
+            versionCode = 100_050,
+            versionName = "0.1.632",
+            apkUrl = "https://example.com/app.apk",
+            sha256 = "0".repeat(64),
+            sizeBytes = 1,
+            notes = "",
+        )
+        val dismissed = UpdateBannerPolicy.nextDismissed(0, release.versionCode)
+        assertFalse(
+            UpdateBannerPolicy.shouldShowBanner(
+                onUpdateScreen = false,
+                state = UpdateState.Available(release),
+                dismissedVersionCode = dismissed,
+            ),
+        )
+        assertFalse(
+            UpdateBannerPolicy.shouldShowBanner(
+                onUpdateScreen = true,
+                state = UpdateState.Available(release),
+                dismissedVersionCode = dismissed,
+            ),
+        )
+    }
 }
