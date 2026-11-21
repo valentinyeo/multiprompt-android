@@ -946,7 +946,7 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     seed_parser.add_argument("--dry-run", action="store_true", help="Print the tmux commands without creating sessions.")
 
     tap_parser = commands.add_parser("tap", formatter_class=argparse.RawDescriptionHelpFormatter, help="Tap a reachable label, resolving scroll and overlap first.", description="Resolve an enabled label in the active window with journey_action, scroll its container until the whole control is visible, then tap its center. Session names typed on the Inbox resolve to their robot row.", epilog="Examples:\n  mpa tap text verify-session\n  mpa tap desc 'Session actions'\n  mpa tap text More --dry-run --xml screen.xml")
-    tap_parser.add_argument("mode", choices=["text", "desc", "field", "text-containing"], help="How to find the control.")
+    tap_parser.add_argument("mode", choices=["text", "desc", "field", "text-containing", "desc-prefix"], help="How to find the control.")
     tap_parser.add_argument("value", help="Label, description or field placeholder to tap.")
     tap_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone (for replay and tests).")
     tap_parser.add_argument("--reveal", action="store_true", help="Scroll the control into view and stop without tapping.")

@@ -8,6 +8,9 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 
 
+SCAN_PAD = 6
+
+
 def bounds(node):
     box = list(map(int, re.findall(r'-?\d+', node.get('bounds', ''))))
     assert len(box) == 4 and box[0] < box[2] and box[1] < box[3], box
@@ -34,6 +37,17 @@ def outlines(image, box, inset):
              if 12 <= bottom[2] - top[2] <= y2 - y1
              and abs(top[0] - bottom[0]) <= 3 and abs(top[1] - bottom[1]) <= 3]
     return pairs
+
+
+def composer_box(editor):
+    texts = [child for child in editor.iter('node') if child is not editor
+             and child.get('clickable') != 'true' and not child.get('content-desc')
+             and child.get('class') != 'android.widget.Button']
+    if not texts:
+        return bounds(editor), True
+    boxes = [bounds(child) for child in texts]
+    return [min(box[0] for box in boxes) - SCAN_PAD, min(box[1] for box in boxes) - SCAN_PAD,
+            max(box[2] for box in boxes) + SCAN_PAD, max(box[3] for box in boxes) + SCAN_PAD], False
 
 
 def picker_swipe(xml):
@@ -91,7 +105,8 @@ def check(xml, screenshot, phase, text):
             label = '/pill-guide-01' if phase == 'picker' else '/review-native'
             assert any(node.get('text') == label for node in nodes), 'Skill picker is missing'
         else:
-            pairs = outlines(image, bounds(editor), True)
+            box, inset = composer_box(editor)
+            pairs = outlines(image, box, inset)
             expected = phase in ('inserted', 'removable')
             assert bool(pairs) == expected, 'Composer skill pill outline is missing or survived removal'
             result['composer_pill'] = expected

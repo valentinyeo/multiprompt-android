@@ -132,15 +132,22 @@ finally:
         reply = next((event for event in map(json.loads, reversed(events.splitlines())) if event['text'] == 'Followup received.'), None)
         if reply is not None:
             result['replyMonotonic'] = reply['monotonic']
+        positive = None
         for capture in captures:
             text = subprocess.check_output(['tesseract', str(root / capture['file']), 'stdout'], text=True, stderr=subprocess.DEVNULL, timeout=15)
             capture['ocrPositive'] = 'Followup received.' in text
-            if capture['ocrPositive']:
-                shutil.copyfile(root / capture['file'], root / 'catchup-visible.png')
-                result['capture'] = capture
-                if reply is not None:
-                    result['replyLatencySeconds'] = capture['endMonotonic'] - reply['monotonic']
+            if not capture['ocrPositive']:
+                continue
+            if positive is None:
+                positive = capture
+            if capture['endMonotonic'] - capture['startMonotonic'] <= 1:
+                positive = capture
                 break
+        if positive is not None:
+            shutil.copyfile(root / positive['file'], root / 'catchup-visible.png')
+            result['capture'] = positive
+            if reply is not None:
+                result['replyLatencySeconds'] = positive['startMonotonic'] - reply['monotonic']
     finally:
         (root / 'catchup-samples.json').write_text(json.dumps(samples, indent=2))
         (root / 'catchup-screenshots.json').write_text(json.dumps(captures, indent=2))

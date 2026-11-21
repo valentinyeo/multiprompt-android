@@ -26,6 +26,22 @@ open_model_menu() {
     tap_text 'Change ›'
     wait_for_text 'Open model picker (/model)'
 }
+jump_to_newest() {
+    dump_ui || return 0
+    python3 "$scripts/ui.py" "$EVIDENCE/current.xml" reach-desc-prefix 'Jump to newest' >/dev/null 2>&1 || return 0
+    python3 "$scripts/mpa" tap desc-prefix 'Jump to newest' >/dev/null
+    sleep 1
+}
+wait_for_reply() {
+    local attempt
+    for attempt in {1..30}; do
+        if select_node contains "$1" >/dev/null 2>&1; then return 0; fi
+        jump_to_newest
+        sleep 1
+    done
+    printf 'Timed out waiting for %s\n' "$1" >&2
+    return 1
+}
 menu_command() {
     local label=$1 command=$2 model=$3 effort=$4 phase=$5 before after attempt
     open_model_menu
@@ -38,7 +54,7 @@ menu_command() {
     done
     (( after == before + 1 ))
     printf 'VERIFY_RECEIVED:%s\n' "$command" >> "$EVIDENCE/native-menu-commands.txt"
-    wait_for_text "Received $command. Claude $model 5.5 $effort"
+    wait_for_reply "Received $command. Claude $model 5.5 $effort"
     menu_state "$phase" reply "Received $command. Claude $model 5.5 $effort"
     menu_state "$phase-draft" draft 'keep this draft'
     sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/native-menu-$phase-host.txt"
@@ -69,7 +85,7 @@ for model in Opus Haiku Fable; do
     tap_text "$model"
     wait_receipt "VERIFY_RECEIVED:/model ${model,,}"
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
-    wait_for_text "Received /model ${model,,}. Claude $model 5.5 high"
+    wait_for_reply "Received /model ${model,,}. Claude $model 5.5 high"
     menu_state "attach-${model,,}" reply "Received /model ${model,,}. Claude $model 5.5 high"
     menu_state "attach-${model,,}-draft" draft 'keep this draft'
     tap_desc Attach
@@ -81,7 +97,7 @@ for effort in Low Medium; do
     tap_text "$effort"
     wait_receipt "VERIFY_RECEIVED:/effort ${effort,,}"
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"
-    wait_for_text "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"
+    wait_for_reply "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"
     menu_state "attach-${effort,,}" reply "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"
     tap_desc Attach
     wait_for_text "$effort ›"

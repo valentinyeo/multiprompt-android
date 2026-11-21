@@ -122,6 +122,12 @@ adb() {
         xml = window('<node class="android.widget.EditText" clickable="true" bounds="[179,872][1048,998]" />' + button('Send prompt', '[927,872][1053,998]'))
         self.assertEqual(self.plan(xml, value='Send prompt'), 'tap 990 935')
 
+    def test_desc_prefix_reaches_a_row_whose_label_carries_a_live_count(self):
+        xml = window(button('Jump to newest', '[400,700][700,800]', 'content-desc="Jump to newest, 4 new"'))
+        self.assertEqual(self.plan(xml, mode='desc-prefix', value='Jump to newest'), 'tap 550 750')
+        with self.assertRaisesRegex(action.Unreachable, 'missing'):
+            self.plan(window(button('Jump to newest')), mode='desc-prefix', value='Jump to newest')
+
     def test_drawing_order_takes_precedence_over_accessibility_sibling_order(self):
         xml = window('<node clickable="true" drawing-order="2" bounds="[0,400][600,700]" />' + button(attributes='drawing-order="1"'))
         with self.assertRaisesRegex(action.Unreachable, 'overlap'):

@@ -138,12 +138,11 @@ hold_inbox_session() {
 find_inbox_session() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
-        select_node focused-field '' >/dev/null
-        clear_field ''
+        sleep 1
         adb shell input text verify-session
+        adb shell input keyevent KEYCODE_BACK
         dump_ui
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value '' verify-session
-        adb shell input keyevent KEYCODE_BACK
     fi
     wait_for_text '1 result across all splits'
     tap_node desc 'Robot verify-session' reveal

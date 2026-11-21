@@ -111,6 +111,8 @@ def plan(root, mode, value, direction="forward", search_axis=None):
             matches.append(node)
         elif mode == "desc" and node.get("content-desc") == value:
             matches.append(node)
+        elif mode == "desc-prefix" and (node.get("content-desc") or "").startswith(value):
+            matches.append(node)
         elif mode == "text-containing" and value in node.get("text", ""):
             matches.append(node)
         elif mode == "editor" and node.get("class") == "android.widget.EditText":

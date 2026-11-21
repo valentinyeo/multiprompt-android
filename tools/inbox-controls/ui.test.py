@@ -191,7 +191,7 @@ tap_node() { [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-ses
 hold_text() { return 1; }
 adb() {
     if [[ "$*" == 'shell input text verify-session' ]]; then
-        [[ "$cleared" == true ]]
+        [[ "$search_open" == true ]]
         searched=true
     else
         [[ "$*" == 'shell input swipe 105 450 105 450 800' || "$*" == 'shell input keyevent KEYCODE_BACK' ]]

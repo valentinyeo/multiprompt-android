@@ -41,6 +41,17 @@ class SkillPillsUiTest(unittest.TestCase):
         self.pill()
         self.assertTrue(self.check()['composer_pill'])
 
+    def test_composer_scan_ignores_the_dictation_control_outside_the_text(self):
+        self.node(parent=self.editor, bounds='[20,215][200,265]')
+        mic = self.node(parent=self.editor, bounds='[300,200][390,280]', clickable='true')
+        self.node(parent=mic, bounds='[310,210][380,270]', **{'class': 'android.widget.Button'})
+        draw = ImageDraw.Draw(self.image)
+        for y in (214, 266):
+            draw.line((305, y, 385, y), fill=(46, 46, 46), width=2)
+        self.assertFalse(self.check('draft', 'Please /review-native this')['composer_pill'])
+        self.pill((40, 222, 180, 258))
+        self.assertTrue(self.check('inserted', 'Please /review-native this')['composer_pill'])
+
     def test_removal_requires_exact_remaining_text_and_no_outline(self):
         self.editor.set('text', 'Keep this')
         self.assertFalse(self.check('removed', 'Keep this')['composer_pill'])
