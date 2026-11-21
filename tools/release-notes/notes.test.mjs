@@ -35,6 +35,14 @@ test('a commit without its ticket is refused', () => {
   assert.throws(() => ticketFor('IGSH-12 no colon'), /must start with its ticket/);
 });
 
+test('a SOFT ticket from the Android board names its notes like any other', () => {
+  const directory = titleDirectory({ 'SOFT-3022.txt': 'Live chat shows its newest messages' });
+  const soft = loadCatalog(directory);
+  assert.equal(ticketFor('SOFT-3022: Live chat shows its newest messages'), 'SOFT-3022');
+  assert.deepEqual(noteLines(['SOFT-3022: Live chat shows its newest messages (#504)'], soft), ['- SOFT-3022 Live chat shows its newest messages']);
+  assert.throws(() => ticketFor('SOFT-0: nothing'), /must start with its ticket/);
+});
+
 test('a ticket missing from the title list is refused', () => {
   assert.throws(() => noteLines(['IGSH-1: something'], catalog), /needs its exact ticket title/);
   assert.throws(() => noteLines(['IGSH-1: something'], { 'IGSH-1': ' padded' }), /needs its exact ticket title/);
@@ -81,11 +89,11 @@ test('the shipped titles directory holds one valid file per ticket and no shared
   const shipped = loadCatalog();
   assert.ok(Object.keys(shipped).length > 0);
   for (const id of Object.keys(shipped)) {
-    assert.match(id, /^(?:IGSH|HYCI)-[1-9]\d*$/);
+    assert.match(id, /^(?:IGSH|HYCI|SOFT)-[1-9]\d*$/);
     assert.deepEqual(noteLines([`${id}: x`], shipped), [`- ${id} ${shipped[id]}`]);
   }
   const directory = fileURLToPath(new URL('./titles/', import.meta.url));
-  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI)-[1-9]\d*\.txt$/);
+  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI|SOFT)-[1-9]\d*\.txt$/);
   assert.throws(() => readdirSync(fileURLToPath(new URL('./ticket-titles.json', import.meta.url))), /ENOENT/);
 });
 

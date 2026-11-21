@@ -3,8 +3,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ticketPrefix = /^((?:IGSH|HYCI)-[1-9]\d*):\s+\S/;
-const titleFile = /^((?:IGSH|HYCI)-[1-9]\d*)\.txt$/;
+const ticketPrefix = /^((?:IGSH|HYCI|SOFT)-[1-9]\d*):\s+\S/;
+const titleFile = /^((?:IGSH|HYCI|SOFT)-[1-9]\d*)\.txt$/;
 const filler = /checks and fixes|no visible change|no source changes|^(?:fix(?:es)?|update[sd]?|misc|cleanup|wip|chore)\.?$/i;
 
 export function loadCatalog(directory = new URL('./titles/', import.meta.url)) {
@@ -47,7 +47,7 @@ export function noteLines(subjects, catalog) {
 
 export function checkNotes(notes, catalog) {
   for (const line of notes.split('\n').filter(line => line.trim())) {
-    const match = /^- ((?:IGSH|HYCI)-[1-9]\d*) (.+)$/.exec(line);
+    const match = /^- ((?:IGSH|HYCI|SOFT)-[1-9]\d*) (.+)$/.exec(line);
     if (!match || ticketTitle(match[1], catalog) !== match[2]) throw new Error(`Release note line lacks ticket number and title: ${line}`);
   }
 }

@@ -30,7 +30,7 @@ object TmuxCommands {
         return "python3 -c '$ETA_PYTHON'$argument 2>/dev/null || true"
     }
 
-    private const val ETA_PYTHON = "import json,os,re,sys,time\n" +
+    private const val ETA_PYTHON = "import glob,json,os,re,sys,time\n" +
         "d=os.environ.get(\"MULTIPROMPT_STATE_DIR\") or os.path.join(os.path.expanduser(\"~\"),\".local/state/multiprompt\")\n" +
         "now=int(time.time())\n" +
         "want=sys.argv[1] if len(sys.argv)>1 else \"\"\n" +
@@ -79,7 +79,7 @@ object TmuxCommands {
         "        if (c.get(\"enabled\") is True and isinstance(t, str) and t and isinstance(s, str) and\n" +
         "                re.fullmatch(r\"[A-Za-z0-9_-]{1,80}\", s) and (t not in hostsid or m > hostsid[t][0])):\n" +
         "            hostsid[t]=(m, s)\n" +
-        "    sys.stdout.write(\"\".join(\"@hostsid\\t%s\\t%s\\n\" % (t, s) for t, (m, s) in hostsid.items()))"
+        "    sys.stdout.write(\"\".join(\"\\n@hostsid\\t%s\\t%s\" % (t, s) for t, (m, s) in hostsid.items()))"
 
     fun etaLogCommand(): String =
         "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +

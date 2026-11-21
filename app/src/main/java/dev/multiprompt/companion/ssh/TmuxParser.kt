@@ -95,9 +95,9 @@ object TmuxParser {
             )
         }
         val etaPayload = etaPayload(output).orEmpty()
-        val replies = parseLiveReplies(etaPayload)
-        val providers = parseHostProviders(etaPayload)
-        val hostSessionIds = parseHostSessionIds(etaPayload)
+        val replies = TmuxText.parseLiveReplies(etaPayload)
+        val providers = TmuxText.parseHostProviders(etaPayload)
+        val hostSessionIds = TmuxText.parseHostSessionIds(etaPayload)
         return sessions.map { session ->
             val sid = session.hostSessionId.ifBlank { hostSessionIds[session.name].orEmpty() }
             val withSid = if (sid != session.hostSessionId) session.copy(hostSessionId = sid) else session
