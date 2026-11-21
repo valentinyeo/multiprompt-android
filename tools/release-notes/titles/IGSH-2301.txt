@@ -1,0 +1,1 @@
+Android: make the app open faster after an update

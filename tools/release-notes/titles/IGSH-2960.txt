@@ -1,0 +1,1 @@
+Android PR checks work when the AI picker is out of credit
