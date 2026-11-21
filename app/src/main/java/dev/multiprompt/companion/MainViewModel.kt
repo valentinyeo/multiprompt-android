@@ -999,7 +999,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             final = final,
             currentUpdatingHostIds = current.updatingHostIds,
         )
-        val sessions = merged.sessions.map { session ->
+        val sessions = RefreshMerge.stabilizeHostedIdentity(current.sessions, merged.sessions, final).map { session ->
             sessionReads.displayName(session)?.let { session.copy(title = it) } ?: session
         }
         val mapping = AccountHostMap.resolve(current.hosts, accountStore.hostOverrides())
@@ -1769,6 +1769,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
         }
+    }
+
+    fun openMentionedSession(sessionName: String) {
+        val session = _state.value.sessions.firstOrNull { it.name == sessionName }
+            ?: _state.value.inboxSessions.firstOrNull { it.name == sessionName }
+            ?: return
+        openExistingSession(session)
     }
 
     fun openExistingSession(session: TmuxSession) {
