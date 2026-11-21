@@ -1,4 +1,5 @@
 {
+  "IGSH-2907": "Tests already broken on main become tickets, not PR blocks",
   "IGSH-3006": "Android: update prompt shows three times on the Update screen",
   "IGSH-2969": "Android: message to a busy chat shows Not sent with no reason",
   "IGSH-2480": "Android: tap a session name in a chat to open it",
