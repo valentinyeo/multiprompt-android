@@ -1258,6 +1258,7 @@ if [[ "$feature" == session-stop.md ]]; then
     exit 0
 fi
 if [[ "$feature" == session-summaries.md ]]; then
+    select_node desc 'Robot verify-session' reveal >/dev/null || true
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
     sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter

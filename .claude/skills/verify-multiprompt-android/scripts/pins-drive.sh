@@ -67,15 +67,20 @@ pins_top() {
     python3 "$scripts/pins-oracle.py" top "$EVIDENCE/current.xml" "$package"
 }
 pins_first_horizontal() {
-    local attempt x1 y1 x2 y2
+    local attempt x y bottom direction=backward
     for attempt in {1..15}; do
         dump_ui
         if python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-00 >/dev/null 2>&1; then return; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" any)
-        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
+        read -r x y bottom < <(python3 "$scripts/pins-oracle.py" swipe-area "$EVIDENCE/current.xml" "$package")
+        if [[ "$direction" == backward ]]; then
+            adb shell input swipe "$x" "$y" "$x" "$bottom" 500
+        else
+            adb shell input swipe "$x" "$bottom" "$x" "$y" 500
+        fi
         sleep 1
+        if (( attempt == 8 )); then direction=forward; fi
     done
-    return 1
+    python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-00
 }
 
 pins_instrument pins-seed
@@ -90,8 +95,8 @@ for reverse in false true; do
     for attempt in {1..15}; do
         dump_ui
         if python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-11 >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" any)
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
+        read -r x y bottom < <(python3 "$scripts/pins-oracle.py" swipe-area "$EVIDENCE/current.xml" "$package")
+        adb shell input swipe "$x" "$bottom" "$x" "$y" 500
         sleep 1
     done
     pins_capture "pins-$reverse-horizontal"
