@@ -1,9 +1,13 @@
 package dev.multiprompt.companion.reader
 
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class ClearedChatTest {
+    @get:Rule val temporary = TemporaryFolder()
+
     private val sid = "cleared-chat-proof"
     private val oldId = "clearedmessage000001"
     private val newId = "clearedmessage000002"
@@ -42,5 +46,15 @@ class ClearedChatTest {
     fun anUnsentMessageTypedAfterTheClearStays() {
         val drawn = cleared().projectMessages(replica(message(newId, "AFTER unsent", MessageProtocol.State.FAILED, 2_100.0)), now = 3_000.0)
         assertEquals(listOf("new question", "AFTER unsent"), drawn.map { it.text })
+    }
+
+    @Test
+    fun theClearBoundarySurvivesTheCachedChatAfterARestart() {
+        val cache = ChatHistoryCache(temporary.newFolder("cleared-cache"))
+        cache.save("host/tmux", cleared())
+        val restored = requireNotNull(cache.restore("host/tmux"))
+        assertEquals(2_000.0, restored.clearedAt, 0.0)
+        val drawn = restored.projectMessages(replica(message(oldId, "OLD unsent", MessageProtocol.State.FAILED, 1_500.0)), now = 3_000.0)
+        assertEquals(listOf("new question"), drawn.map { it.text })
     }
 }
