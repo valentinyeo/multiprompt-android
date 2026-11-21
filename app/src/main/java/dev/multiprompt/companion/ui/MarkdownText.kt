@@ -190,7 +190,7 @@ fun MarkdownText(
                 }
                 is MdBlock.Code -> {
                     val readerStyle = LocalReaderStyle.current
-                    val scrollWide = block.scrollsHorizontally(readerStyle)
+                    val scrollWide = block.scrollsHorizontally()
                     val horizontal = rememberScrollState()
                     Column(
                         Modifier
@@ -585,8 +585,7 @@ internal fun MarkdownLinkedText(
     )
 }
 
-private fun MdBlock.Code.scrollsHorizontally(readerStyle: Boolean): Boolean {
-    if (!readerStyle) return true
+private fun MdBlock.Code.scrollsHorizontally(): Boolean {
     val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     return words.size >= 20 && words.all { it.length <= 16 }
 }
