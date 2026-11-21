@@ -3520,7 +3520,7 @@ internal fun ReaderScreen(
         ) {
             val trimmed = draftText.trim()
             when {
-                Regex("""/login\s*""").matches(trimmed) -> ""
+                trimmed == "/login" || trimmed.matches(Regex("^/login\\s*$")) -> ""
                 else -> dev.multiprompt.companion.reader.PiLogin.parseLoginSlash(draftText)
             }
         } else {
@@ -3545,17 +3545,17 @@ internal fun ReaderScreen(
                 }
             }
         } else {
-        val composedPrompt = PromptComposer.composeMessage(ChatMention.annotate(draftText, mentionPicks, mentionChats), imageAttachments, replyTo, reader.nativeSkills)
-        if (composedPrompt.isNotBlank() &&
-            !reader.sending &&
-            pendingPromptAction == null && !recordingPrompt &&
-            !routeSlashCommand(draftText)
-        ) {
-            val actionCount = reader.completedActions
-            val draft = SentDraft(draftText, imageAttachments, replyTo)
-            recordingPrompt = true
-            val editing = editingMessageId
-            readerScope.launch {
+            val composedPrompt = PromptComposer.composeMessage(ChatMention.annotate(draftText, mentionPicks, mentionChats), imageAttachments, replyTo, reader.nativeSkills)
+            if (composedPrompt.isNotBlank() &&
+                !reader.sending &&
+                pendingPromptAction == null && !recordingPrompt &&
+                !routeSlashCommand(draftText)
+            ) {
+                val actionCount = reader.completedActions
+                val draft = SentDraft(draftText, imageAttachments, replyTo)
+                recordingPrompt = true
+                val editing = editingMessageId
+                readerScope.launch {
                 val sent = if (editing == null) connection.sendPrompt(composedPrompt) else when (val edit = connection.editWaiting(editing, composedPrompt)) {
                     is QueuedEdit.Outcome.Sent -> edit.admission
                     is QueuedEdit.Outcome.TooLate -> dev.multiprompt.companion.reader.PromptAdmission.Rejected(QueuedEdit.TOO_LATE_NOTICE)
@@ -3589,6 +3589,7 @@ internal fun ReaderScreen(
                 }
                 recordingPrompt = false
             }
+        }
         }
     }
     val applyPiModel: (PiModel) -> Unit = { model ->
