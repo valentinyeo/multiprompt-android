@@ -133,7 +133,7 @@ class SignInGateTest {
         val release = UpdateRelease(Long.MAX_VALUE, "next", "https://example.com/app.apk", "0".repeat(64), 1, "")
         compose.runOnIdle { updates.value = UpdateState.Available(release) }
         compose.onNodeWithText("Sign in").assertIsDisplayed()
-        compose.onNodeWithText("Install").assertIsDisplayed().performClick()
+        compose.onNodeWithText("Update now").assertIsDisplayed().performClick()
         compose.onNodeWithText("Allow installs to update to vnext").assertIsDisplayed()
         compose.runOnIdle { assertEquals(UpdateState.PermissionRequired(release), updates.value) }
         compose.onNodeWithText("Inbox").assertDoesNotExist()
