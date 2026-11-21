@@ -1,0 +1,1 @@
+Android phone test finds words inside chats

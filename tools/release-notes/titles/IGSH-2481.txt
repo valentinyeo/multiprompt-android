@@ -1,0 +1,1 @@
+Android: model menu shows the chat's real model

@@ -1,0 +1,1 @@
+No false live view error in desktop hosted chats

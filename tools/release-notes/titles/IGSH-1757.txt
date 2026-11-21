@@ -1,0 +1,1 @@
+Android: reply card inside the message box, like Grok Bot

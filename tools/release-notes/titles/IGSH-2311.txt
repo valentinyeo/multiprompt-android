@@ -1,0 +1,1 @@
+Android: hidden warm chats stop pulling screen updates

@@ -1,0 +1,1 @@
+Android: remove the ETA countdown like desktop

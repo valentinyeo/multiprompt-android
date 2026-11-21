@@ -1,0 +1,1 @@
+Android: rename a group and a Recents heading in the list

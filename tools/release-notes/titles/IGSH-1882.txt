@@ -1,0 +1,1 @@
+Android: open chat stops showing new messages until reopened
