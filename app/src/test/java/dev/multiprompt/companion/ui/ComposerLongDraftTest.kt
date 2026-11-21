@@ -135,25 +135,6 @@ class ComposerLongDraftTest {
         }
     }
 
-    private fun settledCapture(node: SemanticsNodeInteraction): Bitmap {
-        val view = (node.fetchSemanticsNode().root as ViewRootForTest).view.rootView
-        val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
-        val hardwareAccelerated = view.isHardwareAccelerated
-        ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
-        return try {
-            repeat(4) {
-                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
-                view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
-                view.viewTreeObserver.dispatchOnDraw()
-                shadowOf(Looper.getMainLooper()).idle()
-            }
-            compose.waitForIdle()
-            node.captureToImage().asAndroidBitmap()
-        } finally {
-            ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", hardwareAccelerated)
-        }
-    }
-
     private fun skillPillBandPixels(bitmap: Bitmap, textRight: Int): Pair<Int, Int> {
         val surface = Kit.Surface.toArgb()
         val xMax = textRight.coerceIn(1, bitmap.width)
@@ -239,11 +220,7 @@ class ComposerLongDraftTest {
         val last = layout.getBoundingBox(longDraft.length - 1)
         println("COMPOSER_TOKEN layout_start=$first layout_end=$last lines=${layout.lineCount}")
 
-        val bitmap = settledCapture(compose.onNode(hasSetTextAction())).also {
-            val output = File("build/reports/igsh-844/igsh-2957-composer-field.png")
-            checkNotNull(output.parentFile).mkdirs()
-            output.outputStream().use { stream -> assertTrue(it.compress(Bitmap.CompressFormat.PNG, 100, stream)) }
-        }
+        val bitmap = save(compose.onNode(hasSetTextAction()), "composer-field")
         val textRight = (micBounds.left - fieldBounds.left).toInt() - 4
         val (pillRows, pillPixels) = skillPillBandPixels(bitmap, textRight)
         println("COMPOSER_PILL rows=$pillRows pixels=$pillPixels textRight=$textRight scrolls=${layout.scrollsInsideComposer()}")
