@@ -129,7 +129,7 @@ real_chat_screen() {
     tap_text All
 }
 
-real_chat_journeys=" chat-identity.md chat-shapes.md chat-shared.md session-reader.md "
+real_chat_journeys=" chat-clear.md chat-identity.md chat-shapes.md chat-shared.md session-reader.md "
 
 real_chat_step() {
     if [[ "$real_chat_journeys" != *" $feature "* ]]; then

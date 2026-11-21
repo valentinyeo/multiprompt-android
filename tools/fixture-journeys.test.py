@@ -330,6 +330,31 @@ session['db'].close()
                 self.assertEqual(1, state[0]['claims'])
                 self.assertEqual(['VERIFY_RECEIVED:WAITING_ONE', 'VERIFY_RECEIVED:WAITING_TWO'], (home / 'receipts.txt').read_text().splitlines())
 
+    def test_fail_event_expires_the_queued_message_for_the_next_poll(self):
+        reader = load('fixture_canonical_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
+        source = ast.parse((SCRIPTS / 'queued-console.py').read_text())
+        functions = [node for node in ast.walk(source) if isinstance(node, ast.FunctionDef) and node.name in ('advance_queue', 'accept_input', 'fail_messages')]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            transcript = home / '.claude/projects' / str(home / 'queued-work').replace('/', '-') / (queue.SID + '.jsonl')
+            transcript.parent.mkdir(parents=True)
+            transcript.write_text('')
+            sources = {name: base64.b64encode((ROOT / 'app/src/main/assets/chat_connectors' / (name + '.py')).read_bytes()).decode() for name in ('claude', 'codex')}
+            namespace = dict(reader=reader, SID=queue.SID, RECEIPTS=home / 'receipts.txt', draft='FIXTURE_OWNED_DRAFT', native=[], redraw=lambda: None, closing=closing)
+            exec(compile(ast.Module(body=functions, type_ignores=[]), '<queued-fixture-controller>', 'exec'), namespace)
+            def state():
+                with closing(sqlite3.connect(reader.message_store_path())) as db:
+                    return db.execute('SELECT state FROM shared_messages WHERE id=?', ('message_fixture_9001',)).fetchone()[0]
+            with patch.object(reader, 'HOME', home), patch.object(reader, 'CONNECTOR_SOURCES', sources, create=True), patch.object(reader, 'resolve_tmux_agent', return_value=(queue.SID, transcript)):
+                request = dict(message_protocol=1, provider='claude', sid=queue.SID, tmux='verify-session')
+                reader.message_store_request(dict(request, op='message_submit', message_id='message_fixture_9001', text='CLEARED_BEFORE_2474'))
+                namespace['advance_queue']()
+                self.assertEqual('queued', state())
+                namespace['fail_messages']()
+                self.assertEqual('failed', state())
+                events = [event['event'] for event in reader.message_events_page('claude', queue.SID, 0)['events'] if event['event'].get('id') == 'message_fixture_9001']
+                self.assertEqual('failed', events[-1]['state'])
+
     def test_focused_field_is_found_after_the_hint_disappears(self):
         with tempfile.TemporaryDirectory() as temporary:
             xml = Path(temporary) / 'current.xml'
