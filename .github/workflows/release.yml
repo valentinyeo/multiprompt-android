@@ -42,11 +42,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         timeout-minutes: 10
         with:
-          gradle-version: "9.5.1"
-          cache-read-only: true
+          read-only: true
 
       - name: Resolve version
         timeout-minutes: 2
