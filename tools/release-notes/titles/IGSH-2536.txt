@@ -1,0 +1,1 @@
+Android uses only the design kit for buttons and menus

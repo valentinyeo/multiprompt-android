@@ -6,6 +6,8 @@ const { execFileSync } = require('node:child_process');
 const registry = require('../../../.claude/skills/verify-multiprompt-android/features/registry.json');
 const baseline = require('../../../.claude/skills/verify-multiprompt-android/features/coverage-baseline.json');
 const REGISTRY_PATH = '.claude/skills/verify-multiprompt-android/features';
+const HARNESS = /^(?:tools\/journey-actions\/|\.claude\/skills\/verify-multiprompt-android\/scripts\/)/;
+const ownedScripts = new Set(Object.values(registry.journeys).flatMap(journey => journey.runner.scripts ?? []));
 const debugJourneys = Object.entries(registry.journeys).filter(([, journey]) => journey.runner.kind === 'debug').map(([name]) => name);
 const prJourneys = Object.entries(registry.journeys).filter(([, journey]) => ['debug', 'signed'].includes(journey.runner.kind)).map(([name]) => name);
 
@@ -32,10 +34,15 @@ function recipeOutcomes(diff, files = []) {
   return changedRecipes(diff, files).flatMap(name => registry.journeys[name].outcomes);
 }
 
+function sharedHarness(paths) {
+  return [...paths].some(file => HARNESS.test(file) && !ownedScripts.has(file));
+}
+
 function changedJourneys(diff, files = []) {
   const paths = changedPaths(diff, files);
-  return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`)
-    || paths.has('.claude/skills/verify-multiprompt-android/scripts/drive.sh')
+  const shared = sharedHarness(paths);
+  return prJourneys.filter(name => shared
+    || paths.has(`${REGISTRY_PATH}/${name}`)
     || (registry.journeys[name].runner.scripts ?? []).some(script => paths.has(script)));
 }
 

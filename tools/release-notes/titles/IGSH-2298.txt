@@ -1,0 +1,1 @@
+Android: stop rereading the saved chat list every refresh

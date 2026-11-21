@@ -1,0 +1,1 @@
+Android: chat opens at the New line

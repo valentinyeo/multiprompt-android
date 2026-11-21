@@ -1,0 +1,1 @@
+Android: chat menu in desktop order, Delete last in red

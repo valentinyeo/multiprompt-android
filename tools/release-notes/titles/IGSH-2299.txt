@@ -1,0 +1,1 @@
+Android: reconnect chats right away when the network returns
