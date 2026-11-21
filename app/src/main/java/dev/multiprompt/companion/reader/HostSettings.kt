@@ -46,9 +46,15 @@ enum class HostChange(val section: String, val label: String, val op: String, va
     fun line(id: Long, sid: String): String =
         "{\"id\":$id,\"op\":${JSONObject.quote(op)},\"provider\":${JSONObject.quote(provider)},\"sid\":${JSONObject.quote(sid)},${JSONObject.quote(key)}:${JSONObject.quote(value)}}"
 
-    fun active(settings: HostSettings?, runtimeModel: String?, runtimeEffort: String?): Boolean = if (provider != "claude") value == settings?.model else when (key) {
-        "model" -> value == HostSettings.family(settings?.model?.ifEmpty { null } ?: runtimeModel)
-        "effort" -> value == (settings?.effort?.ifEmpty { null } ?: runtimeEffort)?.trim()?.lowercase()
+    fun active(settings: HostSettings?, runtimeModel: String?, runtimeEffort: String?): Boolean = if (provider != "claude") {
+        value == settings?.model || (settings?.model.isNullOrEmpty() && HostSettings.family(runtimeModel) == value)
+    } else when (key) {
+        "model" -> value == (HostSettings.family(runtimeModel) ?: HostSettings.family(settings?.model?.ifEmpty { null }))
+        "effort" -> {
+            val effort = runtimeEffort?.trim()?.lowercase()?.ifEmpty { null }
+                ?: settings?.effort?.ifEmpty { null }?.trim()?.lowercase()
+            value == effort
+        }
         else -> value == settings?.mode
     }
 

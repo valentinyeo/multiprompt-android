@@ -338,6 +338,22 @@ test('changed recipes and owned drivers are mandatory before model suggestions',
   assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/scroll.test.py' }], 1), true);
 });
 
+test('a harness change runs every journey that clicks through the shared action', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const changed = [
+    { filename: 'tools/journey-actions/action.test.py' },
+    { filename: 'tools/journey-actions/fixtures/chat-shared-verify-session-text-visible.xml' },
+    { filename: '.claude/skills/verify-multiprompt-android/scripts/journey_action.py' },
+  ];
+  assert.deepEqual(gate.changedJourneys('', changed), gate.prJourneys);
+  assert.ok(gate.changedJourneys('', changed).includes('chat-shared.md'));
+  const diff = changed.map(file => `diff --git a/${file.filename} b/${file.filename}\n+changed`).join('\n');
+  assert.deepEqual(gate.changedJourneys(diff), gate.prJourneys);
+  assert.deepEqual(verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff).features, gate.prJourneys);
+  assert.equal(verifier.noProductChange([{ filename: 'tools/journey-actions/action.test.py' }], 1), false);
+  assert.deepEqual(gate.changedJourneys('', [{ filename: '.claude/skills/verify-multiprompt-android/scripts/pins-drive.sh' }]), ['session-pins.md']);
+});
+
 test('a shared-driver change runs every journey it touches instead of deferring guards', () => {
   const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
   const files = ['.claude/skills/verify-multiprompt-android/scripts/drive.sh', `${gate.REGISTRY_PATH}/chat-shared.md`];
@@ -1071,8 +1087,8 @@ test('drive.sh prints a product-assertion marker and keeps setup failures separa
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'pick'), /change_kind: \$\{\{ steps\.pick\.outputs\.change_kind \}\}/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /CHANGE_KIND: \$\{\{ needs\.pick\.outputs\.change_kind \}\}/);
-  assert.match(jobBlock(workflow, 'pick'), /tools\/release-notes\/ticket-titles\.json/);
-  assert.match(jobBlock(workflow, 'pstack-verifier'), /tools\/release-notes\/ticket-titles\.json/);
+  assert.match(jobBlock(workflow, 'pick'), /^\s+tools\/release-notes\/titles$/m);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /^\s+tools\/release-notes\/titles$/m);
 });
 
 test('verify.yml pins the parent app source to a full sha and takes it through app_ref', () => {

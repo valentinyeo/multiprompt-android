@@ -1,0 +1,1 @@
+Multi Bot Android release check fails after a cancelled release run

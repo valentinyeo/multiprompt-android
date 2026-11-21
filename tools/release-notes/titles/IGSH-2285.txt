@@ -1,0 +1,1 @@
+Android: take control of the server screen

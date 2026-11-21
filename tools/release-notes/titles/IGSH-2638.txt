@@ -1,0 +1,1 @@
+Phone tests cover every menu control
