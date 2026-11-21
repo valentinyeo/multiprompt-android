@@ -457,17 +457,13 @@ seed_host() {
     setup_failure=1
     adb shell am force-stop "$package"
     set +x
+    local key
+    key=$(base64 -w0 "$FIXTURE/user-key")
     if [[ "$package" == dev.multiprompt.companion.debug ]]; then
-        adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
-            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
-            "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
+        adb shell "am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture -e host_label '$1' -e ssh_host '$2' -e ssh_port '$3' -e ssh_user '$4' -e ssh_private_key '$key' $package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
         grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
     else
-        adb shell am instrument -w -e mode host-seed \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
-            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
-            dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/host-seed.txt"
+        adb shell "am instrument -w -e mode host-seed -e host_label '$1' -e ssh_host '$2' -e ssh_port '$3' -e ssh_user '$4' -e ssh_private_key '$key' dev.multiprompt.verification/dev.multiprompt.verification.Seed" > "$EVIDENCE/host-seed.txt"
         grep -F 'ISOLATED_HOST_SEEDED' "$EVIDENCE/host-seed.txt"
         grep -F 'INSTRUMENTATION_CODE: -1' "$EVIDENCE/host-seed.txt"
     fi
