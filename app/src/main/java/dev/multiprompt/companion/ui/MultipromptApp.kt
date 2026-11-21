@@ -4302,7 +4302,9 @@ internal fun ReaderScreen(
         },
         bottomBar = {
             FloatingBottomBar(
-                Modifier.imePadding().padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
+                Modifier.imePadding()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = ReaderScreenPadding, vertical = ReaderControlSpacing),
                 verticalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
                 if (savedToken > 0 && !attachMenuExpanded) {
@@ -4663,7 +4665,12 @@ internal fun ReaderScreen(
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
                         val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
-                        val skillText = remember(skillSpans) { if (skillSpans.isEmpty()) VisualTransformation.None else SkillPillText(skillSpans) }
+                        val laidOut = composerLayout
+                        val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
+                        val composerGrown = (laidOut?.lineCount ?: 1) > 1
+                        val skillText = remember(skillSpans, pillsDrawn) {
+                            if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans)
+                        }
                         Box(Modifier.weight(1f).padding(vertical = 2.dp)) {
                         BasicTextField(
                             value = promptField,
@@ -4683,7 +4690,7 @@ internal fun ReaderScreen(
                             visualTransformation = skillText,
                             onTextLayout = { composerLayout = it },
                             minLines = 1,
-                            maxLines = 6,
+                            maxLines = ReaderComposerMaxLines,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                             keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                             readOnly = dictationActive,
@@ -4699,9 +4706,9 @@ internal fun ReaderScreen(
                                 }
                                 Row(
                                     Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
+                                    verticalAlignment = if (composerGrown) Alignment.Bottom else Alignment.CenterVertically,
                                 ) {
-                                    Box(Modifier.weight(1f).padding(vertical = 10.dp).skillPills(skillSpans, composerLayout)) {
+                                    Box(Modifier.weight(1f).padding(vertical = 10.dp).skillPills(skillSpans, laidOut)) {
                                         if (prompt.isEmpty()) {
                                             Text(
                                                 "Message ${session.displayName}",

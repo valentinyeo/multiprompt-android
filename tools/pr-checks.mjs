@@ -76,16 +76,20 @@ export function checkStatus(pr, { redOnMain = { journeys: [], url: '' } } = {}) 
     if (!previous || timestamp >= previous.timestamp) latestRuns.set(key, { check, timestamp });
   }
   checks.push(...Array.from(latestRuns.values(), ({ check }) => check));
-  const verifierGreen = checks.some(check => check.__typename === 'CheckRun'
-    && check.name === 'pstack-verifier' && check.status === 'COMPLETED' && check.conclusion === 'SUCCESS');
+  const verifier = checks.find(check => check.__typename === 'CheckRun' && check.name === 'pstack-verifier');
+  const verifierGreen = verifier?.status === 'COMPLETED' && verifier.conclusion === 'SUCCESS';
+  const verifierPending = verifier != null && verifier.status !== 'COMPLETED';
   const redOnMainSet = new Set(Array.isArray(redOnMain.journeys) ? redOnMain.journeys : []);
   const toleratedRedOnMain = [];
   const failed = checks.filter(check => {
     if (!checkFailed(check)) return false;
     const match = journeyVerifyCheck.exec(check.name ?? '');
-    if (match && verifierGreen && redOnMainSet.has(match[1])) {
-      toleratedRedOnMain.push(match[1]);
-      return false;
+    if (match && redOnMainSet.has(match[1])) {
+      if (verifierGreen) {
+        toleratedRedOnMain.push(match[1]);
+        return false;
+      }
+      if (verifierPending) return false;
     }
     return true;
   });
@@ -108,13 +112,12 @@ export function checkStatus(pr, { redOnMain = { journeys: [], url: '' } } = {}) 
 
 export async function waitForChecks(inspect, { wait = false, now = Date.now, pause = setTimeout, report = console.error, loadRedOnMain = null } = {}) {
   const deadline = now() + timeoutMs;
-  let head, base;
+  let head;
   while (true) {
     if (now() >= deadline) throw new Error('Check wait exceeded thirty minutes');
     const pr = await inspect();
-    if (head && (pr.headRefOid !== head || pr.baseRefOid !== base)) throw new Error('PR head or base changed; stop this wait');
+    if (head && pr.headRefOid !== head) throw new Error('PR head changed; stop this wait');
     head = pr.headRefOid;
-    base = pr.baseRefOid;
     const redOnMain = loadRedOnMain ? loadRedOnMain() : { journeys: [], url: '' };
     let status;
     try {

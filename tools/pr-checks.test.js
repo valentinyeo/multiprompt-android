@@ -226,15 +226,33 @@ test('wait accepts completed checks without starting another watcher', async () 
   assert.deepEqual(pauses, [300_000]);
 });
 
-test('wait stops on changed head or base instead of retrying', async () => {
+test('wait stops on a changed head instead of retrying', async () => {
   const { waitForChecks } = await gate;
-  for (const field of ['headRefOid', 'baseRefOid']) {
-    let calls = 0;
-    await assert.rejects(waitForChecks(() => ++calls === 1 ? original : { ...original, [field]: 'a'.repeat(40) }, {
-      wait: true, pause: async () => {}, report: () => {},
-    }), /head or base changed/);
-    assert.equal(calls, 2);
-  }
+  let calls = 0;
+  await assert.rejects(waitForChecks(() => ++calls === 1 ? original : { ...original, headRefOid: 'a'.repeat(40) }, {
+    wait: true, pause: async () => {}, report: () => {},
+  }), /head changed/);
+  assert.equal(calls, 2);
+});
+
+test('wait keeps polling when only the base moves forward', async () => {
+  const { waitForChecks } = await gate;
+  const pr = await green();
+  const pending = {
+    ...pr,
+    statusCheckRollup: pr.statusCheckRollup.map((check, index) => index === 0
+      ? { ...check, status: 'IN_PROGRESS', conclusion: null }
+      : check),
+  };
+  let calls = 0;
+  const result = await waitForChecks(() => {
+    calls += 1;
+    if (calls === 1) return pending;
+    if (calls === 2) return { ...pending, baseRefOid: 'b'.repeat(40) };
+    return pr;
+  }, { wait: true, pause: async () => {}, report: () => {} });
+  assert.equal(result, `COMPLETE_CHECKS_GREEN ${pr.headRefOid}`);
+  assert.equal(calls, 3);
 });
 
 test('API failures and failed checks stop immediately without retry', async () => {
@@ -337,4 +355,120 @@ test('a red-on-main journey still blocks when pstack-verifier did not pass', asy
     () => checkStatus(pr, { redOnMain: { journeys: ['session-gestures.md'], url: 'https://github.com/example/actions/runs/1' } }),
     /Checks not green: (?:journey session-gestures\.md \/ verify|pstack-verifier)/,
   );
+});
+
+test('a red-on-main journey failure waits while pstack-verifier is pending', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+  verifier.status = 'IN_PROGRESS';
+  verifier.conclusion = null;
+  pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-drafts.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+  const status = checkStatus(pr, { redOnMain: { journeys: ['session-drafts.md'], url: 'https://github.com/example/actions/runs/1' } });
+  assert.equal(status.ready, false);
+  assert.match(status.message, /pending/);
+});
+
+test('wait keeps polling when a red-on-main journey fails before pstack-verifier finishes', async () => {
+  const { waitForChecks } = await gate;
+  const redOnMain = { journeys: ['session-drafts.md'], url: 'https://github.com/example/actions/runs/1' };
+  let calls = 0;
+  const pauses = [];
+  const message = await waitForChecks(async () => {
+    calls++;
+    const pr = await green();
+    if (calls === 1) {
+      const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+      verifier.status = 'IN_PROGRESS';
+      verifier.conclusion = null;
+      pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-drafts.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+      return pr;
+    }
+    pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-drafts.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+    return pr;
+  }, {
+    wait: true,
+    now: () => calls * 300_000,
+    pause: async ms => { pauses.push(ms); },
+    report: () => {},
+    loadRedOnMain: () => redOnMain,
+  });
+  assert.match(message, /^COMPLETE_CHECKS_GREEN /);
+  assert.equal(calls, 2);
+  assert.deepEqual(pauses, [300_000]);
+});
+
+test('wait stops immediately when a non-red journey fails while pstack-verifier is pending', async () => {
+  const { waitForChecks } = await gate;
+  const pr = await green();
+  const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+  verifier.status = 'IN_PROGRESS';
+  verifier.conclusion = null;
+  pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey chat-table.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+  let pauses = 0;
+  await assert.rejects(waitForChecks(() => pr, {
+    wait: true,
+    pause: async () => { pauses++; },
+    report: () => {},
+    loadRedOnMain: () => ({ journeys: ['session-drafts.md'], url: 'https://github.com/example/actions/runs/1' }),
+  }), /Checks not green: journey chat-table\.md \/ verify/);
+  assert.equal(pauses, 0);
+});
+
+test('wait accepts tolerated red-on-main journeys after pstack-verifier passes', async () => {
+  const { waitForChecks, reportToleratedRedOnMain } = await gate;
+  const redOnMain = { journeys: ['session-drafts.md'], url: 'https://github.com/example/actions/runs/1' };
+  let step = 0;
+  const reports = [];
+  const message = await waitForChecks(async () => {
+    const pr = await green();
+    if (step === 0) {
+      step++;
+      const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+      verifier.status = 'IN_PROGRESS';
+      verifier.conclusion = null;
+      pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-drafts.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+      return pr;
+    }
+    pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-drafts.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+    return pr;
+  }, {
+    wait: true,
+    now: () => step * 300_000,
+    pause: async () => { step++; },
+    report: line => reports.push(line),
+    loadRedOnMain: () => redOnMain,
+  });
+  assert.match(message, /^COMPLETE_CHECKS_GREEN /);
+  const status = { toleratedRedOnMain: ['session-drafts.md'], redOnMainUrl: redOnMain.url };
+  const lines = [];
+  reportToleratedRedOnMain(status, line => lines.push(line));
+  assert.match(lines.join('\n'), /session-drafts\.md/);
+});
+
+test('wait fails when pstack-verifier fails after a red-on-main journey already failed', async () => {
+  const { waitForChecks } = await gate;
+  const redOnMain = { journeys: ['session-drafts.md'], url: 'https://github.com/example/actions/runs/1' };
+  let step = 0;
+  await assert.rejects(waitForChecks(async () => {
+    const pr = await green();
+    if (step === 0) {
+      step++;
+      const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+      verifier.status = 'IN_PROGRESS';
+      verifier.conclusion = null;
+      pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-drafts.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+      return pr;
+    }
+    const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+    verifier.conclusion = 'FAILURE';
+    pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-drafts.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+    return pr;
+  }, {
+    wait: true,
+    now: () => step * 300_000,
+    pause: async () => { step++; },
+    report: () => {},
+    loadRedOnMain: () => redOnMain,
+  }), /Checks not green/);
 });
