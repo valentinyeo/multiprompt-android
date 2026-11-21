@@ -68,6 +68,7 @@ internal val ReaderMessageSpacing = 6.dp
 internal val ReaderControlSize = 44.dp
 internal val ReaderControlSpacing = 8.dp
 internal val ReaderSendSize = 28.dp
+internal const val ReaderComposerMaxLines = 6
 internal val ReaderJumpSize = 40.dp
 internal val ReaderFloatingInset = 96.dp
 internal val ReaderTextSize = 16.sp

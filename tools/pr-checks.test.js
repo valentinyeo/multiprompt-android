@@ -226,15 +226,33 @@ test('wait accepts completed checks without starting another watcher', async () 
   assert.deepEqual(pauses, [300_000]);
 });
 
-test('wait stops on changed head or base instead of retrying', async () => {
+test('wait stops on a changed head instead of retrying', async () => {
   const { waitForChecks } = await gate;
-  for (const field of ['headRefOid', 'baseRefOid']) {
-    let calls = 0;
-    await assert.rejects(waitForChecks(() => ++calls === 1 ? original : { ...original, [field]: 'a'.repeat(40) }, {
-      wait: true, pause: async () => {}, report: () => {},
-    }), /head or base changed/);
-    assert.equal(calls, 2);
-  }
+  let calls = 0;
+  await assert.rejects(waitForChecks(() => ++calls === 1 ? original : { ...original, headRefOid: 'a'.repeat(40) }, {
+    wait: true, pause: async () => {}, report: () => {},
+  }), /head changed/);
+  assert.equal(calls, 2);
+});
+
+test('wait keeps polling when only the base moves forward', async () => {
+  const { waitForChecks } = await gate;
+  const pr = await green();
+  const pending = {
+    ...pr,
+    statusCheckRollup: pr.statusCheckRollup.map((check, index) => index === 0
+      ? { ...check, status: 'IN_PROGRESS', conclusion: null }
+      : check),
+  };
+  let calls = 0;
+  const result = await waitForChecks(() => {
+    calls += 1;
+    if (calls === 1) return pending;
+    if (calls === 2) return { ...pending, baseRefOid: 'b'.repeat(40) };
+    return pr;
+  }, { wait: true, pause: async () => {}, report: () => {} });
+  assert.equal(result, `COMPLETE_CHECKS_GREEN ${pr.headRefOid}`);
+  assert.equal(calls, 3);
 });
 
 test('API failures and failed checks stop immediately without retry', async () => {
