@@ -148,7 +148,8 @@ echo "$*" >> "$ANDROID_HOME/calls"
             self.assertIn('ANDROID_IMAGE_READY', result.stdout)
             self.assertFalse((path / 'calls').exists())
 
-    def run_packages(self, cached, already=None):
+    def run_packages(self, cached, already=None, extra_env=None, plan=None, curl_mode='ok', uris=True):
+        plan = plan or [('gdb_1.deb', 'deb-gdb'), ('libpulse0_1.deb', 'deb-libpulse0')]
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)
             script = path / 'packages.sh'
@@ -157,6 +158,14 @@ echo "$*" >> "$ANDROID_HOME/calls"
             state.write_text('\n'.join(already or []))
             calls = path / 'calls'
             calls.write_text('')
+            bodies = path / 'bodies'
+            bodies.mkdir()
+            for name, body in plan:
+                (bodies / name).write_text(body)
+            uris_file = path / 'uris'
+            uris_file.write_text('\n'.join(
+                f"'http://us-east-2.ec2.archive.ubuntu.com/ubuntu/{name}' {name} {len(body)} MD5Sum:{hashlib.md5(body.encode()).hexdigest()}"
+                for name, body in plan) + '\n' if uris else '')
             (path / 'dpkg-query').write_text('''#!/usr/bin/env bash
 set -u
 for arg in "$@"; do
@@ -172,11 +181,33 @@ printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE"
             (path / 'apt-get').write_text('''#!/usr/bin/env bash
 set -u
 echo "apt-get $*" >> "$PROOF_CALLS"
+case "$*" in
+  *--print-uris*) cat "$PROOF_URIS"; exit 0 ;;
+esac
 for arg in "$@"; do
-  case "$arg" in *Dir::Cache::archives=*) dir=${arg#*archives=} ; mkdir -p "$dir/partial"; : > "$dir/lock"; : > "$dir/fetched.deb" ;; esac
+  case "$arg" in *Dir::Cache::archives=*) dir=${arg#*archives=} ; mkdir -p "$dir/partial"; : > "$dir/lock" ;; esac
 done
+case "$*" in
+  *install*gdb*libpulse0*) printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE" ;;
+esac
 ''')
-            for name in ('dpkg-query', 'dpkg', 'apt-get'):
+            (path / 'curl').write_text('''#!/usr/bin/env bash
+set -u
+echo "curl $*" >> "$PROOF_CALLS"
+target=
+uri=
+while [ "$#" -gt 0 ]; do
+  case "$1" in -o) target=$2; shift 2 ;; *) uri=$1; shift ;; esac
+done
+name=${uri##*/}
+echo "start $name" >> "$PROOF_CALLS"
+if [ "$PROOF_CURL_MODE" = fail ]; then exit 7; fi
+if [ "$PROOF_CURL_MODE" = fail_fast ]; then case "$uri" in https://archive.ubuntu.com*) exit 7 ;; esac; fi
+sleep 0.3
+if [ "$PROOF_CURL_MODE" = corrupt ]; then printf 'garbage' > "$target"; else cat "$PROOF_BODIES/$name" > "$target"; fi
+echo "end $name" >> "$PROOF_CALLS"
+''')
+            for name in ('dpkg-query', 'dpkg', 'apt-get', 'curl'):
                 (path / name).chmod(0o700)
             (path / 'sudo').write_text('#!/usr/bin/env bash\nexec "$@"\n')
             (path / 'sudo').chmod(0o700)
@@ -184,10 +215,21 @@ done
             if cached:
                 debs.mkdir(parents=True)
                 (debs / 'gdb.deb').write_text('deb')
-            env = dict(os.environ, HOME=tmp, PROOF_STATE=str(state), PROOF_CALLS=str(calls), PATH=f'{path}:{os.environ["PATH"]}')
+            env = dict(os.environ, HOME=tmp, PROOF_STATE=str(state), PROOF_CALLS=str(calls), PROOF_URIS=str(uris_file),
+                       PROOF_BODIES=str(bodies), PROOF_CURL_MODE=curl_mode, PATH=f'{path}:{os.environ["PATH"]}', **(extra_env or {}))
             result = subprocess.run(['bash', str(script), 'gdb', 'libpulse0'], env=env, capture_output=True, text=True)
             leftovers = sorted(item.name for item in debs.glob('*')) if debs.exists() else []
             return result, calls.read_text(), (path / 'state').read_text(), leftovers
+
+    def test_deb_cache_directory_can_be_shared_with_a_second_job_step(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            shared = Path(tmp) / 'recording-debs'
+            shared.mkdir()
+            (shared / 'ffmpeg.deb').write_text('deb')
+            result, calls, _, _ = self.run_packages(cached=False, extra_env={'ANDROID_PROOF_DEB_CACHE': str(shared)})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('ANDROID_PROOF_PACKAGES_FROM_CACHE', result.stdout)
+            self.assertNotIn('apt-get', calls)
 
     def test_cached_emulator_packages_install_without_apt(self):
         result, calls, state, _ = self.run_packages(cached=True)
@@ -204,14 +246,44 @@ done
         self.assertNotIn('dpkg', calls)
         self.assertNotIn('apt-get', calls)
 
-    def test_empty_package_cache_downloads_once_then_installs(self):
+    def test_empty_package_cache_fetches_every_deb_in_parallel_from_the_fast_mirror(self):
         result, calls, _, leftovers = self.run_packages(cached=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('apt-get update -qq', calls)
-        self.assertIn('--download-only', calls)
-        self.assertEqual(calls.count('apt-get install -y --download-only'), 1)
+        self.assertEqual(calls.count('--print-uris'), 1)
+        self.assertEqual(calls.count('curl '), 2)
+        self.assertIn('https://archive.ubuntu.com/ubuntu/gdb_1.deb', calls)
+        self.assertIn('https://archive.ubuntu.com/ubuntu/libpulse0_1.deb', calls)
+        self.assertNotIn('us-east-2.ec2.archive.ubuntu.com', calls)
+        self.assertIn('--max-time 180', calls)
+        in_flight = calls.splitlines()[:calls.splitlines().index(next(line for line in calls.splitlines() if line.startswith('end ')))]
+        self.assertEqual(len([line for line in in_flight if line.startswith('start ')]), 2)
         self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
-        self.assertEqual(leftovers, ['fetched.deb'])
+        self.assertEqual(leftovers, ['gdb_1.deb', 'libpulse0_1.deb'])
+
+    def test_throttled_archive_mirror_falls_back_to_the_plan_uri(self):
+        result, calls, _, leftovers = self.run_packages(cached=False, curl_mode='fail_fast')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls.count('curl '), 4)
+        self.assertIn('http://us-east-2.ec2.archive.ubuntu.com/ubuntu/gdb_1.deb', calls)
+        self.assertNotIn('DEB_DOWNLOAD_FAILED', result.stdout)
+        self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
+        self.assertEqual(leftovers, ['gdb_1.deb', 'libpulse0_1.deb'])
+
+    def test_corrupt_deb_is_rejected_before_it_can_install(self):
+        result, calls, state, leftovers = self.run_packages(cached=False, curl_mode='corrupt')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('ANDROID_PROOF_DEB_CHECKSUM_FAILED=gdb_1.deb', result.stdout)
+        self.assertIn('apt-get install -y gdb libpulse0', calls)
+        self.assertEqual(leftovers, [])
+        self.assertEqual(state.split(), ['gdb', 'libpulse0'])
+
+    def test_plan_without_download_uris_still_installs(self):
+        result, calls, _, _ = self.run_packages(cached=False, uris=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('curl ', calls)
+        self.assertIn('apt-get install -y gdb libpulse0', calls)
+        self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
 
     def test_stale_package_cache_repairs_dpkg_before_downloading_again(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -254,7 +326,7 @@ done
             result = subprocess.run(['bash', str(script), 'gdb', 'libpulse0'], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('ANDROID_PROOF_PACKAGES_CACHE_REJECTED', result.stdout)
-            self.assertLess(calls.read_text().index('-f install'), calls.read_text().index('--download-only'))
+            self.assertLess(calls.read_text().index('-f install'), calls.read_text().index('--print-uris'))
             self.assertEqual(sorted(item.name for item in debs.glob('*')), ['fetched.deb'])
             self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
 
@@ -282,11 +354,13 @@ done
             (path / 'apt-get').write_text('''#!/usr/bin/env bash
 set -u
 echo "apt-get $*" >> "$PROOF_CALLS"
+case "$*" in
+  *--print-uris*) exit 0 ;;
+esac
 for arg in "$@"; do
   case "$arg" in *Dir::Cache::archives=*) dir=${arg#*archives=} ; mkdir -p "$dir"; : > "$dir/fetched.deb" ;; esac
 done
 case "$*" in
-  *--download-only*) exit 0 ;;
   install*gdb*libpulse0*) printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE" ;;
 esac
 ''')

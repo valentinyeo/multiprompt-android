@@ -4,11 +4,10 @@ search_state() {
     if [[ "$count" != closed ]]; then wait_for_text "$count"; fi
     if [[ -n "$target" ]]; then wait_for_text "$target"; fi
     shot "search-$name"
-    python3 tools/chat-search/ui.py \
-        "$EVIDENCE/$(printf '%02d' "$step")-search-$name.xml" \
-        "$EVIDENCE/$(printf '%02d' "$step")-search-$name.png" \
-        "$query" "$count" "$target" > "$EVIDENCE/search-$name.json"
-    cat "$EVIDENCE/search-$name.json"
+    python3 "$scripts/mpa" chat-search \
+        --xml "$EVIDENCE/$(printf '%02d' "$step")-search-$name.xml" \
+        --png "$EVIDENCE/$(printf '%02d' "$step")-search-$name.png" \
+        --query "$query" --count "$count" --target "$target"
 }
 
 tap_text verify-session

@@ -6,6 +6,7 @@ import os
 import pwd
 import shlex
 from datetime import datetime, timezone
+import importlib.machinery
 import importlib.util
 import json
 from pathlib import Path
@@ -32,7 +33,21 @@ def load(name, path):
 
 runtime = load('shared_fixture_runtime', ROOT / 'tools/shared-fixture-runtime.py')
 queue = load('queue_evidence', SCRIPTS / 'queue-evidence.py')
-ui = load('queue_ui', SCRIPTS / 'queued.py')
+def load_cli():
+    loader = importlib.machinery.SourceFileLoader('queue_cli', str(SCRIPTS / 'mpa'))
+    module = importlib.util.module_from_spec(importlib.util.spec_from_loader('queue_cli', loader))
+    loader.exec_module(module)
+    return module
+
+
+cli = load_cli()
+
+
+def queue_verify(root, expected, name, evidence=None):
+    try:
+        return cli.queue_verify(root, expected, name, evidence)
+    except cli.MpaError as error:
+        raise AssertionError(error.message)
 
 
 class FixtureJourneyTest(unittest.TestCase):
@@ -349,9 +364,9 @@ session['db'].close()
         root = ET.fromstring('<hierarchy><node text="WAITING_ONE"/><node text="WAITING_TWO"/></hierarchy>')
         evidence = [dict(id=f'phone-{n}', text=text, state='started') for n, text in enumerate(('WAITING_ONE', 'WAITING_TWO'), 1)]
         with self.assertRaisesRegex(AssertionError, 'provider answer must be visible'):
-            ui.verify(root, 0, 'QUEUE_ANSWERED', evidence)
+            queue_verify(root, 0, 'QUEUE_ANSWERED', evidence)
         ET.SubElement(root, 'node', text='Both messages received.')
-        self.assertEqual('Both messages received.', ui.verify(root, 0, 'QUEUE_ANSWERED', evidence)['answer'])
+        self.assertEqual('Both messages received.', queue_verify(root, 0, 'QUEUE_ANSWERED', evidence)['answer'])
 
     def test_wrong_attempt_receipt_cannot_confirm_a_queued_message(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -366,14 +381,14 @@ session['db'].close()
     def test_ui_requires_queued_host_state_then_exactly_one_phone_bubble(self):
         root = ET.fromstring('<hierarchy><node text="WAITING_ONE"/><node text="WAITING_TWO"/></hierarchy>')
         evidence = [dict(id=f'phone-{n}', text=text, state='queued') for n, text in enumerate(('WAITING_ONE', 'WAITING_TWO'), 1)]
-        self.assertEqual(2, ui.verify(root, 2, 'QUEUE_WAITING', evidence)['queued'])
+        self.assertEqual(2, queue_verify(root, 2, 'QUEUE_WAITING', evidence)['queued'])
         evidence[0]['state'] = 'started'
         with self.assertRaisesRegex(AssertionError, 'queue state mismatch'):
-            ui.verify(root, 2, 'QUEUE_WAITING', evidence)
+            queue_verify(root, 2, 'QUEUE_WAITING', evidence)
         evidence[0]['state'] = 'queued'
         ET.SubElement(root, 'node', text='WAITING_ONE')
         with self.assertRaisesRegex(AssertionError, 'exactly once'):
-            ui.verify(root, 2, 'QUEUE_WAITING', evidence)
+            queue_verify(root, 2, 'QUEUE_WAITING', evidence)
 
 
 if __name__ == '__main__':

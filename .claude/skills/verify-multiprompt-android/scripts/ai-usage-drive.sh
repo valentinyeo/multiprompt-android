@@ -2,11 +2,12 @@
 usage_state() {
     local phase=$1
     shot "ai-usage-$phase"
-    python3 tools/ai-usage/ui.py \
-        "$EVIDENCE/$(printf '%02d' "$step")-ai-usage-$phase.xml" \
-        "$EVIDENCE/$(printf '%02d' "$step")-ai-usage-$phase.png" \
-        "$EVIDENCE/ai-usage-receipts.txt" "$phase" > "$EVIDENCE/ai-usage-$phase.json"
-    cat "$EVIDENCE/ai-usage-$phase.json"
+    python3 "$scripts/mpa" ai-usage \
+        --phase "$phase" \
+        --xml "$EVIDENCE/$(printf '%02d' "$step")-ai-usage-$phase.xml" \
+        --png "$EVIDENCE/$(printf '%02d' "$step")-ai-usage-$phase.png" \
+        --receipts "$EVIDENCE/ai-usage-receipts.txt" \
+        --out "$EVIDENCE/ai-usage-$phase.json"
 }
 tap_desc 'Session list actions'
 wait_for_text 'AI usage'

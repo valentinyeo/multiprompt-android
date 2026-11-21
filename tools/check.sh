@@ -29,6 +29,7 @@ source_checks() {
   python3 -B tools/journey-actions/action.test.py
   python3 -B tools/session-gestures/scroll.test.py
   python3 -B tools/send-frame.test.py
+  python3 -B tools/catchup-frames.test.py
   python3 -B tools/working-dots/check.test.py
   bash tools/check-canonical-chat-reader.sh
   python3 -B tools/history-continuity.test.py

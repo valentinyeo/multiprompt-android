@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,6 +41,7 @@ PICKER = """<hierarchy rotation="0">
 </hierarchy>
 """
 CLIPPED = PICKER.replace('bounds="[40,800][600,860]"', 'bounds="[40,1200][600,1260]"')
+JOURNEY_COMMANDS = ('doctor', 'launch', 'seed', 'tap', 'read', 'fill', 'screenshot', 'proof', 'cleanup', 'key', 'swipe', 'terminal', 'composer-strip', 'toast', 'queue', 'reaction', 'ai-usage', 'chat-search', 'chat-table', 'skill-pills')
 
 
 def environment(**values):
@@ -80,9 +82,9 @@ class MpaCliTest(unittest.TestCase):
     def test_every_command_has_rich_help_and_a_description(self):
         result = self.run_cli('--help')
         self.assertEqual(0, result.returncode)
-        for command in ('doctor', 'launch', 'seed', 'tap', 'read', 'fill', 'screenshot', 'proof', 'cleanup', 'key', 'swipe', 'terminal'):
+        for command in JOURNEY_COMMANDS:
             self.assertIn(command, result.stdout)
-        for command in ('doctor', 'launch', 'seed', 'tap', 'read', 'fill', 'screenshot', 'proof', 'cleanup', 'key', 'swipe', 'terminal'):
+        for command in JOURNEY_COMMANDS:
             with self.subTest(command=command):
                 help_text = self.run_cli(command, '--help')
                 self.assertEqual(0, help_text.returncode, help_text.stderr)
@@ -278,6 +280,212 @@ class MpaCliTest(unittest.TestCase):
         missing = subprocess.run([sys.executable, '-B', str(UI), str(self.screen), 'text', 'Nope'], capture_output=True, text=True, env=self.env)
         self.assertEqual(1, missing.returncode)
         self.assertEqual('Missing text: Nope', missing.stderr.strip())
+
+
+class JourneyCommandTest(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.evidence = self.root / 'evidence'
+        self.evidence.mkdir()
+        self.env = {**os.environ, 'EVIDENCE': str(self.evidence), 'GITHUB_ACTIONS': 'true', 'ADB': str(self.root / 'no-adb')}
+
+    def run_cli(self, *args, env=None):
+        return subprocess.run([sys.executable, '-B', str(MPA), *args], capture_output=True, text=True, env=env or self.env)
+
+    def payload(self, *args, env=None):
+        result = self.run_cli(*args, env=env)
+        self.assertEqual(0, result.returncode, result.stderr + result.stdout)
+        return json.loads(result.stdout)
+
+    def failure(self, *args):
+        result = self.run_cli(*args)
+        self.assertEqual(1, result.returncode, result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertFalse(payload['ok'])
+        self.assertTrue(payload['next'])
+        return payload
+
+    def write_screen(self, name, root):
+        path = self.root / name
+        ET.ElementTree(root).write(path)
+        return path
+
+    def write_image(self, name, width=300, height=400, painter=None):
+        from PIL import Image, ImageDraw
+        image = Image.new('RGB', (width, height), (16, 16, 16))
+        if painter:
+            painter(ImageDraw.Draw(image))
+        path = self.root / name
+        image.save(path)
+        return path
+
+    def node(self, root, **attrs):
+        return ET.SubElement(root, 'node', {'package': 'dev.multiprompt.companion.debug', **attrs})
+
+    def test_composer_strip_accepts_a_clean_composer_and_rejects_a_blue_strip(self):
+        tree = ET.Element('hierarchy')
+        self.node(tree, **{'class': 'android.widget.EditText', 'bounds': '[20,300][280,360]'})
+        xml = self.write_screen('composer.xml', tree)
+        clean = self.write_image('clean.png')
+        payload = self.payload('composer-strip', '--state', 'idle', '--xml', str(xml), '--png', str(clean))
+        self.assertEqual('NO_CHAT_BAR idle', payload['message'])
+        plotted = self.write_image('plotted.png', painter=lambda draw: draw.rectangle((20, 285, 280, 299), fill=(30, 90, 240)))
+        self.assertEqual('PROGRESS_STRIP_VISIBLE', self.failure('composer-strip', '--state', 'idle', '--xml', str(xml), '--png', str(plotted))['error'])
+        self.assertEqual('SEND_SPINNER_MISSING', self.failure('composer-strip', '--state', 'sending', '--xml', str(xml), '--png', str(clean))['error'])
+        self.node(tree, **{'class': 'android.widget.ProgressBar', 'bounds': '[240,310][270,340]'})
+        xml = self.write_screen('spinner.xml', tree)
+        self.assertEqual('NO_CHAT_BAR sending', self.payload('composer-strip', '--state', 'sending', '--xml', str(xml), '--png', str(clean))['message'])
+
+    def test_toast_finds_the_new_dark_pill_in_a_burst(self):
+        settled = self.write_image('settled.png', painter=lambda draw: draw.rectangle((60, 330, 240, 360), fill=(150, 150, 150)))
+        later = self.write_image('later.png', painter=lambda draw: (draw.rectangle((60, 330, 240, 360), fill=(150, 150, 150)), draw.rectangle((60, 332, 240, 358), fill=(0, 0, 0))))
+        payload = self.payload('toast', '--settled', str(settled), '--shot', str(later))
+        self.assertEqual(str(later), payload['appeared'])
+        self.assertEqual('TOAST_MISSING', self.failure('toast', '--settled', str(settled), '--shot', str(settled))['error'])
+
+    def test_queue_combines_host_rows_with_visible_bubbles_and_dry_run_writes_nothing(self):
+        tree = ET.Element('hierarchy')
+        for text in ('WAITING_ONE', 'WAITING_TWO'):
+            self.node(tree, text=text)
+        xml = self.write_screen('queue.xml', tree)
+        evidence = self.root / 'queue-state.json'
+        evidence.write_text(json.dumps([{'id': 'phone-1', 'text': 'WAITING_ONE', 'state': 'queued'}, {'id': 'phone-2', 'text': 'WAITING_TWO', 'state': 'queued'}]))
+        out = self.evidence / 'queue-ui-WAITING.json'
+        payload = self.payload('queue', '--xml', str(xml), '--expected', '2', '--phase', 'QUEUE_WAITING', '--evidence', str(evidence), '--out', str(out))
+        self.assertEqual(2, payload['result']['queued'])
+        self.assertTrue(out.exists())
+        self.assertTrue(out.with_suffix('.xml').exists())
+        dry = self.payload('queue', '--xml', str(xml), '--expected', '2', '--phase', 'QUEUE_WAITING', '--evidence', str(evidence), '--out', str(self.evidence / 'dry.json'), '--dry-run')
+        self.assertTrue(dry['dry_run'])
+        self.assertFalse((self.evidence / 'dry.json').exists())
+        self.node(tree, text='Delivered')
+        xml = self.write_screen('labelled.xml', tree)
+        self.assertEqual('QUEUE_LABEL_VISIBLE', self.failure('queue', '--xml', str(xml), '--expected', '2', '--phase', 'QUEUE_WAITING', '--evidence', str(evidence))['error'])
+
+    def test_reaction_reads_the_one_real_transport_receipt(self):
+        receipts = self.root / 'receipts.txt'
+        text = ' '.join(('Same first words ' + 'for this example ' * 8).split())[:80].rstrip()
+        receipts.write_text('VERIFY_RECEIVED:👍 to: ' + text + ' [mp:6d8e353d25c5fe23]\n', encoding='utf-8')
+        out = self.evidence / 'reaction-transport.json'
+        payload = self.payload('reaction', '--mode', 'transport', '--receipts', str(receipts), '--out', str(out))
+        self.assertEqual('REACTION_REACHED_REAL_TMUX_ONCE', payload['message'])
+        self.assertEqual(1, json.loads(out.read_text())['submissions'])
+        receipts.write_text('VERIFY_RECEIVED:👍 to: other text\n', encoding='utf-8')
+        self.assertEqual('REACTION_TRANSPORT_TEXT', self.failure('reaction', '--mode', 'transport', '--receipts', str(receipts))['error'])
+        self.assertEqual('REACTION_XML_MISSING', self.failure('reaction', '--mode', 'point')['error'])
+
+    def test_ai_usage_menu_and_closed_need_their_own_screens(self):
+        menu = ET.Element('hierarchy')
+        for text in ('AI usage', 'Refresh'):
+            self.node(menu, text=text)
+        menu_xml = self.write_screen('menu-usage.xml', menu)
+        png = self.write_image('usage.png')
+        self.assertEqual('menu', self.payload('ai-usage', '--phase', 'menu', '--xml', str(menu_xml), '--png', str(png))['result']['phase'])
+        self.assertEqual('AI_USAGE_STILL_OPEN', self.failure('ai-usage', '--phase', 'closed', '--xml', str(menu_xml), '--png', str(png))['error'])
+        closed = ET.Element('hierarchy')
+        for text in ('Inbox', 'verify-session'):
+            self.node(closed, text=text)
+        closed_xml = self.write_screen('closed-usage.xml', closed)
+        dry = self.payload('ai-usage', '--phase', 'closed', '--xml', str(closed_xml), '--png', str(png), '--out', str(self.evidence / 'usage.json'), '--dry-run')
+        self.assertTrue(dry['dry_run'])
+        self.assertFalse((self.evidence / 'usage.json').exists())
+
+    def test_chat_search_needs_the_match_count_and_controls(self):
+        tree = ET.Element('hierarchy')
+        self.node(tree, **{'class': 'android.widget.EditText', 'text': 'orchard'})
+        self.node(tree, text='2 of 2')
+        for label in ('Close search', 'Previous match', 'Next match'):
+            self.node(tree, **{'content-desc': label})
+        open_xml = self.write_screen('search.xml', tree)
+        png = self.write_image('search.png')
+        self.assertIn('CHAT_SEARCH_', self.payload('chat-search', '--xml', str(open_xml), '--png', str(png), '--query', 'orchard', '--count', '2 of 2')['message'])
+        self.assertEqual('CHAT_SEARCH_COUNT_MISSING', self.failure('chat-search', '--xml', str(open_xml), '--png', str(png), '--query', 'orchard', '--count', '9 of 9')['error'])
+        closed = ET.Element('hierarchy')
+        self.node(closed, text='Message verify-session')
+        self.node(closed, **{'content-desc': 'Session actions'})
+        closed_xml = self.write_screen('search-closed.xml', closed)
+        self.assertEqual('CHAT_SEARCH_CLOSED_OK', self.payload('chat-search', '--xml', str(closed_xml), '--png', str(png), '--count', 'closed')['message'])
+
+    def test_chat_table_answers_cell_bounds_and_one_swipe_plan(self):
+        tree = ET.Element('hierarchy')
+        window = self.node(tree, bounds='[0,0][400,800]')
+        sheet = self.node(window, bounds='[10,100][390,750]')
+        self.node(sheet, text='Garden harvest table')
+        self.node(sheet, **{'content-desc': 'Close'})
+        viewport = self.node(sheet, bounds='[20,180][380,720]', scrollable='true')
+        table = self.node(viewport, **{'class': 'android.widget.HorizontalScrollView', 'bounds': '[20,180][380,720]'})
+        self.node(table, text='R24-C06 harvest', bounds='[40,600][210,630]')
+        xml = self.write_screen('table.xml', tree)
+        visible = self.payload('chat-table', '--xml', str(xml), '--visible', 'R24-C06 harvest')
+        self.assertEqual('40 600 210 630', visible['stdout'])
+        scroll = self.payload('chat-table', '--xml', str(xml), '--scroll', 'sideways')
+        self.assertEqual(4, len(scroll['from'] + scroll['to']))
+        self.assertEqual('CHAT_TABLE_ARGUMENTS', self.failure('chat-table', '--xml', str(xml))['error'])
+        self.assertEqual('CHAT_TABLE_CELL_HIDDEN', self.failure('chat-table', '--xml', str(xml), '--visible', 'R01-C06 harvest')['error'])
+
+    def test_skill_pills_merges_a_phase_and_answers_the_scroll_plan(self):
+        tree = ET.Element('hierarchy')
+        self.node(tree, **{'class': 'android.widget.EditText', 'text': 'Please /review-native this', 'bounds': '[10,200][290,280]'})
+        xml = self.write_screen('pills.xml', tree)
+        plain = self.write_image('plain.png')
+        self.assertEqual('SKILL_PILLS_OUTLINE', self.failure('skill-pills', '--xml', str(xml), '--png', str(plain), '--phase', 'inserted', '--text', 'Please /review-native this')['error'])
+
+        def paint_pill(draw):
+            draw.rounded_rectangle((120, 220, 280, 259), radius=16, outline=(46, 46, 46))
+        painted = self.write_image('painted.png', painter=paint_pill)
+        out = self.evidence / 'pills-state.json'
+        payload = self.payload('skill-pills', '--xml', str(xml), '--png', str(painted), '--phase', 'inserted', '--text', 'Please /review-native this', '--out', str(out))
+        self.assertTrue(payload['result']['composer_pill'])
+        self.assertIn('inserted', json.loads(out.read_text()))
+        self.assertEqual('SKILL_PILLS_COMPOSER_TEXT', self.failure('skill-pills', '--xml', str(xml), '--png', str(painted), '--phase', 'draft', '--text', 'Wrong text')['error'])
+
+        picker = ET.Element('hierarchy')
+        window = self.node(picker, bounds='[0,0][400,400]')
+        self.node(window, bounds='[0,0][400,400]', scrollable='true')
+        area = self.node(window, bounds='[10,80][390,180]', scrollable='true', **{'class': 'android.widget.ScrollView'})
+        self.node(area, text='/pill-guide-01', bounds='[20,90][200,110]')
+        picker_xml = self.write_screen('picker-pills.xml', picker)
+        scroll = self.payload('skill-pills', '--xml', str(picker_xml), '--scroll')
+        self.assertEqual([200, 160, 200, 100], scroll['from'] + scroll['to'])
+
+    def test_the_toast_call_passes_one_argument_per_screenshot(self):
+        drive = (SCRIPTS / 'drive.sh').read_text()
+        start = drive.index('    toast_args=()')
+        end = drive.index('$EVIDENCE/toast-result.txt"', start) + len('$EVIDENCE/toast-result.txt"') + 1
+        snippet = drive[start:end]
+        fake = self.root / 'fake-bin'
+        fake.mkdir()
+        recorder = self.root / 'argv.json'
+        binary = fake / 'mpa'
+        binary.write_text('#!/usr/bin/env python3\nimport json,sys\nopen(' + repr(str(recorder)) + ',"w").write(json.dumps(sys.argv[1:]))\n')
+        binary.chmod(0o755)
+        harness = 'set -euo pipefail\nscripts=' + str(fake) + '\ntoast_shots=("a.png" "b.png")\n' + snippet
+        result = subprocess.run(['bash', '-c', harness], capture_output=True, text=True, env=self.env)
+        self.assertEqual(0, result.returncode, result.stderr)
+        argv = json.loads(recorder.read_text())
+        self.assertEqual(['toast', '--settled', str(self.evidence / 'toast-settled.png'), '--shot', 'a.png', '--shot', 'b.png'], argv)
+
+    def test_the_folded_scripts_are_gone_and_their_callers_use_the_cli(self):
+        for name in ('.claude/skills/verify-multiprompt-android/scripts/queued.py',
+                     '.claude/skills/verify-multiprompt-android/scripts/reactions.py',
+                     '.claude/skills/verify-multiprompt-android/scripts/no-chat-bar.py',
+                     '.claude/skills/verify-multiprompt-android/scripts/toast.py',
+                     'tools/ai-usage/ui.py', 'tools/chat-search/ui.py', 'tools/chat-table/ui.py', 'tools/skill-pills/ui.py'):
+            with self.subTest(path=name):
+                self.assertFalse((ROOT / name).exists(), name)
+        for name in ('ai-usage-drive.sh', 'chat-search-drive.sh', 'chat-table-drive.sh', 'skill-pills-drive.sh'):
+            source = (SCRIPTS / name).read_text()
+            with self.subTest(driver=name):
+                self.assertNotIn('tools/ai-usage/ui.py', source)
+                self.assertNotIn('tools/chat-search/ui.py', source)
+                self.assertNotIn('tools/chat-table/ui.py', source)
+                self.assertNotIn('tools/skill-pills/ui.py', source)
+                self.assertIn('"$scripts/mpa"', source)
+        drive = (SCRIPTS / 'drive.sh').read_text()
+        for folded in ('queued.py', 'reactions.py', 'no-chat-bar.py', 'toast.py'):
+            self.assertNotIn(folded, drive)
 
 
 FAKE_ADB = """#!/usr/bin/env python3

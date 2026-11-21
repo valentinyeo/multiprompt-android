@@ -11,7 +11,7 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 
 ## The phone CLI
 
-[scripts/mpa](scripts/mpa) is the one way agents drive the phone. Python 3, stdlib only, one JSON object per command, rich `--help` on every subcommand, and `--dry-run` on anything that changes state.
+[scripts/mpa](scripts/mpa) is the one way agents drive the phone. Python 3 with Pillow on the screenshot checks, one JSON object per command, rich `--help` on every subcommand, and `--dry-run` on anything that changes state.
 
 | Command | What it does |
 |---|---|
@@ -27,13 +27,21 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 | `mpa key back` | One keyevent. |
 | `mpa swipe [--inside LABEL] [--axis vertical] [--direction forward]` | Scroll the one visible container, or the container holding LABEL, by a fifth of its size. `--dry-run` prints the swipe. |
 | `mpa terminal --step ready` | Read the fixture pane and assert the terminal fallback's shell: ready prompt, typed echo, real sleep, Ctrl+C, history or tab completion. Runner only. |
+| `mpa ai-usage --phase open --xml X --png P` | Compare the AI usage sheet with the copied token-ladder receipts: one block per provider, host figures, the WEEK line and the pace word, fully on screen. |
+| `mpa chat-search --xml X --png P --query Q --count '2 of 2'` | Check the in-chat search count, controls, query and active highlight; `--count closed` proves the restored chat. |
+| `mpa chat-table --xml X --png P --state open --target CELL` | Check the table state and a fully visible cell; `--visible CELL` and `--scroll AXIS` answer geometry as JSON for the reveal loop. |
+| `mpa skill-pills --xml X --png P --phase inserted --text TEXT` | Check a slash skill pill in the composer or a sent message; `--scroll` answers the picker swipe plan. |
+| `mpa queue --xml X --expected 2 --phase QUEUE_WAITING` | Combine the copied host queue evidence with exactly-one visible phone bubbles. |
+| `mpa reaction --mode check --xml X --png P --stage badge` | Resolve the reaction point, assert the desktop grey badge, read the one real tmux receipt, or check a mixed screen. |
+| `mpa composer-strip --state idle --xml X --png P` | Prove no progress strip sits above the composer, and that a spinner appears while sending. |
+| `mpa toast --settled PNG --shot PNG` | Find the toast pill in a burst of screenshots. |
 | `mpa cleanup --fixture "$FIXTURE"` | Stop the recorded PIDs, copy logs, keep the evidence. |
 
 `--xml PATH` replays a captured dump instead of dumping the phone, which is how the CLI's own tests run without a device. A failure prints `{"ok": false, "error": "...", "message": "...", "next": "..."}` and exits 1; `next` names the command to run instead. `ui.py`, `doctor.sh`, `seed.sh` and `cleanup.sh` are thin wrappers over the same core, so a journey that has not moved yet keeps working.
 
-`tools/mpa-cli.test.py` covers argument parsing, the JSON shape, `--dry-run` side effects, the selector modes and the error messages. It runs in `tools/check.sh source`.
+`tools/mpa-cli.test.py` covers argument parsing, the JSON shape, `--dry-run` side effects, the selector modes, the journey checks and the error messages. It runs in `tools/check.sh source`. The per-journey tests (`tools/ai-usage/ui.test.py`, `tools/chat-search/ui.test.py`, `tools/chat-table/ui.test.py`, `tools/skill-pills/ui.test.py`, `scripts/reactions.test.py`) now replay their fixtures through `mpa`.
 
-Four journeys have moved end to end: `signed-out-sync.md`, `clear-ranking.md`, `message-reply.md` and `claude-remote-control.md` run only `mpa` commands for the phone. Six more phone checks now call only the CLI: the favorites dot, copy chat ID, inbox draft label, composer Stop/Send slot, native menu rows and the terminal shell steps. Every other journey still uses the `drive.sh` helpers below; migrate one journey per pull request. Host-side fixtures, receipts and tmux captures stay where they are: `mpa` drives the phone, not the host. Remaining loose drivers to fold in: `drive.sh` and its journey body, `fixture.sh`, and the per-journey `*-drive.sh`, `*-console.py`, `*-fixture.py` and `*-proof.py` scripts in [scripts](scripts).
+Four journeys have moved end to end: `signed-out-sync.md`, `clear-ranking.md`, `message-reply.md` and `claude-remote-control.md` run only `mpa` commands for the phone. Eight more phone checks now call only the CLI for their phone assertions: AI usage, chat search, the garden table, skill pills, queued bubbles, reactions, the composer progress strip and the resync toast. The favorites dot, copy chat ID, inbox draft label, composer Stop/Send slot, native menu rows and terminal shell steps already did. Every other journey still uses the `drive.sh` helpers below; migrate one journey per pull request. Host-side fixtures, receipts and tmux captures stay where they are: `mpa` drives the phone, not the host. Remaining loose drivers to fold in: `drive.sh` and its journey body, `fixture.sh`, and the per-journey `*-drive.sh`, `*-console.py`, `*-fixture.py` and `*-proof.py` scripts in [scripts](scripts).
 
 ## Choose proof for the change
 

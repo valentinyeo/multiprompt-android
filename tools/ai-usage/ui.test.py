@@ -1,14 +1,21 @@
-import importlib.util
 import json
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
-spec = importlib.util.spec_from_file_location('usage_ui', Path(__file__).with_name('ui.py'))
-ui = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(ui)
+MPA = Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/mpa'
+
+
+def usage_phase(xml, png, receipts, phase):
+    result = subprocess.run([sys.executable, '-B', str(MPA), 'ai-usage', '--phase', phase, '--xml', str(xml), '--png', str(png), '--receipts', str(receipts)], capture_output=True, text=True)
+    payload = json.loads(result.stdout)
+    if result.returncode != 0:
+        raise AssertionError(payload['message'])
+    return payload['result']
 
 
 class UsageUiTest(unittest.TestCase):
@@ -32,7 +39,7 @@ class UsageUiTest(unittest.TestCase):
         for text in texts:
             ET.SubElement(tree, 'node', text=text, bounds=bounds)
         ET.ElementTree(tree).write(self.xml)
-        return ui.check(self.xml, self.png, self.receipts, phase)
+        return usage_phase(self.xml, self.png, self.receipts, phase)
 
     def test_matches_both_ai_numbers_to_the_independent_receipt(self):
         result = self.capture(self.texts)
