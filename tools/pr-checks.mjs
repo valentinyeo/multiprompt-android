@@ -89,7 +89,12 @@ export function checkStatus(pr, { redOnMain = { journeys: [], url: '' } } = {}) 
     }
     return true;
   });
-  if (failed.length) throw new Error(`Checks not green: ${failed.map(check => check.name ?? check.context ?? 'unknown check').join(', ')}`);
+  if (failed.length) {
+    const error = new Error(`Checks not green: ${failed.map(check => check.name ?? check.context ?? 'unknown check').join(', ')}`);
+    error.toleratedRedOnMain = toleratedRedOnMain;
+    error.redOnMainUrl = redOnMain.url ?? '';
+    throw error;
+  }
   const missing = requiredChecks.filter(name => !checks.some(check => check.__typename === 'CheckRun' && check.name === name));
   const pending = checks.filter(check => check.__typename === 'CheckRun' ? check.status !== 'COMPLETED' : check.state !== 'SUCCESS');
   const ready = pr.mergeable === 'MERGEABLE' && missing.length === 0 && pending.length === 0;
@@ -111,7 +116,13 @@ export async function waitForChecks(inspect, { wait = false, now = Date.now, pau
     head = pr.headRefOid;
     base = pr.baseRefOid;
     const redOnMain = loadRedOnMain ? loadRedOnMain() : { journeys: [], url: '' };
-    const status = checkStatus(pr, { redOnMain });
+    let status;
+    try {
+      status = checkStatus(pr, { redOnMain });
+    } catch (error) {
+      reportToleratedRedOnMain(error, report);
+      throw error;
+    }
     reportToleratedRedOnMain(status, report);
     if (now() >= deadline) throw new Error('Check wait exceeded thirty minutes');
     if (status.ready) return status.message;
@@ -151,6 +162,7 @@ async function main() {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch(error => {
+    reportToleratedRedOnMain(error);
     console.error(error.message);
     process.exitCode = 1;
   });

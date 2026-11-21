@@ -306,6 +306,27 @@ test('a failed journey still blocks when it is not red on main', async () => {
   );
 });
 
+test('tolerated red-on-main journeys are reported even when another journey still blocks', async () => {
+  const { checkStatus, reportToleratedRedOnMain } = await gate;
+  const pr = await green();
+  const redOnMain = { journeys: ['session-gestures.md'], url: 'https://github.com/example/actions/runs/1' };
+  pr.statusCheckRollup.push(
+    { __typename: 'CheckRun', name: 'journey session-gestures.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+    { __typename: 'CheckRun', name: 'journey chat-table.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+  );
+  let thrown;
+  try {
+    checkStatus(pr, { redOnMain });
+  } catch (error) {
+    thrown = error;
+  }
+  assert.ok(thrown);
+  assert.deepEqual(thrown.toleratedRedOnMain, ['session-gestures.md']);
+  const lines = [];
+  reportToleratedRedOnMain(thrown, line => lines.push(line));
+  assert.match(lines.join('\n'), /session-gestures\.md/);
+});
+
 test('a red-on-main journey still blocks when pstack-verifier did not pass', async () => {
   const { checkStatus } = await gate;
   const pr = await green();
