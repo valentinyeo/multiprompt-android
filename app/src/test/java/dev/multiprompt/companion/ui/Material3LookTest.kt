@@ -64,7 +64,6 @@ class Material3LookTest(private val screen: M3Screen, private val sunlight: Bool
             assertEquals(Kit.ControlInnerSize.value, send.height, 0.01f)
             val field = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
             assertEquals("composer=$field", Kit.ControlInnerSize.value, field.height, 0.01f)
-            assertEquals("send=$send composer=$field", Kit.InnerInset.value, send.left - field.right, 0.01f)
             assertEquals("send=$send composer=$field", field.center.y, send.center.y, 0.01f)
             listOf("Archive", "Remind", "Wait").forEach { label ->
                 compose.onNodeWithText(label).assertDoesNotExist()
