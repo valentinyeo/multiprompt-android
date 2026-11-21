@@ -12,14 +12,11 @@ The signed APK is unchanged. Published mode checks its manifest commit, URL, siz
 4. Read the local persisted edited layout with read-only same-signer instrumentation. Require `verify-session=false`, `verify-keep=true`, and both tabs retained. Only these booleans and names appear in the JSON evidence.
 5. Restart the fixture app, open **All**, and long-press `verify-session`. Capture **Favorite**, the Desktop word. Tap it.
 6. Open **Favorites**. Require both sessions visible. Independently snapshot both persisted booleans as true. Restart and require both visible again.
-
-7. Long-press `verify-session`. Open **Archive Session**. Check the exact title, warning, and buttons. Capture `confirmation-archive`. Tap **Cancel**. Require both sessions visible. Require both tmux sessions alive.
-8. Long-press `verify-session` again. Open **End tmux session**. Check the exact title, warning, and buttons. Capture `confirmation-end`. Press system Back. Require Favorites selected. Require both sessions visible. Require both tmux sessions alive.
-
-9. Verify the resolved ETA log is absent. Enable the guarded generic-console history fixture. Confirm its actual alternate-screen live marker. Open **Session history**. Capture the first numbered page. Load older and capture another page.
-10. Tap **Back to live**. Confirm the live marker returns. Reopen history and press system Back. Confirm the live marker returns again. Check `pane_in_mode=0` after each close. This guard does not prove a transition.
-11. Open **Estimate accuracy**. Capture `information-accuracy-opening` immediately. Capture its empty explanation. Close it and return to Reader.
-12. Return to **Favorites**. Require both sessions and persisted favorites. Restart after the final instrumentation snapshot. Require Favorites selected and both sessions visible. Compare neighbor pane and receipts byte-for-byte. Require both tmux sessions alive.
+7. Long-press `verify-session`. Open **End tmux session**. Check the exact title, warning, and buttons. Capture `confirmation-end`. Press system Back. Require Favorites selected. Require both sessions visible. Require both tmux sessions alive.
+8. Verify the resolved ETA log is absent. Enable the guarded generic-console history fixture. Confirm its actual alternate-screen live marker. Open **Session history**. Capture the first numbered page. Load older and capture another page.
+9. Tap **Back to live**. Confirm the live marker returns. Reopen history and press system Back. Confirm the live marker returns again. Check `pane_in_mode=0` after each close. This guard does not prove a transition.
+10. Open **Estimate accuracy**. Capture `information-accuracy-opening` immediately. Capture its empty explanation. Close it and return to Reader.
+11. Return to **Favorites**. Require both sessions and persisted favorites. Restart after the final instrumentation snapshot. Require Favorites selected and both sessions visible. Compare neighbor pane and receipts byte-for-byte. Require both tmux sessions alive.
 
 Run the old baseline from a pinned ref. Keep that ref separate from the candidate. Confirm manifest `55489f01be380c996a83f1e3f8b8fe3a8ea522c3` and traces.
 

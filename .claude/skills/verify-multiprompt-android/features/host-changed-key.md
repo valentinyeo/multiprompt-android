@@ -11,7 +11,7 @@ A changed SSH identity must never authenticate without explicit replacement. **N
 
 ## How to get to it (user POV)
 
-Add/trust Verify using the [hosts journey](hosts.md), remain in Inbox, then change the server's SSH host identity. **Session list actions → Refresh** opens **SSH host key changed**. Compare **Saved: ssh-ed25519 …** and **Now: ssh-ed25519 …**. Choose **Not now**, not **Replace trusted key**.
+Trust the seeded Verify host with the [hosts journey](hosts.md), remain in Inbox, then change the server's SSH host identity. **Session list actions → Refresh** opens **SSH host key changed**. Compare **Saved: ssh-ed25519 …** and **Now: ssh-ed25519 …**. Choose **Not now**, not **Replace trusted key**.
 
 ## Driving it with adb and UI Automator
 
@@ -22,7 +22,7 @@ Preconditions: fresh GitHub fixture; dispatch `feature=host-changed-key.md`. Doc
 - The app's background refresh raises **SSH host key changed** after the fixture closes its old authenticated SSH connections. Wait for that sheet before doing anything else; never try the covered overflow menu while it is open. Capture `changed-host-key`; XML must contain both exact independently known **Now:** and **Saved:** identities.
 - `tap_text 'Not now'`; refresh again. Twelve bounded fresh dumps must contain neither the dialog title nor **Not now**, and the SSH log must show another connection attempt. Capture `changed-key-dismissed`.
 - `am force-stop` then `am start` the debug app; if Sign in returns, use **Use without account (debug)** again. Require Inbox, rerun doctor, refresh and repeat the absence/connection checks; capture `changed-key-dismissed-relaunched`.
-- Reopen **Hosts** and require **Pinned <original fingerprint>**; capture `original-key-still-pinned`. Save `accepted-after-rotation.txt`; it must equal the pre-rotation count or fail closed. Cleanup retains the append-only sshd.log and removes both host identities' key files.
+- Open **Settings → Host mapping** and require **Pinned <original fingerprint>**; capture `original-key-still-pinned`. Save `accepted-after-rotation.txt`; it must equal the pre-rotation count or fail closed. Cleanup retains the append-only sshd.log and removes both host identities' key files.
 
 ## Gotchas
 

@@ -14,7 +14,7 @@ For each provider, Android submits through SSH.
 A second reader submits another message.
 Both queued IDs must reach the host store.
 Both attempt IDs must also appear.
-**Resync chat** must invoke shared Reset.
+**Reset this chat** must invoke shared Reset.
 Both queued copies must disappear from Android.
 The host epoch advances once.
 IDs and attempts stay unchanged.

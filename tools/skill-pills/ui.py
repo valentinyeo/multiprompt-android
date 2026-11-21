@@ -14,7 +14,11 @@ def bounds(node):
     return box
 
 
-def outlines(image, box, inset):
+def covered(boxes, x, y):
+    return any(a <= x <= c and b <= y <= d for a, b, c, d in boxes)
+
+
+def outlines(image, box, inset, exclude=()):
     x1, y1, x2, y2 = box
     assert 0 <= x1 < x2 <= image.width and 0 <= y1 < y2 <= image.height, 'Pill is off screen'
     margin = max(3, (y2 - y1) // 10) if inset else 0
@@ -23,7 +27,7 @@ def outlines(image, box, inset):
         start = None
         for x in range(x1 + margin, x2 - margin + 1):
             pixel = image.getpixel((x, y)) if x < x2 - margin else None
-            grey = pixel is not None and all(abs(channel - 46) <= 2 for channel in pixel)
+            grey = pixel is not None and all(abs(channel - 46) <= 2 for channel in pixel) and not covered(exclude, x, y)
             if grey and start is None:
                 start = x
             if not grey and start is not None:
@@ -62,6 +66,7 @@ def check(xml, screenshot, phase, text):
              if node.get('package') == 'dev.multiprompt.companion.debug']
     assert nodes, 'Chat UI is missing'
     image = Image.open(screenshot).convert('RGB')
+    buttons = [bounds(node) for node in nodes if node.get('class') == 'android.widget.Button']
     editors = [node for node in nodes if node.get('class') == 'android.widget.EditText']
     assert len(editors) == 1, 'Expected one composer'
     editor = editors[0]
@@ -83,7 +88,7 @@ def check(xml, screenshot, phase, text):
                            max(message_bounds[1], text_bounds[1] - pad_y),
                            min(message_bounds[2], text_bounds[2] + pad_x),
                            min(message_bounds[3], text_bounds[3] + pad_y)]
-            assert outlines(image, pill_bounds, False), 'Sent skill pill outline is missing'
+            assert outlines(image, pill_bounds, False, buttons), 'Sent skill pill outline is missing'
             result.update(sent_pill='/review-native', sent_pill_bounds=pill_bounds)
     else:
         assert editor.get('text') == text, ('Wrong composer text', editor.get('text'), text)
@@ -91,7 +96,7 @@ def check(xml, screenshot, phase, text):
             label = '/pill-guide-01' if phase == 'picker' else '/review-native'
             assert any(node.get('text') == label for node in nodes), 'Skill picker is missing'
         else:
-            pairs = outlines(image, bounds(editor), True)
+            pairs = outlines(image, bounds(editor), True, buttons)
             expected = phase in ('inserted', 'removable')
             assert bool(pairs) == expected, 'Composer skill pill outline is missing or survived removal'
             result['composer_pill'] = expected

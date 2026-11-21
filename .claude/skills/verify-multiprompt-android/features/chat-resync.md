@@ -18,7 +18,7 @@ Use [shared chat store](chat-shared.md) instead.
 ## How to get to it
 
 Open chat, then its three-dot menu.
-Tap Resync chat.
+Tap Reset this chat.
 
 ## Hosted fixture
 
@@ -73,9 +73,9 @@ Only legacy `scan` advances to the new EOF.
 Origins stay unchanged; recovery cursors stay NULL.
 The appended snapshot enters evidence before commit.
 
-The driver then taps Resync chat.
+The driver then taps Reset this chat.
 Normal foreground watching may also recover these receipts.
-This journey doesn't attribute recovery solely to Resync.
+This journey doesn't attribute recovery solely to Reset this chat.
 
 ## Required evidence
 

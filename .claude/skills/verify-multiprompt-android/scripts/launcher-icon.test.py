@@ -9,7 +9,7 @@ class HomeScreenTest(unittest.TestCase):
     def probe(self, surface):
         with tempfile.TemporaryDirectory() as folder:
             xml = Path(folder) / 'screen.xml'
-            xml.write_text(f'<hierarchy><node resource-id="com.google.android.apps.nexuslauncher:id/{surface}"/><node text="multiprompt" package="com.google.android.apps.nexuslauncher" bounds="[472,1461][609,1616]"/></hierarchy>')
+            xml.write_text(f'<hierarchy><node resource-id="com.google.android.apps.nexuslauncher:id/{surface}"/><node text="Multi Bot" package="com.google.android.apps.nexuslauncher" bounds="[472,1461][609,1616]"/></hierarchy>')
             return subprocess.run([sys.executable, str(Path(__file__).with_name('launcher-icon.py')), 'home', str(xml)], capture_output=True, text=True)
 
     def test_actual_home_screen_is_accepted(self):

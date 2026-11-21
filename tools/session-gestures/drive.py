@@ -1,6 +1,7 @@
 import atexit
 import json
 import os
+import time
 from pathlib import Path
 import re
 import subprocess
@@ -95,15 +96,37 @@ for direction in (False, True):
 for attempt in range(10):
     root, bubble = stable_target(text='GESTURE_REPLY_TARGET')
     swipe((max(12, bubble[0]), bubble[1], min(width - 12, bubble[2]), bubble[3]), right=True)
-    root = dump()
-    cancel = find(root, desc='Cancel reply')
+    deadline = time.monotonic() + 5
+    previous = None
+    settled = False
+    while time.monotonic() < deadline:
+        root = dump()
+        try:
+            cancel = find(root, desc='Cancel reply')
+        except AssertionError:
+            previous = None
+            time.sleep(0.3)
+            continue
+        if cancel == previous:
+            settled = True
+            break
+        previous = cancel
+        time.sleep(0.3)
+    if not settled:
+        raise AssertionError('Layout did not settle: Cancel reply')
     if attempt == 9:
         screenshot('ten-replies')
     x = (cancel[0] + cancel[2]) // 2
     y = (cancel[1] + cancel[3]) // 2
     adb('shell', 'input', 'tap', str(x), str(y))
-    root = dump()
-    assert not any(n.get('content-desc') == 'Cancel reply' for n in root.iter('node'))
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        root = dump()
+        if not any(n.get('content-desc') == 'Cancel reply' for n in root.iter('node')):
+            break
+        time.sleep(0.3)
+    else:
+        assert False, 'Cancel reply did not close the reply bar'
 (back_x, back_y, back_right, back_bottom) = find(root, desc='Back')
 adb('shell', 'input', 'tap', str((back_x + back_right) // 2), str((back_y + back_bottom) // 2))
 adb('shell', 'uiautomator', 'dump', '/sdcard/gestures.xml')

@@ -10,7 +10,7 @@ The native reader streams output and lets a user send a prompt, send Enter/appro
 - `reader-enter`: send an empty Enter from the actions menu.
 - `reader-interrupt`: interrupt the real foreground tmux process.
 - `reader-extras`: Chat View is a full transcript in one scroll, with model/effort/waiting state in the top-bar subtitle, no Conversation/status row, and horizontally scrollable tables/nested lists; needs a supported agent transcript on the host (not automated).
-- `reader-reply`: right-swipe a message bubble or long-press → **Reply**; **Reply to …** above the composer, **Cancel reply**, send Markdown quote (not automated).
+- `reader-reply`: right-swipe a message bubble or long-press → **Reply**; **Replying** above the composer, **Cancel reply**, send Markdown quote (not automated).
 - `reader-history`: **Session actions → Session history** opens alternate-screen agent history (not automated).
 - `reader-tools`: attachments, speech-gated Deepgram dictation, search and font controls need their own evidence (not automated).
 

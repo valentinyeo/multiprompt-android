@@ -166,6 +166,26 @@ tap_node() {
 }
 tap_text() { tap_node text "$1"; }
 tap_desc() { tap_node desc "$1"; }
+scroll_back() {
+    local speed=$1 point x1 y1 x2 y2
+    point=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+    if [[ ! "$point" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]]; then
+        printf 'SCROLL_CONTAINER_MISSING: no single scrollable container resolved (%s), so no swipe was sent\n' "${point:-empty}" >&2
+        return 1
+    fi
+    read -r x1 y1 x2 y2 <<< "$point"
+    adb shell input swipe "$x1" "$y1" "$x2" "$y2" "$speed"
+}
+scroll_forward() {
+    local speed=$1 point x1 y1 x2 y2
+    point=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
+    if [[ ! "$point" =~ ^[0-9]+\ [0-9]+\ [0-9]+\ [0-9]+$ ]]; then
+        printf 'SCROLL_CONTAINER_MISSING: no single scrollable container resolved (%s), so no swipe was sent\n' "${point:-empty}" >&2
+        return 1
+    fi
+    read -r x1 y1 x2 y2 <<< "$point"
+    adb shell input swipe "$x2" "$y2" "$x1" "$y1" "$speed"
+}
 hold_text() {
     local point x y
     dump_ui || return
@@ -407,8 +427,7 @@ if [[ "$feature" == settings-navigation.md ]]; then
     wait_for_text 'Workspace colors'
     for attempt in {1..6}; do
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Auto >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
+        scroll_forward 400
         dump_ui
     done
     shot settings-workspace-colors
@@ -435,8 +454,7 @@ if [[ "$feature" == settings-navigation.md ]]; then
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Default Reader font size' >/dev/null 2>&1 &&
             python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Large >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
+        scroll_forward 500
     done
     dump_ui
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text 'Default Reader font size'
@@ -444,8 +462,7 @@ if [[ "$feature" == settings-navigation.md ]]; then
     shot settings-preferences-bottom
     for attempt in {1..5}; do
         if select_node text Update >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+        scroll_back 500
     done
     tap_text Update
     wait_for_text 'App updates'
@@ -453,19 +470,23 @@ if [[ "$feature" == settings-navigation.md ]]; then
     wait_for_text Inbox
 fi
 tap_text All
+device_quote() {
+    local escaped=${1//\'/\'\\\'\'}
+    printf "'%s'" "$escaped"
+}
 seed_host() {
     setup_failure=1
     adb shell am force-stop "$package"
     set +x
     if [[ "$package" == dev.multiprompt.companion.debug ]]; then
         adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
+            -e host_label "$(device_quote "$1")" -e ssh_host "$(device_quote "$2")" -e ssh_port "$3" -e ssh_user "$(device_quote "$4")" \
             -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
             "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
         grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
     else
         adb shell am instrument -w -e mode host-seed \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
+            -e host_label "$(device_quote "$1")" -e ssh_host "$(device_quote "$2")" -e ssh_port "$3" -e ssh_user "$(device_quote "$4")" \
             -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
             dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/host-seed.txt"
         grep -F 'ISOLATED_HOST_SEEDED' "$EVIDENCE/host-seed.txt"
@@ -801,29 +822,6 @@ PYFAVORITES
     wait_for_text verify-session
     wait_for_text verify-keep
     shot favorites-after-restart
-    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
-        [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
-        tmux has-session -t verify-session && tmux has-session -t verify-keep
-    '
-    read -r row_x row_y <<< "$(select_node text verify-session)"
-    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
-    wait_for_text 'End tmux session'
-    for attempt in {1..5}; do
-        if select_node text 'Archive Session' >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
-    done
-    tap_text 'Archive Session'
-    wait_for_text 'Archive verify-session?'
-    select_node text 'Archive verify-session?' >/dev/null
-    select_node text 'This ends its tmux session but saves the name and resume command so it can be restored later.' >/dev/null
-    select_node text Cancel >/dev/null
-    select_node text Archive >/dev/null
-    shot confirmation-archive
-    tap_text Cancel
-    wait_for_absence 'Archive verify-session?'
-    wait_for_text verify-session
-    wait_for_text verify-keep
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
         [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
         tmux has-session -t verify-session && tmux has-session -t verify-keep
@@ -2436,11 +2434,10 @@ if [[ "$feature" == chat-resync.md ]]; then
                         found=true
                         break
                     fi
-                    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
                     if [[ "$direction" == older ]]; then
-                        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
+                        scroll_back 450
                     else
-                        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
+                        scroll_forward 450
                     fi
                     sleep 1
                 done
@@ -2612,9 +2609,8 @@ if [[ "$feature" == terminal.md ]]; then
         for attempt in {1..100}; do
             dump_ui
             if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001 >/dev/null 2>&1; then break; fi
-            read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
             for swipe in 1 2 3; do
-                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 120
+                scroll_back 120
             done
         done
         wait_for_text SHELL_HISTORY_0001

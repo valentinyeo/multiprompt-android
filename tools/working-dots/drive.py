@@ -104,7 +104,7 @@ finally:
     subprocess.run(["adb", "pull", "/sdcard/working-dots.mp4", str(root / "working-dots.mp4")], check=True)
     (root / "server.jsonl").write_text(run("sudo", "cat", "/home/verifyssh/working-events.jsonl") + "\n")
     (root / "working-logcat.txt").write_text(run("adb", "logcat", "-d", "-v", "epoch", "-s", "SessionWorking:I"))
-    transcript = run("sudo", "find", "/home/verifyssh/.claude/projects", "-name", "*.jsonl").splitlines()
+    transcript = run("sudo", "find", "/home/verifyssh/.claude/projects", "-path", "*-home-verifyssh-working-proof/*", "-name", "*.jsonl").splitlines()
     assert len(transcript) == 1, transcript
     (root / "transcript.jsonl").write_text(run("sudo", "cat", transcript[0]) + "\n")
 run("adb", "shell", "touch", "/sdcard/Android/data/dev.multiprompt.companion/files/working-stop")

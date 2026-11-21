@@ -219,6 +219,17 @@ class MpaCliTest(unittest.TestCase):
         self.assertFalse(record['passed'])
         self.assertIn('ORDER_OFFSCREEN', record['checks'][0]['detail'])
 
+    def test_proof_order_puts_nodes_on_one_visual_line_in_left_to_right_order(self):
+        screen = self.root / 'same-line.xml'
+        screen.write_text(hierarchy('<node package="' + PACKAGE + '" clickable="true" bounds="[0,1500][1080,1600]">'
+                                    + item(text='Draft', bounds='[200,1536][280,1573]')
+                                    + item(text='Inbox preview stays.', bounds='[296,1528][954,1581]') + '</node>'))
+        payload = self.payload('proof', '--name', 'draft-line', '--order', 'Draft', '--order', 'Inbox preview stays.', '--xml', str(screen), '--dry-run')
+        self.assertTrue(payload['record']['passed'], payload['record']['checks'])
+        reversed_line = self.run_cli('proof', '--name', 'draft-line', '--order', 'Inbox preview stays.', '--order', 'Draft', '--xml', str(screen), '--dry-run')
+        self.assertEqual(1, reversed_line.returncode)
+        self.assertIn('ORDER_MISMATCH', json.loads(reversed_line.stdout)['record']['checks'][0]['detail'])
+
     def test_proof_order_names_a_missing_row_and_the_next_step(self):
         result = self.run_cli('proof', '--name', 'clear-query', '--order', '/clear', '--order', '/ghost', '--xml', str(self.picker))
         self.assertEqual(1, result.returncode)
@@ -823,6 +834,15 @@ class MovedPhoneScriptTest(unittest.TestCase):
         self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', path, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-session')['error'])
         dotted = self.write('dot-plain', row + '<node package="' + PACKAGE + '" text="verify-keep" clickable="true" bounds="[0,520][1080,700]">' + item(description='Session favorite dot', bounds='[900,540][980,620]') + '</node>')
         self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', dotted, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-keep')['error'])
+
+    def test_inside_searches_the_anchor_row_for_a_sibling_description(self):
+        session = '<node package="' + PACKAGE + '" clickable="true" bounds="[0,1500][1080,1600]">' + item(text='verify-session', bounds='[200,1536][280,1573]') + item(description='Session favorite dot', bounds='[296,1528][954,1581]') + '</node>'
+        keep = '<node package="' + PACKAGE + '" clickable="true" bounds="[0,1620][1080,1720]">' + item(text='verify-keep', bounds='[200,1656][280,1693]') + '</node>'
+        path = self.write('row-dot', session + keep)
+        self.assertEqual('desc', self.payload('read', '--xml', path, '--select', 'desc', '--value', 'Session favorite dot', '--inside', 'verify-session')['mode'])
+        self.assertEqual('SELECTOR_MISSING', self.failure('read', '--xml', path, '--select', 'desc', '--value', 'Session favorite dot', '--inside', 'verify-keep')['error'])
+        self.assertEqual('desc-absent', self.payload('read', '--xml', path, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-keep')['mode'])
+        self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', path, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-session')['error'])
 
     def test_swipe_scrolls_the_one_visible_container(self):
         path = self.write('scroll', '<node package="' + PACKAGE + '" scrollable="true" bounds="[0,1000][1080,1600]">' + item(text='Add image', bounds='[40,1140][700,1200]') + '</node>')

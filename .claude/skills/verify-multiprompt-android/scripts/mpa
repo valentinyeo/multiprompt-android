@@ -113,6 +113,20 @@ def point(bounds_text):
     return [(numbers[0] + numbers[2]) // 2, (numbers[1] + numbers[3]) // 2]
 
 
+def row_scope(anchor, parents):
+    row = rect(anchor.get("bounds"))
+    node = anchor
+    while node in parents and node.get("clickable") != "true":
+        parent = parents[node]
+        if parent.get("clickable") == "true":
+            return parent
+        outer = rect(parent.get("bounds"))
+        if row and outer and outer[0] < row[0] and row[2] < outer[2]:
+            return parent
+        node = parent
+    return node
+
+
 def resolve(root, mode, value, extra=(), inside=None):
     if mode == "snapshot":
         texts = [node.get("text") for node in root.iter("node") if node.get("text")]
@@ -150,7 +164,7 @@ def resolve(root, mode, value, extra=(), inside=None):
             raise MpaError("INSIDE_MISSING", f"Missing container: {inside}", f"Run `mpa read`; `{inside}` is not on screen.")
         if len(anchors) != 1:
             raise MpaError("INSIDE_AMBIGUOUS", f"Ambiguous container: {inside} ({len(anchors)})", "Scope with a unique text or description, then retry.")
-        allowed = {id(node) for node in anchors[0].iter("node")}
+        allowed = {id(node) for node in row_scope(anchors[0], parents).iter("node")}
         candidates = [node for node in candidates if id(node) in allowed]
     matches = []
     for node in candidates:
@@ -383,9 +397,18 @@ def screen_order(root, values):
             outer = rect(ancestor.get("bounds"))
             if outer and not (outer[0] <= found[0] and found[2] <= outer[2] and outer[1] <= found[1] and found[3] <= outer[3]):
                 raise MpaError("ORDER_OFFSCREEN", f"Clipped by its scroll container: {value}", "Scroll the container until the whole row is visible, then retry `mpa proof --order`.")
-        positioned.append((found[1], found[0], value))
-    positioned.sort()
-    observed = [item[2] for item in positioned]
+        positioned.append((found[1], found[0], found[3], value))
+    lines = []
+    for top, left, bottom, value in sorted(positioned):
+        for line in lines:
+            if top < line["bottom"] and bottom > line["top"]:
+                line["items"].append((left, value))
+                line["top"] = min(line["top"], top)
+                line["bottom"] = max(line["bottom"], bottom)
+                break
+        else:
+            lines.append({"top": top, "bottom": bottom, "items": [(left, value)]})
+    observed = [value for line in lines for _, value in sorted(line["items"])]
     if observed != list(values):
         raise MpaError("ORDER_MISMATCH", f"Screen order is {observed}, expected {list(values)}", "Run `mpa read`; the rows are not in the expected top-to-bottom order.")
     return observed

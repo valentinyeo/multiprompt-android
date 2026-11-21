@@ -16,7 +16,7 @@ Inbox lists the real tmux sessions on saved trusted hosts, with output previews 
 
 ## How to get to it (user POV)
 
-Inbox opens after account sign-in or debug offline entry. Return from Hosts using **Sessions**. The overflow's **Refresh** updates discovery; **Search sessions** opens search. Tap a session card to read it. **Switch session bucket**, **Session actions**, and **New session** expose organization and creation paths.
+Inbox opens after account sign-in or debug offline entry; the host is already seeded and trusted, so there is no Hosts screen to return from. The overflow's **Refresh** updates discovery; **Search sessions** opens search. Tap a session card to read it. **Switch session bucket**, **Session actions**, and **New session** expose organization and creation paths.
 
 ## Driving it with adb and UI Automator
 
