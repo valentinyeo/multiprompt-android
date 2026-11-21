@@ -2213,7 +2213,15 @@ internal fun SessionsScreen(
             Modifier
                 .fillMaxSize()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
-            contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 4.dp),
+            contentPadding = run {
+                val barInset = padding.calculateTopPadding() + 4.dp
+                val fadeClearance = barInset + TopFadeTail
+                if (reversedSessions) {
+                    PaddingValues(top = barInset, bottom = padding.calculateBottomPadding() + 4.dp + fadeClearance)
+                } else {
+                    PaddingValues(top = fadeClearance, bottom = padding.calculateBottomPadding() + 4.dp)
+                }
+            },
             reverseLayout = reversedSessions,
         ) {
             if (rooms.isNotEmpty()) {
