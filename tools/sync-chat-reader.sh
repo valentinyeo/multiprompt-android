@@ -1,20 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-revision=98f1c4a835ff0a9924dd391f54a7df65452e3221
+revision=f821d627aed08c62b4d0c47bb76ca1c58896b75b
+reader_pin=tools/chat-reader-pin/chat_history_reader.py
 [[ "$(cat app/src/main/assets/chat_history_reader.sha)" == "$revision" ]]
+[[ -f "$reader_pin" ]]
 [[ $# -le 1 && ( "${1:-}" == "" || "${1:-}" == --check ) ]]
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 for entry in \
-    'chat_history_reader.py 36bf62590819c1d557f6d3b923f579e173d2cf3b6f5c461433d96cc1ccc5a6d1' \
+    'chat_history_reader.py aa3220fb4e1c5761ddd3db4aa2e80f63901b818c4dd3d42fbd5abeb3e4c32e57' \
     'chat_connectors/claude.py 7b181305096a39c3ac4276607a3177177f23ca0a88535c96604c2b3f393d1729' \
     'chat_connectors/codex.py 07e448dc7d5a849cbbf4b914ce375e147f9343906f213bcda00a7d7663757a31' \
     'mp_send.py 380036692abf2a771b07493197d40a83824584ee3c374ee1a88f41a2b6886903' \
     'multibot_feedback.py 960a574620ca6cfe5649a403fffad8f8704e937138292d356ce3c46167690ce9'; do
     read -r path hash <<< "$entry"
     mkdir -p "$tmp/$(dirname "$path")"
-    if [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
+    if [[ "$path" == chat_history_reader.py ]]; then
+        cp "$reader_pin" "$tmp/$path"
+    elif [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
         git -C "$MULTIPROMPT_DESKTOP_REPO" show "$revision:src/$path" > "$tmp/$path"
     elif [[ "${GITHUB_ACTIONS:-}" == true ]]; then
         curl --fail --silent --show-error --location "https://raw.githubusercontent.com/valentinyeo/multiprompt/$revision/src/$path" > "$tmp/$path"

@@ -156,6 +156,7 @@
   "IGSH-2748": "PR checker randomly refuses the chat fix as unmapped",
   "IGSH-2715": "Phone tests use real-shaped chats and a daily live chat probe",
   "IGSH-2781": "Chat phone tests use real-size chats and check the screen",
+  "IGSH-2779": "Phone chat shows only my messages and no AI replies",
   "IGSH-2840": "App crashes on Valentin's phone after update 0.1.609",
   "IGSH-2906": "Coverage-growth rules stop blocking Android PRs",
   "IGSH-2960": "Android PR checks work when the AI picker is out of credit",

@@ -38,6 +38,7 @@ END = "@@MP_END@@"
 PAGE_BYTES = 350000
 SCAN_BYTES = 512 * 1024
 TAIL_BYTES = 512 * 1024
+TAIL_VISIBLE_BYTES = 4 * TAIL_BYTES
 QUESTION_SCAN_BYTES = 16 * TAIL_BYTES
 STATUS_CACHE = {}
 QUEUE_CACHE = {}
@@ -1129,14 +1130,39 @@ def asks_question(raw, agent):
     return message is not None and message.get("role") == "user"
 
 
+def tail_visible_start(agent, start, older, base, end, data):
+    offset = base
+    visible_at = None
+    for raw in reversed(older.splitlines(keepends=True)):
+        offset -= len(raw)
+        if end - offset > TAIL_VISIBLE_BYTES:
+            break
+        messages = conversation_rows(load_line(raw), agent, offset)
+        if any(row["role"] == "user" for row in messages):
+            return offset, end, older[offset - start:] + data
+        if visible_at is None and any(row["role"] == "assistant" for row in messages):
+            visible_at = offset
+    if visible_at is not None:
+        return visible_at, end, older[visible_at - start:] + data
+    return base, end, data
+
+
 def read_tail(source, size, agent, captured=None, fill=True):
+    tail_page = fill
     fill = fill and ISSUE_631_TAIL_FILLS_SHOWN_BUDGET
     base, end, data = read_window(source, size, captured=captured)
     if (not ISSUE_358_TAIL_STARTS_AT_QUESTION or not base or (not data and not fill) or
             (not fill and any(asks_question(raw, agent) for raw in data.splitlines()))):
         return base, end, data
     start, _, older = read_window(source, base, QUESTION_SCAN_BYTES - TAIL_BYTES, captured)
-    held = sum(len(wire_row(row)) + 1 for raw in data.splitlines() for row in conversation_rows(load_line(raw), agent, base))
+    held = 0
+    visible = False
+    for raw in data.splitlines():
+        messages = conversation_rows(load_line(raw), agent, base)
+        held += sum(len(wire_row(row)) + 1 for row in messages)
+        visible = visible or any(row["role"] in ("user", "assistant") for row in messages)
+    if tail_page and ISSUE_631_TAIL_FILLS_SHOWN_BUDGET and not visible:
+        return tail_visible_start(agent, start, older, base, end, data)
     fill = fill and held < TAIL_BYTES // 2
     shown = 0
     offset = base
@@ -1670,21 +1696,27 @@ def hosted_claude_transcript_sid(sid, config):
     return sid
 
 
+def hosted_claude_live_native(agent, sid, hosted):
+    state_native = host_session_state(agent, sid).get("native_session")
+    if isinstance(state_native, str) and SESSION_ID.fullmatch(state_native) and state_native != sid:
+        return state_native
+    return hosted_claude_transcript_sid(sid, hosted) if hosted else sid
+
+
 def resolve_response_path(q, source=None, as_owner=False):
     rid = q["id"]
     agent = q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q["codex"] else "claude"
     sid, tmux, cwd = q["sid"], q["tmux"], q["cwd"]
+    hosted = host_config(agent, sid) if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None
+    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
+        cwd = q["cwd"] = hosted["cwd"]
     if (not isinstance(rid, int) or rid < 0 or
             sid and not SESSION_ID.fullmatch(sid) or
-            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux):
+            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux or
+            cwd and not Path(cwd).is_absolute()):
         raise ValueError("invalid identity")
     if not sid and tmux and not as_owner:
         sid = q["sid"] = host_sid_for_tmux(agent, tmux) or ""
-    hosted = host_config(agent, sid) if sid else None
-    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
-        cwd = q["cwd"] = hosted["cwd"]
-    if cwd and not Path(cwd).is_absolute():
-        raise ValueError("invalid identity")
     if hosted and host_session_state(agent, sid).get("display_history"):
         history = host_paths(agent, sid)["history"]
         if history.is_file():
@@ -1700,29 +1732,6 @@ def resolve_response_path(q, source=None, as_owner=False):
     pin_hosted_claude(q, agent, as_owner)
     sid = q["sid"]
     follow = bool(tmux and (q.get("follow") or agent == "codex"))
-    if agent == "claude" and sid and not as_owner and host_dispatch_switch(agent, sid):
-        native = hosted_claude_transcript_sid(sid, hosted)
-        if native != sid:
-            owner = conversation_owner(cwd)
-            denied = False
-            for home in ([None, owner[1]] if owner and owner[1] != HOME else [None]):
-                try:
-                    path = conversation_path(agent, native, cwd, home)
-                except PermissionError:
-                    path, denied = None, True
-                if path is not None:
-                    return agent, sid, path, None
-            if denied and owner and source is not None:
-                query = dict(q, sid=native, follow=False,
-                             cached_sid=native if q.get("cached_sid") == sid else q.get("cached_sid", ""))
-                wire = owner_response(query, owner, source)
-                operation = "search" if "search" in q else "history"
-                prefix = f"@mp\t{rid}\t{operation}\tok\t{native}\t"
-                if wire.startswith(prefix):
-                    wire = f"@mp\t{rid}\t{operation}\tok\t{sid}\t" + wire[len(prefix):]
-                return agent, sid, None, wire
-            wire = missing_response(q, "permission denied") if denied else empty_history_response(q, sid, tmux)
-            return agent, sid, None, wire
     denied = False
     delegated = None
     try:
@@ -1736,6 +1745,15 @@ def resolve_response_path(q, source=None, as_owner=False):
         except PermissionError:
             hosted = None
         return (agent, sid, hosted, None) if hosted is not None else (agent, sid, None, empty_history_response(q, sid, tmux, agent))
+    if agent == "claude" and path is not None and sid and not as_owner and host_dispatch_switch(agent, sid):
+        native = hosted_claude_live_native(agent, sid, hosted)
+        if isinstance(native, str) and SESSION_ID.fullmatch(native) and native != sid:
+            try:
+                cleared = conversation_path(agent, native, cwd)
+            except PermissionError:
+                cleared = None
+            if cleared is not None:
+                path = cleared
     owner = conversation_owner(cwd) if agent == "claude" else None
     if follow and owner and owner[1] != HOME and source is not None and not as_owner:
         delegated = owner_response(dict(q, sid=""), owner, source)
@@ -1750,6 +1768,14 @@ def resolve_response_path(q, source=None, as_owner=False):
                 delegated = owner_response(q, owner, source)
                 if delegated != missing_response(q, "session transcript not found"):
                     return agent, sid, None, delegated
+
+    if path is None and not denied and agent == "claude" and sid and not as_owner and host_dispatch_switch(agent, sid):
+        native = hosted_claude_live_native(agent, sid, hosted)
+        if isinstance(native, str) and SESSION_ID.fullmatch(native) and native != sid:
+            try:
+                path = conversation_path(agent, native, cwd)
+            except PermissionError:
+                path = None
 
     if path is None and not denied and agent == "claude" and sid and host_dispatch_switch(agent, sid):
         try:
@@ -2009,8 +2035,15 @@ def fit_tail(rows, oldest):
     budget = sum(len(wire_row(row)) + 1 for row in rows)
     if budget <= TAIL_BYTES or len(rows) < 2:
         return rows, oldest
+    newest = question = None
+    for index, row in enumerate(rows):
+        if row["role"] in ("user", "assistant"):
+            newest = index
+            if row["role"] == "user":
+                question = index
+    keep = question if question is not None else (newest or 0)
     start = 0
-    while budget > TAIL_BYTES and start + 1 < len(rows):
+    while budget > TAIL_BYTES and start + 1 < len(rows) and (start < keep or budget > TAIL_VISIBLE_BYTES):
         budget -= len(wire_row(rows[start])) + 1
         start += 1
     kept = rows[start:]
@@ -2155,8 +2188,17 @@ def response(q, source=None, as_owner=False, resolved=None):
         if tail_reuse == "append":
             rows, oldest = fit_tail(rows, oldest)
         elif tail_reuse != "exact" and mode != "delta" and budget > TAIL_BYTES and len(groups) > 1 and any(row["role"] in ("tool", "tool_result") for row in rows):
+            newest = question = None
+            for index, (_consumed, row_start, _cost) in enumerate(groups):
+                stop = groups[index + 1][1] if index + 1 < len(groups) else len(rows)
+                block = rows[row_start:stop]
+                if any(row["role"] in ("user", "assistant") for row in block):
+                    newest = index
+                    if any(row["role"] == "user" for row in block):
+                        question = index
+            keep = question if question is not None else (newest or 0)
             first = 0
-            while budget > TAIL_BYTES and first + 1 < len(groups):
+            while budget > TAIL_BYTES and first < keep and first + 1 < len(groups):
                 budget -= groups[first][2]
                 first += 1
             base, row_start, _cost = groups[first]
@@ -4793,6 +4835,10 @@ def host_handle_request(provider, sid, tmux, session, request):
             session["settings"][key] = value
             host_settings_event(provider, sid, tmux, session)
         return dict(status="ok")
+    if operation == "send_now":
+        if provider != "claude":
+            return host_refuse("send_now_unsupported")
+        return host_claude_send_now(provider, sid, tmux, session, request)
     if operation == "recall":
         token, attempt = request.get("id"), request.get("attempt")
         if (not isinstance(token, str) or re.fullmatch(r"[A-Za-z0-9_-]{16,80}", token) is None
@@ -4949,6 +4995,9 @@ def host_claude_event(provider, sid, tmux, session, event):
     if kind == "system":
         if event.get("subtype") == "init":
             session["ready"] = True
+            capabilities = event.get("capabilities")
+            if isinstance(capabilities, list):
+                session["capabilities"] = set(item for item in capabilities if isinstance(item, str))
             if "starting_settings" in session:
                 settings = session["starting_settings"]
                 actual = host_model_name(event.get("model"))
@@ -4963,9 +5012,6 @@ def host_claude_event(provider, sid, tmux, session, event):
                              dict(requested=settings["model"], actual=actual or "unknown"))
             if isinstance(event.get("session_id"), str):
                 session["state"]["native_session"] = event["session_id"]
-                config = host_config(provider, sid)
-                if config is not None:
-                    host_write(host_paths(provider, sid)["config"], dict(config, native_session=event["session_id"]))
             host_state_write(provider, sid, session["state"])
             host_log(provider, sid, "init", dict(session=event.get("session_id")))
             host_event(provider, sid, tmux, session, "host.status", dict(state="ready"))
@@ -5076,6 +5122,37 @@ def host_claude_recall(provider, sid, tmux, session, entry):
     if not isinstance(response, dict) or response.get("subtype") != "success" or not isinstance(body, dict) or body.get("cancelled") is not True:
         return host_refuse("not_waiting")
     return dict(status="ok")
+
+
+def host_claude_send_now(provider, sid, tmux, session, request):
+    capabilities = session.get("capabilities")
+    if not isinstance(capabilities, set) or "interrupt_send_now_v1" not in capabilities:
+        return host_refuse("send_now_unsupported")
+    text = request.get("text")
+    target = None
+    for entry in reversed(session.get("sends") or []):
+        if not isinstance(entry, dict) or not isinstance(entry.get("recall_uuid"), str):
+            continue
+        if isinstance(text, str) and entry.get("text") != text:
+            continue
+        target = entry["recall_uuid"]
+        break
+    if target is None:
+        return host_refuse("not_waiting")
+    outcome = None
+    for attempt in range(2):
+        response = host_control_call(provider, sid, tmux, session,
+                                     dict(subtype="interrupt", send_now=True, message_uuid=target))
+        body = response.get("response") if isinstance(response, dict) else None
+        if not isinstance(response, dict) or response.get("subtype") != "success" or not isinstance(body, dict):
+            return host_refuse("send_now_unanswered")
+        outcome = body.get("send_now")
+        if outcome != "nothing_waiting" or attempt == 1:
+            break
+    if outcome not in ("stopped", "delivering"):
+        return host_refuse("not_waiting")
+    host_log(provider, sid, "send_now", dict(id=target, outcome=outcome))
+    return dict(status="ok", send_now=outcome)
 
 
 def host_turn_end(provider, sid, tmux, session, payload, detail):
@@ -7068,6 +7145,27 @@ def cancel_queued_response(q):
     return f"@mp\t{q['id']}\tcancel_queued\t{'error' if reason else 'ok'}\t{reason or '-'}\t0\n{END}\n"
 
 
+def send_now_response(q):
+    rid = q.get("id", 0)
+    provider, sid, name = q.get("provider"), q.get("sid"), q.get("tmux")
+    text = q.get("text")
+    if not isinstance(text, str) or not text.strip() or "\x00" in text:
+        return f"@mp\t{rid}\tsend_now\terror\tinvalid_text\t0\n{END}\n"
+    if host_identity(provider, sid) and host_enabled(provider, sid) and host_owned(provider, sid):
+        reply = host_request(provider, sid, dict(op="send_now", text=text))
+        if isinstance(reply, dict) and reply.get("status") == "ok":
+            return f"@mp\t{rid}\tsend_now\tok\t-\t0\n{END}\n"
+        reason = reply.get("reason") if isinstance(reply, dict) else None
+        return f"@mp\t{rid}\tsend_now\terror\t{reason if isinstance(reason, str) and TMUX_NAME.fullmatch(reason) else 'send_now_failed'}\t0\n{END}\n"
+    if not isinstance(name, str) or TMUX_NAME.fullmatch(name) is None:
+        return f"@mp\t{rid}\tsend_now\terror\tinvalid_tmux_name\t0\n{END}\n"
+    try:
+        subprocess.run(["tmux", "send-keys", "-t", "=" + name + ":", "C-x", "C-s"], check=True, capture_output=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return f"@mp\t{rid}\tsend_now\terror\ttmux_stop_failed\t0\n{END}\n"
+    return f"@mp\t{rid}\tsend_now\tok\t-\t0\n{END}\n"
+
+
 def held_queue_ready(tmux, path):
     shown = subprocess.run(["tmux", "capture-pane", "-p", "-e", "-J", "-t", "=" + tmux + ":"],
                            capture_output=True, text=True, timeout=5, check=True).stdout
@@ -7380,6 +7478,10 @@ def prompt_rows_close(target, opened):
         pass
 
 
+def reaction_reply(text):
+    return isinstance(text, str) and re.fullmatch(r'(?:👍|👎|❤️) to: [^\r\n]+(?: \[mp:[0-9a-f]{16}\])?', text) is not None
+
+
 def send_response_preserve_draft(q):
     import uuid
     name, sid, text = q.get('tmux'), q.get('sid'), q.get('text')
@@ -7408,7 +7510,7 @@ def send_response_preserve_draft(q):
         typed, sent = record.get('typed'), record.get('sent')
         typed = typed if isinstance(typed, str) else ''
         sent = sent if isinstance(sent, str) else ''
-        if re.fullmatch(r'(?:👍|👎|❤️) to: [^\r\n]+ \[mp:[0-9a-f]{16}\]', text):
+        if reaction_reply(text):
             typed = ''
         displaced = draft if draft and not own_draft(draft, text, typed, sent) else ''
         if displaced:
@@ -8078,6 +8180,8 @@ def serve_request(line, source, subscriptions, lock):
             wire = draft_response(query)
         elif query.get("op") in ("stop", "permission", "question", "send_queued", "edit_queued"):
             wire = stop_response(query)
+        elif query.get("op") == "send_now":
+            wire = send_now_response(query)
         elif query.get("op") == "restart_ai":
             wire = restart_ai_response(query)
         elif query.get("op") == "settle":
@@ -8167,7 +8271,7 @@ elif __name__ == "__main__":
 
 '''
 READER_SOURCE = 'CONNECTOR_SOURCES = ' + repr(globals().get('CONNECTOR_SOURCES', {})) + '\n' + READER_SOURCE
-RUNTIME_GENERATION = 131
+RUNTIME_GENERATION = 132
 
 if __name__ == '__main__':
     import base64 as _base64
@@ -8270,6 +8374,20 @@ if __name__ == '__main__':
                         try:
                             publish_named_tool('mp-helper', _base64.b64decode(helper_source))
                             _os.chmod('mp-helper', 0o700, dir_fd=directory)
+                        except (ValueError, OSError, NotImplementedError):
+                            pass
+                    sessions_source = globals().get('MP_SESSIONS_SOURCE')
+                    if isinstance(sessions_source, str) and sessions_source:
+                        try:
+                            publish_named_tool('mp-sessions', _base64.b64decode(sessions_source))
+                            _os.chmod('mp-sessions', 0o700, dir_fd=directory)
+                        except (ValueError, OSError, NotImplementedError):
+                            pass
+                    layout_source = globals().get('MP_LAYOUT_SOURCE')
+                    if isinstance(layout_source, str) and layout_source:
+                        try:
+                            relink('mp-layout', publish_named_tool('mp-layout.mjs', _base64.b64decode(layout_source)))
+                            _os.chmod('mp-layout', 0o700, dir_fd=directory)
                         except (ValueError, OSError, NotImplementedError):
                             pass
                     zsb_source = globals().get('ZSB_SOURCE')
