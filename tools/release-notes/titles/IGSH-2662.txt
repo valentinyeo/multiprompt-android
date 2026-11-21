@@ -1,0 +1,1 @@
+Android: chat screen lost its version label

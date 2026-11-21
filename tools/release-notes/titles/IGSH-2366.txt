@@ -1,0 +1,1 @@
+Android: agent messages in the new format show as a sender card

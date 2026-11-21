@@ -1,0 +1,1 @@
+Android: new session screen in the chat's new style

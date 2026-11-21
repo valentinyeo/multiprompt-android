@@ -1,0 +1,1 @@
+Android: new chat picks a folder from every server in one list

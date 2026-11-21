@@ -1,0 +1,1 @@
+Android: show a named live chat mention as a name

@@ -1,0 +1,1 @@
+Android: full robot in the status bar, not cut off

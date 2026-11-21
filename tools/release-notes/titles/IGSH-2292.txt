@@ -1,0 +1,1 @@
+Android: send any file to the server, not only pictures
