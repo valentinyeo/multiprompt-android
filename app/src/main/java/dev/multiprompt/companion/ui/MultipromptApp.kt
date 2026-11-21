@@ -299,63 +299,63 @@ fun MultipromptApp(viewModel: MainViewModel) {
             delay(UPDATE_POLL_INTERVAL_MS)
         }
     }
-    Box(Modifier.fillMaxSize()) {
-        AppScreens(viewModel)
-        if (state.signedIn) state.pendingDevice?.let { device ->
-            DeviceApprovalPrompt(
-                device = device,
-                busy = state.deviceApprovalBusy,
-                error = state.deviceApprovalError,
-                onApprove = viewModel::approveDevice,
-                onDeny = viewModel::denyDevice,
-            )
-        }
+    val onUpdateScreen = state.section == AppSection.UPDATE
+    Column(Modifier.fillMaxSize()) {
         UpdateBanner(
+            onUpdateScreen = onUpdateScreen,
             state = updateState,
             dismissedVersion = dismissedVersion,
             onInstall = { release -> viewModel.updates.install(release) },
             onLater = { release -> viewModel.updates.dismissBanner(release.versionCode) },
-            modifier = Modifier.align(Alignment.TopCenter),
         )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            AppScreens(viewModel)
+            if (state.signedIn) state.pendingDevice?.let { device ->
+                DeviceApprovalPrompt(
+                    device = device,
+                    busy = state.deviceApprovalBusy,
+                    error = state.deviceApprovalError,
+                    onApprove = viewModel::approveDevice,
+                    onDeny = viewModel::denyDevice,
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun UpdateBanner(
+    onUpdateScreen: Boolean,
     state: UpdateState,
     dismissedVersion: Long,
     onInstall: (UpdateRelease) -> Unit,
     onLater: (UpdateRelease) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    val release = when (state) {
-        is UpdateState.Available -> state.release
-        is UpdateState.PermissionRequired -> state.release
-        is UpdateState.Downloading -> state.release
-        else -> null
-    } ?: return
-    if (state is UpdateState.Available && !UpdateBannerPolicy.shouldShow(release.versionCode, dismissedVersion)) return
-    Surface(modifier = modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.primaryContainer) {
-        Row(
-            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                when (state) {
-                    is UpdateState.Downloading -> "Downloading v${release.versionName}… " +
-                        "${(state.progress * 100).toInt()}%"
-                    is UpdateState.PermissionRequired -> "Allow installs to update to v${release.versionName}"
-                    else -> "Version ${release.versionName} available"
-                },
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-            )
-            if (state is UpdateState.Available) {
-                KitSecondaryButton("Later", onClick = { onLater(release) })
-                KitPrimaryButton("Install", onClick = { onInstall(release) })
-            }
+    if (!UpdateBannerPolicy.shouldShowBanner(onUpdateScreen, state, dismissedVersion)) return
+    val release = UpdateBannerPolicy.bannerRelease(state) ?: return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .background(Kit.Surface)
+            .border(Kit.OutlineWidth, Kit.Outline, RoundedCornerShape(0.dp))
+            .padding(horizontal = Kit.ScreenEdge, vertical = Kit.ControlGap),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+    ) {
+        Text(
+            when (state) {
+                is UpdateState.Downloading -> "Downloading v${release.versionName}… ${(state.progress * 100).toInt()}%"
+                is UpdateState.PermissionRequired -> "Allow installs to update to v${release.versionName}"
+                else -> "v${release.versionName} is ready"
+            },
+            modifier = Modifier.weight(1f),
+            style = Kit.BodyStrong,
+            color = Kit.Text,
+        )
+        if (state is UpdateState.Available) {
+            KitSecondaryButton("Later", onClick = { onLater(release) })
+            KitPrimaryButton("Update now", onClick = { onInstall(release) })
         }
     }
 }
@@ -365,8 +365,11 @@ private fun AppScreens(viewModel: MainViewModel) {
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
-    val bannerRelease = (updateState as? UpdateState.Available)?.release
-        ?.takeIf { UpdateBannerPolicy.shouldShow(it.versionCode, dismissedVersion) }
+    val updateBannerVisible = UpdateBannerPolicy.shouldShowBanner(
+        onUpdateScreen = state.section == AppSection.UPDATE,
+        state = updateState,
+        dismissedVersionCode = dismissedVersion,
+    )
     val context = LocalContext.current
     var useWithoutAccount by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     val systemDark = isSystemInDarkTheme()
@@ -544,7 +547,7 @@ private fun AppScreens(viewModel: MainViewModel) {
         contentWindowInsets = if (state.section == AppSection.SESSIONS)
             WindowInsets(0, 0, 0, 0) else ScaffoldDefaults.contentWindowInsets,
         topBar = {
-            Column(if (state.section == AppSection.SESSIONS && bannerRelease == null) Modifier else Modifier.statusBarsPadding()) {
+            Column(if (state.section == AppSection.SESSIONS || updateBannerVisible) Modifier else Modifier.statusBarsPadding()) {
                 if (state.section != AppSection.SESSIONS) {
                     Header(
                         refreshing = state.refreshing,
@@ -552,13 +555,6 @@ private fun AppScreens(viewModel: MainViewModel) {
                         section = state.section,
                         onSelect = viewModel::select,
                         onReleaseNotes = viewModel::openReleaseNotes,
-                    )
-                }
-                if (bannerRelease != null) {
-                    UpdateBanner(
-                        release = bannerRelease,
-                        onInstall = { viewModel.installUpdate(bannerRelease) },
-                        onLater = { viewModel.updates.dismissBanner(bannerRelease.versionCode) },
                     )
                 }
             }
@@ -765,19 +761,6 @@ internal fun Header(
             }
         },
     )
-}
-
-@Composable
-private fun UpdateBanner(release: UpdateRelease, onInstall: () -> Unit, onLater: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.primaryContainer).padding(10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Text("v${release.versionName} is ready", Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-        KitSecondaryButton("Later", onClick = onLater)
-        KitPrimaryButton("Update now", onClick = onInstall)
-    }
 }
 
 internal val PickerControlHeight = ReaderControlSize
