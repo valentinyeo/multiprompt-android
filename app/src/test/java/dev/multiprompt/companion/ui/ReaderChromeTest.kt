@@ -154,7 +154,7 @@ class ReaderChromeTest {
         render()
         compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
         compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
-        val before = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        val before = compose.onNodeWithTag("composer-pill").getUnclippedBoundsInRoot()
         screenshot("dictation-before")
         val dictationState: MutableStateFlow<DictationState> = f.field(f.app.deepgramDictation, "_state")
         val dictationLevel: MutableStateFlow<Float> = f.field(f.app.deepgramDictation, "_level")
@@ -186,7 +186,7 @@ class ReaderChromeTest {
         }
         compose.onNodeWithTag("dictation-stop").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed()
-        val after = compose.onNode(hasSetTextAction()).getUnclippedBoundsInRoot()
+        val after = compose.onNodeWithTag("composer-pill").getUnclippedBoundsInRoot()
         assertEquals("message box returns at the same bounds", before, after)
         screenshot("dictation-after")
         println("DICTATION_GEOMETRY before=$before during=$stop meter=$meter send=$send after=$after")

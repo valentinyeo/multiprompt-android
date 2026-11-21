@@ -38,6 +38,14 @@ class ReplyQuoteTest {
     }
 
     @Test
+    fun replyCardPreviewCutsAtAWholeWord() {
+        assertEquals(
+            "I agree, releases are too slow. A merged fix…",
+            ReplyQuote.preview("I agree, releases are too slow. A merged fix takes about 21 minutes", limit = 46),
+        )
+    }
+
+    @Test
     fun skillMessageKeepsTheQuoteWithTheDraft() {
         assertEquals(
             "/review > Kraków\n\nmy answer",
@@ -49,9 +57,47 @@ class ReplyQuoteTest {
         val wire = "> First line\n>\n> Second line\n\nmy answer"
         val reply = requireNotNull(ReplyQuote.parse(wire))
         assertEquals("> First line\n>\n> Second line", reply.quoted)
-        assertEquals("First line Second line", reply.preview)
+        assertEquals("First line… more", reply.reference.text)
         assertEquals("my answer", reply.body)
         assertEquals(wire, ReplyQuote.compose("First line\n\nSecond line", "my answer"))
+    }
+
+    @Test
+    fun skillReplyShowsTheQuoteAsAReferenceInsteadOfRawMarkdown() {
+        val source = "I agree, releases are too slow. A merged fix takes about 21 minutes.\n\n" +
+            "- **Building the app:** about 9 minutes."
+        val wire = "/pstack:poteto-help " + ReplyQuote.compose(source, "is this how Lauren tan does it?")
+        val reply = requireNotNull(ReplyQuote.parse(wire))
+        assertEquals("> I agree, releases are too slow. A merged fix takes about 21 minutes.\n>\n> - **Building the app:** about 9 minutes.", reply.quoted)
+        assertEquals("/pstack:poteto-help is this how Lauren tan does it?", reply.body)
+        assertEquals("I agree, releases are too slow. A merged fix takes about… more", reply.reference.text)
+    }
+
+    @Test
+    fun skillOnItsOwnLineKeepsTheQuoteOutOfTheBody() {
+        val reply = requireNotNull(ReplyQuote.parse("/review\n> First line\n> Second line\n\nmy answer"))
+        assertEquals("> First line\n> Second line", reply.quoted)
+        assertEquals("/review my answer", reply.body)
+    }
+
+    @Test
+    fun referenceShowsBulletsAndBoldWithoutMarkdownMarks() {
+        val reference = ReplyQuote.reference("> - **Building the app:** about 9 minutes.")
+        assertEquals("• Building the app: about 9 minutes.", reference.text)
+        assertEquals(true, reference.runs.any { it.bold && it.text == "Building the app:" })
+        assertEquals(false, reference.longer)
+    }
+
+    @Test
+    fun referenceCutsAtAWholeWordAndSaysItQuotesMore() {
+        val reference = ReplyQuote.reference(
+            "> I agree, releases are too slow. A merged fix takes about 21 minutes to reach your phone.",
+            limit = 40,
+        )
+        assertEquals("I agree, releases are too slow. A…", reference.text)
+        assertEquals(true, reference.longer)
+        assertEquals("Hello", ReplyQuote.reference("> Hello").text)
+        assertEquals(false, ReplyQuote.reference("> Hello").longer)
     }
 
     @Test

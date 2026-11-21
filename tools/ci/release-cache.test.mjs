@@ -23,9 +23,13 @@ const gradleWorkflows = () =>
       return source.includes('gradle/actions/setup-gradle@v4') || source.includes('./.github/actions/gradle-ci');
     });
 
-test('shared Gradle setup pins 9.5.1, uses strict home cache, and gates read-only restores', () => {
+test('shared Gradle setup pins 9.5.1, writes a strict home cache, and lets readers fall back', () => {
   assert.match(gradleCi, /gradle-version:\s*"9\.5\.1"/);
-  assert.match(gradleCi, /gradle-home-cache-strict-match:\s*true/);
+  assert.match(
+    gradleCi,
+    /gradle-home-cache-strict-match: \$\{\{ inputs\.read-only != 'true' \}\}/,
+    'only cache writers may pin the exact key'
+  );
   assert.match(gradleCi, /cache-read-only: \$\{\{ inputs\.read-only == 'true' \}\}/);
 });
 
@@ -78,7 +82,9 @@ test('Gradle steps retry a busy repository through one wrapper', () => {
   for (const job of ['test', 'unit-tests', 'm3-unit-tests', 'lint']) {
     assert.match(jobBody(workflow, job), /GRADLE: tools\/ci\/gradle-retry\.sh/, `${job} must retry its Gradle step`);
   }
-  assert.match(readFileSync(new URL('../../tools/ci/gradle-retry.sh', import.meta.url), 'utf8'), /attempt.*-ge 3/);
+  const retry = readFileSync(new URL('../../tools/ci/gradle-retry.sh', import.meta.url), 'utf8');
+  assert.match(retry, /GRADLE_RETRY_ATTEMPTS:-6/);
+  assert.match(retry, /GRADLE_RETRY_WINDOW_SECONDS:-300/);
   assert.match(readFileSync(new URL('../../tools/check.sh', import.meta.url), 'utf8'), /tools\/ci\/gradle-retry\.test\.mjs/);
 });
 

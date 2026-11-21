@@ -61,7 +61,9 @@ class ReplyReferenceTest {
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
         val layout = layouts.single()
         assertEquals(1, layout.lineCount)
-        assertTrue(layout.isLineEllipsized(0))
+        val shown = layout.layoutInput.text.text
+        assertTrue(layout.isLineEllipsized(0) || shown.endsWith("…"))
+        assertTrue(!shown.contains(">"))
         assertEquals(expectedColor, layout.layoutInput.style.color)
         compose.onNodeWithTag("chat-message-source").assertDoesNotExist()
         compose.onNodeWithContentDescription("Jump to original message").performClick()
@@ -71,7 +73,7 @@ class ReplyReferenceTest {
         screenshot("reply-source-highlight.png")
         output("reply-layout.json").writeText(JSONObject()
             .put("lines", layout.lineCount)
-            .put("ellipsized", layout.isLineEllipsized(0))
+            .put("ellipsized", layout.isLineEllipsized(0) || shown.endsWith("…"))
             .put("sourceVisible", true)
             .put("highlighted", true)
             .put("wire", wire)

@@ -1,0 +1,1 @@
+Android: buttons and pills all have different sizes

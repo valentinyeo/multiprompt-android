@@ -17,6 +17,9 @@ class ClearedChatTest {
     private fun row(offset: Long, text: String, id: String) =
         ChatHistoryProtocol.Row("user", text, id, "", offset, offset + 10)
 
+    private fun timed(offset: Long, text: String, id: String, at: String) =
+        ChatHistoryProtocol.Row("user", text, id, at, offset, offset + 10)
+
     private fun page(rows: List<ChatHistoryProtocol.Row>, inode: Long, at: Double) =
         ChatHistoryProtocol.Page(sid, 0, 100, inode, false, stamp(at), "a".repeat(64), "tail", 0, rows)
 
@@ -46,6 +49,16 @@ class ClearedChatTest {
     fun anUnsentMessageTypedAfterTheClearStays() {
         val drawn = cleared().projectMessages(replica(message(newId, "AFTER unsent", MessageProtocol.State.FAILED, 2_100.0)), now = 3_000.0)
         assertEquals(listOf("new question", "AFTER unsent"), drawn.map { it.text })
+    }
+
+    @Test
+    fun aClearStillReplacesRowsThatLookNewerOnScreen() {
+        val shown = ChatHistory(sid = sid, inode = 1, offset = 100, mtime = stamp(1_600.0),
+            rows = listOf(timed(0, "old question", "old", "2026-11-21T16:00:00.000Z")))
+        val afterClear = shown.apply(page(listOf(timed(0, "new question", "new", "2026-11-21T15:00:00.000Z")), inode = 2, at = 2_000.0))
+        assertEquals(2L, afterClear.inode)
+        assertEquals(2_000.0, afterClear.clearedAt, 0.0)
+        assertEquals(listOf("new question"), afterClear.messages.map { it.text })
     }
 
     @Test

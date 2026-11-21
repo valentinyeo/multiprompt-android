@@ -42,6 +42,7 @@ import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
@@ -127,6 +128,20 @@ class ReplyToMessageTest {
         compose.runOnIdle {
             assertEquals(listOf("> First line\n> Second line\n\nmy answer"), sent)
         }
+    }
+
+    @Test
+    fun codeScrollsBothWaysWithoutStartingReply() {
+        val wide = "CODE_START " + (0 until 40).joinToString(" ") { "column_%03d".format(it) } + " CODE_END"
+        harness("```\n$wide\n```")
+        val code = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
+        fun position() = code.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange].value()
+        code.performTouchInput { swipeLeft() }
+        val afterLeft = position()
+        assertTrue("Wide code must scroll left", afterLeft > 0f)
+        code.performTouchInput { swipeRight() }
+        assertTrue("Wide code must scroll back right", position() < afterLeft)
+        compose.onNodeWithContentDescription("Cancel reply").assertDoesNotExist()
     }
 
     @Test
