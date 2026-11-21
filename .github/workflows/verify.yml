@@ -316,14 +316,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         if: steps.parent-cache.outputs.hit != 'true'
         id: setup-gradle
         continue-on-error: ${{ inputs.side == 'parent' }}
         with:
-          gradle-version: "9.5.1"
-          gradle-home-cache-strict-match: true
-          cache-read-only: true
+          read-only: true
       - uses: android-actions/setup-android@v3
         if: steps.parent-cache.outputs.hit != 'true'
         id: setup-android

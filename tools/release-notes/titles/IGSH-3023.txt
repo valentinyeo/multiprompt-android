@@ -1,0 +1,1 @@
+Release and checker builds survive download hiccups
