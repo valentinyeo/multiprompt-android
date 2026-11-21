@@ -14,6 +14,7 @@ test('only cheap rules and the one independent verifier run on PRs', () => {
   assert.deepEqual(triggered.sort(), ['gitleaks.yml', 'no-paid-ai.yml', 'pstack-verifier.yml', 'test.yml']);
   const cheap = read('.github/workflows/test.yml');
   assert.deepEqual(jobs(cheap), ['build', 'test', 'unit-tests', 'm3-unit-tests', 'lint']);
+  for (const job of ['test', 'unit-tests', 'm3-unit-tests', 'lint']) assert.match(cheap, new RegExp(`^  ${job}:\\n[\\s\\S]*?needs: build`, 'm'), job);
   assert.doesNotMatch(cheap, /android-proof|uses: \.\/\.github\/workflows\/|unit-red|original source|original unshared|original source|git worktree/);
   for (const phase of ['source', 'unit', 'm3', 'lint']) assert.ok(cheap.includes(`run: tools/check.sh ${phase}`), phase);
   const check = read('tools/check.sh');

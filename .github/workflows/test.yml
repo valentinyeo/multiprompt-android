@@ -33,6 +33,7 @@ jobs:
 
   test:
     name: test
+    needs: build
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -57,6 +58,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+          cache-read-only: true
 
       - name: Install screenshot text reader
         run: |
@@ -92,6 +94,7 @@ jobs:
 
   unit-tests:
     name: unit-tests
+    needs: build
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -104,6 +107,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+          cache-read-only: true
       - name: Debug unit tests
         env:
           GRADLE: gradle
@@ -127,6 +131,7 @@ jobs:
 
   m3-unit-tests:
     name: m3-unit-tests
+    needs: build
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -139,6 +144,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+          cache-read-only: true
       - name: Material 3 unit tests
         env:
           GRADLE: gradle
@@ -154,6 +160,7 @@ jobs:
 
   lint:
     name: lint
+    needs: build
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -166,6 +173,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.1"
+          cache-read-only: true
       - name: Android lint
         env:
           GRADLE: gradle
