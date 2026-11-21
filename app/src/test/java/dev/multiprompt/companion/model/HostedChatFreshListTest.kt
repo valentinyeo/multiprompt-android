@@ -117,7 +117,7 @@ class HostedChatFreshListTest {
     fun hostedHistoryDeltaPollStillValidatesCachedSidAgainstHostSid() {
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, tmux, "/work", hostSid)
         val history = ChatHistory(sid = hostSid, inode = 2, offset = 100, mtime = 1_730_000_000_000_000_000L, probe = probe)
-        val wire = historyHeader(hostSid, id = 2, base = 0, end = 120, inode = 2, more = 0, mode = "delta", oldest = 0) + "\n" +
+        val wire = historyHeader(nativeSid, id = 2, base = 100, end = 120, inode = 2, more = 0, mode = "delta", oldest = 0) + "\n" +
             JSONObject().put("role", "user").put("text", "tail").put("id", "u2")
                 .put("timestamp", "").put("offset", 100).put("end", 120) +
             "\n${TranscriptProtocol.END}\n"
