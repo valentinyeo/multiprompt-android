@@ -278,3 +278,42 @@ test('a picked journey that skipped blocks the merge', async () => {
   pr.statusCheckRollup.push({ ...pr.statusCheckRollup[0], name: 'journey chat-shared.md / verify', conclusion: 'SKIPPED' });
   assert.throws(() => checkStatus(pr), /Checks not green: journey chat-shared\.md \/ verify/);
 });
+
+test('a journey red on main is tolerated when pstack-verifier passed', async () => {
+  const { checkStatus, reportToleratedRedOnMain } = await gate;
+  const pr = await green();
+  const nightly = 'https://github.com/example/actions/runs/1';
+  const redOnMain = { journeys: ['session-gestures.md', 'chat-shared.md'], url: nightly };
+  pr.statusCheckRollup.push(
+    { __typename: 'CheckRun', name: 'journey session-gestures.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+    { __typename: 'CheckRun', name: 'journey chat-shared.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' },
+  );
+  const status = checkStatus(pr, { redOnMain });
+  assert.equal(status.ready, true);
+  assert.deepEqual(status.toleratedRedOnMain.sort(), ['chat-shared.md', 'session-gestures.md']);
+  const lines = [];
+  reportToleratedRedOnMain(status, line => lines.push(line));
+  assert.match(lines.join('\n'), /Red on main tolerated \(nightly https:\/\/github\.com\/example\/actions\/runs\/1\): chat-shared\.md, session-gestures\.md/);
+});
+
+test('a failed journey still blocks when it is not red on main', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey chat-table.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+  assert.throws(
+    () => checkStatus(pr, { redOnMain: { journeys: ['session-gestures.md'], url: 'https://github.com/example/actions/runs/1' } }),
+    /Checks not green: journey chat-table\.md \/ verify/,
+  );
+});
+
+test('a red-on-main journey still blocks when pstack-verifier did not pass', async () => {
+  const { checkStatus } = await gate;
+  const pr = await green();
+  const verifier = pr.statusCheckRollup.find(check => check.name === 'pstack-verifier');
+  verifier.conclusion = 'FAILURE';
+  pr.statusCheckRollup.push({ __typename: 'CheckRun', name: 'journey session-gestures.md / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+  assert.throws(
+    () => checkStatus(pr, { redOnMain: { journeys: ['session-gestures.md'], url: 'https://github.com/example/actions/runs/1' } }),
+    /Checks not green: (?:journey session-gestures\.md \/ verify|pstack-verifier)/,
+  );
+});
