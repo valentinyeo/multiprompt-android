@@ -121,7 +121,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -209,7 +208,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.account.AccountTab
@@ -2025,7 +2023,7 @@ internal fun SessionsScreen(
                                 }
                             }, icon = if (searchVisible) Icons.Default.Close else Icons.Default.Search, description = if (searchVisible) "Close session search" else "Search sessions", modifier = Modifier.minimumInteractiveComponentSize())
                         if (state.creatingSession) {
-                            CircularProgressIndicator(Modifier.minimumInteractiveComponentSize().size(Kit.RoundButton), strokeWidth = 2.dp)
+                            CircularProgressIndicator(Modifier.minimumInteractiveComponentSize().size(Kit.ControlHeight), strokeWidth = 2.dp)
                         } else {
                             KitRoundButton(onClick = onStartNewSession, icon = Icons.Default.Add, description = "New session", modifier = Modifier.minimumInteractiveComponentSize())
                         }
@@ -2098,7 +2096,7 @@ internal fun SessionsScreen(
                             Tab(
                                 selected = state.selectedWorkspaceId == id,
                                 onClick = { onSelectWorkspace(id) },
-                                modifier = Modifier.height(48.dp),
+                                modifier = Modifier.height(Kit.ControlHeight),
                                 selectedContentColor = MaterialTheme.colorScheme.primary,
                                 unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 text = {
@@ -2881,12 +2879,12 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
             ) {
-                KitRoundButton(onClick = onBack, modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize), icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
+                KitRoundButton(onClick = onBack, modifier = Modifier.minimumInteractiveComponentSize(), icon = Icons.AutoMirrored.Filled.ArrowBack, description = "Back")
                 Box(Modifier.weight(1f)) {
                     Row(
-                        Modifier.height(ReaderControlSize).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
+                        Modifier.height(Kit.ControlHeight).background(MaterialTheme.colorScheme.surfaceContainerHighest, CircleShape)
                             .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                            .padding(8.dp),
+                            .padding(Kit.InnerInset),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -2903,7 +2901,7 @@ internal fun ReaderTopBar(
                 }
                 VersionLabel(onClick = onReleaseNotes)
                 Box {
-                    KitRoundButton(onClick = onMenuClick, modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize), icon = Icons.Default.MoreVert, description = "Session actions")
+                    KitRoundButton(onClick = onMenuClick, modifier = Modifier.minimumInteractiveComponentSize(), icon = Icons.Default.MoreVert, description = "Session actions")
                     menuContent()
                 }
             }
@@ -2931,7 +2929,7 @@ internal fun ReaderTopBar(
                         Modifier
                             .fillMaxWidth()
                             .clickable { modelMenuExpanded = true }
-                            .then(if (LocalMaterial3.current) Modifier.heightIn(min = 48.dp) else Modifier),
+                            .then(if (LocalMaterial3.current) Modifier.heightIn(min = Kit.ControlHeight) else Modifier),
                     ) {
                         Text(
                             session.displayName,
@@ -3007,6 +3005,15 @@ internal fun ReaderTopBar(
             }
         },
     )
+}
+
+private data class ComposerFills(val soft: Color, val softInk: Color, val strong: Color, val strongInk: Color)
+
+@Composable
+private fun composerFills(): ComposerFills {
+    val onLightPage = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    return if (onLightPage) ComposerFills(MaterialTheme.colorScheme.surfaceContainerHigh, Kit.Page, Kit.Surface, Kit.Text)
+    else ComposerFills(Kit.SurfaceRaised, Kit.Text, Kit.Text, Kit.Page)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -4379,21 +4386,19 @@ internal fun ReaderScreen(
                         onSend = submitPrompt,
                     )
                 } else {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(ReaderControlSpacing),
-                    ) {
+                    val fills = composerFills()
+                    KitComposerPill(Modifier.testTag("composer-pill"), fill = MaterialTheme.colorScheme.surfaceContainer) {
                         Box {
                             if (imageUploading) {
-                                CircularProgressIndicator(Modifier.minimumInteractiveComponentSize().size(Kit.RoundButton), strokeWidth = 2.dp)
+                                CircularProgressIndicator(Modifier.size(Kit.ControlInnerSize), strokeWidth = 2.dp)
                             } else {
-                                KitRoundButton(
+                                KitInnerButton(
                                     onClick = { attachMenuSection = null; attachMenuExpanded = true },
                                     enabled = !reader.sending && !dictationActive,
-                                    modifier = Modifier.minimumInteractiveComponentSize().size(ReaderControlSize),
                                     icon = Icons.Default.Add,
                                     description = "Attach",
+                                    fill = fills.soft,
+                                    tint = fills.softInk,
                                 )
                             }
                             KitMenu(
@@ -4629,17 +4634,13 @@ internal fun ReaderScreen(
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
-                        val composerGrown = (laidOut?.lineCount ?: 1) > 1
                         val skillText = remember(skillSpans, pillsDrawn) {
                             if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans)
                         }
-                        Box(Modifier.weight(1f).padding(vertical = 2.dp)) {
                         BasicTextField(
                             value = promptField,
                             onValueChange = { promptField = it },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = ReaderControlSize)
-                                .background(MaterialTheme.colorScheme.surfaceContainer, ReaderComposerFieldShape)
-                                .border(1.dp, MaterialTheme.colorScheme.outline, ReaderComposerFieldShape).focusRequester(promptFocusRequester)
+                            modifier = Modifier.weight(1f).heightIn(min = Kit.ControlInnerSize).focusRequester(promptFocusRequester)
                                 .drawWithContent {
                                     drawContent()
                                     if (sendMarkPending && prompt.isEmpty()) {
@@ -4657,20 +4658,16 @@ internal fun ReaderScreen(
                             keyboardActions = KeyboardActions(onSend = { submitPrompt() }),
                             readOnly = dictationActive,
                             decorationBox = { inner ->
-                                Column {
-                                replyTo?.let { quoted ->
-                                    ReplyQuoteBar(
-                                        message = quoted,
-                                        sunlight = sunlightMode,
-                                        onCancel = { replyTo = null },
-                                        modifier = Modifier.padding(start = 6.dp, top = 6.dp, end = 6.dp),
-                                    )
-                                }
-                                Row(
-                                    Modifier.heightIn(min = ReaderControlSize).padding(start = 16.dp, end = 8.dp),
-                                    verticalAlignment = if (composerGrown) Alignment.Bottom else Alignment.CenterVertically,
-                                ) {
-                                    Box(Modifier.weight(1f).padding(vertical = 10.dp).skillPills(skillSpans, laidOut)) {
+                                Column(Modifier.padding(horizontal = Kit.InnerInset)) {
+                                    replyTo?.let { quoted ->
+                                        ReplyQuoteBar(
+                                            message = quoted,
+                                            sunlight = sunlightMode,
+                                            onCancel = { replyTo = null },
+                                            modifier = Modifier.padding(top = Kit.InnerInset),
+                                        )
+                                    }
+                                    Box(Modifier.fillMaxWidth().heightIn(min = Kit.ControlInnerSize).padding(vertical = Kit.ControlTextInset).skillPills(skillSpans, laidOut)) {
                                         if (prompt.isEmpty()) {
                                             Text(
                                                 "Message ${session.displayName}",
@@ -4682,53 +4679,39 @@ internal fun ReaderScreen(
                                         }
                                         inner()
                                     }
-                                    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-                                        if (dictationState.status in listOf(DictationStatus.CONNECTING, DictationStatus.FINISHING)) {
-                                            CircularProgressIndicator(Modifier.minimumInteractiveComponentSize().size(Kit.RoundButton), strokeWidth = 2.dp)
-                                        } else {
-                                            KitRoundButton(onClick = {
-                                                    if (dictationActive) dictation.stop()
-                                                    else if (dictationState.configured) startDictation()
-                                                    else apiKeyDialogVisible = true
-                                                }, enabled = !reader.sending, icon = if (dictationActive) Icons.Default.Stop else Icons.Default.Mic, description = if (dictationActive) "Stop dictation" else "Start dictation", modifier = Modifier.minimumInteractiveComponentSize())
-                                        }
-                                    }
-                                    Box(
-                                        Modifier.size(ReaderSendSize)
-                                            .clip(CircleShape)
-                                            .background(if (sunlightMode) MaterialTheme.colorScheme.surfaceContainerHigh else Color(0xFF353535))
-                                            .clickable(
-                                                enabled = stopShown || sendEnabled,
-                                                role = Role.Button,
-                                                onClick = {
-                                                    if (stopShown) {
-                                                        onSessionInteraction()
-                                                        if (!connection.interruptHost()) connection.interrupt()
-                                                    } else {
-                                                        submitPrompt()
-                                                    }
-                                                },
-                                            )
-                                            .semantics { contentDescription = if (stopShown) "Stop" else "Send prompt" },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        if (stopShown) {
-                                            Icon(Icons.Default.Stop, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurface)
-                                        } else if (reader.sending || sendAfterDictation) {
-                                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                                        } else {
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.Send,
-                                                null,
-                                                Modifier.size(18.dp),
-                                                tint = if (sendEnabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                    }
-                                }
                                 }
                             },
                         )
+                        if (dictationState.status in listOf(DictationStatus.CONNECTING, DictationStatus.FINISHING)) {
+                            CircularProgressIndicator(Modifier.size(Kit.ControlInnerSize), strokeWidth = 2.dp)
+                        } else {
+                            KitInnerButton(onClick = {
+                                    if (dictationActive) dictation.stop()
+                                    else if (dictationState.configured) startDictation()
+                                    else apiKeyDialogVisible = true
+                                }, enabled = !reader.sending, icon = if (dictationActive) Icons.Default.Stop else Icons.Default.Mic, description = if (dictationActive) "Stop dictation" else "Start dictation", fill = fills.soft, tint = fills.softInk)
+                        }
+                        KitInnerControl(
+                            modifier = Modifier.semantics { contentDescription = if (stopShown) "Stop" else "Send prompt" },
+                            fill = fills.strong,
+                            outlined = false,
+                            enabled = stopShown || sendEnabled,
+                            onClick = {
+                                if (stopShown) {
+                                    onSessionInteraction()
+                                    if (!connection.interruptHost()) connection.interrupt()
+                                } else {
+                                    submitPrompt()
+                                }
+                            },
+                        ) {
+                            if (stopShown) {
+                                Icon(Icons.Default.Stop, null, Modifier.size(Kit.ControlIconSize), tint = fills.strongInk)
+                            } else if (reader.sending || sendAfterDictation) {
+                                CircularProgressIndicator(Modifier.size(Kit.ControlIconSize), strokeWidth = 2.dp, color = fills.strongInk)
+                            } else {
+                                Icon(Icons.AutoMirrored.Filled.Send, null, Modifier.size(Kit.ControlIconSize), tint = fills.strongInk)
+                            }
                         }
                     }
                 }

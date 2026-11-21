@@ -5,15 +5,20 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -150,8 +155,57 @@ class DesignKitTest {
             assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "$tag outline")
         }
         val round = capture("round")
-        assertEquals(Kit.RoundButton.value.toInt(), round.width)
+        assertEquals(Kit.ControlHeight.value.toInt(), round.width)
+        assertEquals(Kit.ControlHeight.value.toInt(), round.height)
         assertPixel(round, 6, round.height / 2, Kit.Surface, "round fill")
+    }
+
+    @Test
+    fun roundButtonsAndPillsShareControlHeight() {
+        compose.setContent {
+            Page {
+                KitRoundButton({}, Icons.Default.MoreVert, "More", Modifier.testTag("round"))
+                KitTitlePill("Session name", Modifier.testTag("pill"))
+                KitSecondaryButton("All", {}, Modifier.testTag("split-pill"))
+                KitSearchBox("", {}, Modifier.testTag("search"))
+            }
+        }
+        val height = Kit.ControlHeight.value.toInt()
+        listOf("round", "pill", "split-pill", "search").forEach { tag ->
+            val bitmap = capture(tag)
+            assertEquals("$tag uses Kit.ControlHeight", height, bitmap.height)
+        }
+        val source = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
+        assertFalse("Kit.RoundButton must be removed", source.contains("val RoundButton"))
+    }
+
+    @Test
+    fun composerPillAndItsCirclesShareTheKitSizes() {
+        compose.setContent {
+            Page {
+                KitComposerPill(Modifier.testTag("composer-pill")) {
+                    KitInnerButton({}, Icons.Default.Add, "Attach", Modifier.testTag("attach"))
+                    Box(Modifier.weight(1f))
+                    KitInnerButton({}, Icons.Default.Mic, "Start dictation", Modifier.testTag("mic"))
+                    KitInnerControl(modifier = Modifier.testTag("send"), fill = Kit.Text, outlined = false, onClick = {}) {
+                        Icon(Icons.Default.MoreVert, null, Modifier.size(Kit.ControlIconSize), tint = Kit.Page)
+                    }
+                }
+            }
+        }
+        val outer = Kit.ControlHeight.value.toInt()
+        val inner = Kit.ControlInnerSize.value.toInt()
+        val pill = capture("composer-pill")
+        assertEquals("the message box pill uses the outer control height", outer, pill.height)
+        assertPixel(pill, 2, pill.height / 2, Kit.Surface, "composer pill fill")
+        listOf("attach", "mic", "send").forEach { tag ->
+            val circle = capture(tag)
+            assertEquals("$tag uses the shared inner button size", inner, circle.width)
+            assertEquals("$tag uses the shared inner button size", inner, circle.height)
+        }
+        assertEquals("the inner circles leave an even inset", Kit.ControlHeight - Kit.ControlInnerSize, Kit.InnerInset * 2)
+        assertPixel(capture("attach"), 3, inner / 2, Kit.SurfaceRaised, "attach soft fill")
+        assertPixel(capture("send"), 3, inner / 2, Kit.Text, "send strong fill")
     }
 
     @Test
