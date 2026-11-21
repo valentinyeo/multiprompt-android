@@ -1202,7 +1202,7 @@ test('a pull request never schedules the break-it replay', () => {
   assert.doesNotMatch(jobBlock(workflow, 'journeys'), /break_it/);
 });
 
-test('a product change is picked from the feature map when the AI picker has no credit', () => {
+test('a product change is picked from the feature map when the ladder cannot answer', () => {
   const file = 'app/src/main/assets/chat_history_reader.py';
   const diff = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+hosted_claude_transcript_sid\n`;
   const cases = [
