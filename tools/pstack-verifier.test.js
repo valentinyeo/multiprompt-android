@@ -1113,7 +1113,7 @@ test('PR392 native model and effort receipts reach the judge before diagnostic e
 
 test('journey builds reuse cached fixed-version dependencies during repository outages', () => {
   const build = stepBlocks(read('.github/workflows/verify.yml')).find(step => /id: build-apk/.test(step));
-  assert.match(build, /gradle -p "\$app_source"/);
+  assert.match(build, /tools\/ci\/gradle-retry\.sh -p "\$app_source"/);
   assert.doesNotMatch(build, /--refresh-dependencies/);
 });
 
