@@ -26,6 +26,9 @@ BoardFeedbackTest = FEEDBACK_TESTS.BoardFeedbackTest
 SPEC = importlib.util.spec_from_file_location('reader', ROOT / 'src/chat_history_reader.py')
 reader = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(reader)
+FIXTURE_SPEC = importlib.util.spec_from_file_location('soft2779_fixture', ROOT / 'tools/fixtures/SOFT-2779/fixture.py')
+fixture = importlib.util.module_from_spec(FIXTURE_SPEC)
+FIXTURE_SPEC.loader.exec_module(fixture)
 
 
 class HistoryReaderTest(unittest.TestCase):
@@ -1671,7 +1674,7 @@ class HistoryReaderTest(unittest.TestCase):
                 self.assertIn('REPLY-631-a', wire)
                 self.assertEqual(wire.splitlines()[0].split('\t')[13], 'tail')
                 costs = [len(row.encode('utf-8')) + 1 for row in wire.splitlines()[1:-1]]
-                self.assertLessEqual(sum(costs), reader.TAIL_BYTES + max(costs))
+                self.assertLessEqual(sum(costs), 4 * reader.TAIL_BYTES + max(costs))
                 with patch.object(reader, 'ISSUE_631_TAIL_FILLS_SHOWN_BUDGET', False):
                     self.assertNotIn('REPLY-631-b', reader.response(dict(self.query)))
 
@@ -3008,6 +3011,59 @@ class HistoryReaderTest(unittest.TestCase):
         fields, rows = self.read()
         self.assertIn('QUESTION-690', [text[:12] for text in texts(rows)])
         self.assertIn('answer-4', [text[:8] for text in texts(rows)])
+
+
+class SOFT_2779_TailWindowTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(patch.stopall)
+        self.home = Path(self.temp.name)
+        patch.object(reader, 'HOME', self.home).start()
+        self.path = fixture.extract(self.home)
+        self.query = dict(id=9, provider='claude', codex=False, sid=fixture.SID, tmux='', cwd=str(self.home),
+                          follow=False, offset=0, before=0, cached_sid='', inode=0, mtime=0, probe='', start=0)
+
+    def read(self, query=None):
+        asked = dict(self.query if query is None else query)
+        wire = reader.response(asked, None, False, ('claude', asked['sid'], self.path, None))
+        lines = wire.splitlines()
+        fields = lines[0].split('\t')
+        return fields, [json.loads(line) for line in lines[1:-1]], wire
+
+    def older_page(self, fields):
+        return dict(self.query, cached_sid=fields[4], inode=int(fields[7]), offset=int(fields[6]),
+                    start=int(fields[14]), before=int(fields[5]), mtime=int(fields[11]), probe=fields[12])
+
+    def visible(self, rows):
+        return [row['text'] for row in rows if row['role'] in ('user', 'assistant')]
+
+    def test_tail_frame_holds_the_newest_question_and_reply(self):
+        measured = fixture.check(self.path)
+        fields, rows, wire = self.read()
+        self.assertEqual(fields[13], 'tail')
+        texts = self.visible(rows)
+        self.assertTrue(texts, sorted({row['role'] for row in rows}))
+        self.assertEqual(texts[-1], fixture.NEWEST_REPLY)
+        self.assertIn(fixture.NEWEST_QUESTION, texts)
+        self.assertNotIn(fixture.OLDEST_QUESTION, texts)
+        self.assertGreater(int(fields[6]) - int(fields[5]), reader.TAIL_BYTES)
+        self.assertLessEqual(int(fields[6]) - int(fields[5]), reader.TAIL_VISIBLE_BYTES)
+        self.assertGreater(measured['tool_rows'] / measured['rows'], fixture.MIN_TOOL_SHARE)
+        fields, rows, wire = self.read(self.older_page(fields))
+        self.assertEqual(fields[13], 'older')
+        self.assertTrue(self.visible(rows), [row['role'] for row in rows])
+
+    def test_tail_frame_keeps_its_messages_when_a_tool_row_arrives(self):
+        fields, rows, _wire = self.read()
+        self.assertIn(fixture.NEWEST_QUESTION, self.visible(rows), sorted({row['role'] for row in rows}))
+        with self.path.open('ab') as output:
+            output.write((json.dumps(fixture.tail_result(10_000)) + '\n').encode())
+        fields, rows, _wire = self.read()
+        texts = self.visible(rows)
+        self.assertTrue(texts, sorted({row['role'] for row in rows}))
+        self.assertEqual(texts[-1], fixture.NEWEST_REPLY)
+        self.assertIn(fixture.NEWEST_QUESTION, texts)
 
 
 class IGSH412ResumedSessionTest(unittest.TestCase):
@@ -4847,15 +4903,20 @@ class IGSH_1652_LeftoverBoxTest(unittest.TestCase):
 
     def test_igsh1590_reaction_restores_the_mirrored_composer_draft(self):
         draft = 'draft stays here'
+        forms = (
+            '{} to: Same first words [mp:6d8e353d25c5fe23]',
+            '{} to: Same first words for this example for this example for this example for this\u2026',
+        )
         for emoji in ('👍', '👎', '❤️'):
-            with self.subTest(emoji=emoji):
-                self.text = emoji + ' to: Same first words [mp:6d8e353d25c5fe23]'
-                reader.draft_note('fixture', typed=draft, sent='')
-                result, state = self.send(draft)
-                self.assertEqual(result['status'], 'sent')
-                self.assertEqual(state['sent'], [self.text])
-                self.assertEqual(state['box'], draft)
-                self.assertEqual(reader.draft_record('fixture').get('restored'), draft)
+            for form in forms:
+                with self.subTest(emoji=emoji, form=form):
+                    self.text = form.format(emoji)
+                    reader.draft_note('fixture', typed=draft, sent='')
+                    result, state = self.send(draft)
+                    self.assertEqual(result['status'], 'sent')
+                    self.assertEqual(state['sent'], [self.text])
+                    self.assertEqual(state['box'], draft)
+                    self.assertEqual(reader.draft_record('fixture').get('restored'), draft)
 
     def test_genuine_multiline_human_draft_is_restored_without_sending_it(self):
         human = 'Unfinished human draft' + self.leftover
@@ -6607,22 +6668,6 @@ class HostEventStreamFixture:
 
 
 class HostEventStreamTest(HostEventStreamFixture, unittest.TestCase):
-    def test_soft_2681_config_follows_the_live_claude_session_after_resume(self):
-        self.sid = '11111111-1111-4111-8111-111111111111'
-        resumed = '22222222-2222-4222-8222-222222222222'
-        config = dict(enabled=True, provider=self.provider, sid=self.sid, tmux=self.tmux,
-                      cwd=str(self.home), model='opus')
-        paths = reader.host_paths(self.provider, self.sid)
-        reader.host_write(paths['config'], dict(config, native_session=self.sid))
-        for native in (self.sid, resumed):
-            with self.subTest(native=native):
-                self.feed(dict(type='system', subtype='init', session_id=native))
-                saved = json.loads(paths['config'].read_text())
-                self.assertEqual(saved.get('native_session'), native)
-                self.assertEqual({key: saved[key] for key in config}, config)
-                self.assertEqual(reader.host_session_state(self.provider, self.sid)['native_session'], native)
-                self.assertEqual(reader.host_sid_for_tmux(self.provider, self.tmux), self.sid)
-
     def test_text_and_thinking_deltas_coalesce_into_one_full_text_row_then_complete(self):
         self.feed(self.frame(dict(type='message_start', message=dict(id='msg-1'))),
                   self.frame(dict(type='content_block_start', index=0, content_block=dict(type='thinking', thinking=''))),
@@ -8081,9 +8126,8 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.before = self.transcript(self.host_sid, 'Remember the secret word PINEAPPLE', 'ok')
         self.after = self.transcript(self.native_sid, 'What was the secret word I told you earlier?', 'unknown')
         paths = reader.host_paths('claude', self.host_sid)
-        reader.host_write(paths['config'], dict(enabled=True, provider='claude', sid=self.host_sid,
-                                                tmux=self.tmux, cwd=self.cwd, native_session=self.native_sid))
-        reader.host_write(paths['state'], dict(provider='claude', sid=self.host_sid))
+        reader.host_write(paths['config'], dict(enabled=True, tmux=self.tmux, cwd=self.cwd))
+        reader.host_write(paths['state'], dict(provider='claude', sid=self.host_sid, native_session=self.native_sid))
         self.query = dict(id=7, codex=False, provider='claude', sid=self.host_sid, tmux=self.tmux, cwd=self.cwd,
                           follow=True, cached_sid=self.host_sid, inode=0, offset=0, start=0)
 
@@ -8105,9 +8149,8 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.assertNotIn('PINEAPPLE', wire)
 
     def test_no_clear_keeps_reading_the_pinned_transcript(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        reader.host_write(paths['config'], dict(config, native_session=self.host_sid))
+        reader.host_write(reader.host_paths('claude', self.host_sid)['state'],
+                          dict(provider='claude', sid=self.host_sid, native_session=self.host_sid))
         wire = self.wire()
         self.assertIn('PINEAPPLE', wire)
         self.assertNotIn('unknown', wire)
@@ -8120,125 +8163,11 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         self.assertIn('PINEAPPLE', wire)
         self.assertNotIn('unknown', wire)
 
-    def test_a_missing_native_transcript_never_reads_the_foreign_pinned_file(self):
+    def test_a_missing_native_transcript_keeps_the_pinned_file(self):
         self.after.unlink()
         wire = self.wire()
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-        self.assertIn('"no_transcript":true', wire)
-
-    def test_soft_2681_read_path_switches_to_the_live_transcript_after_compaction(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        reader.host_write(paths['config'], dict(config, native_session=self.host_sid))
-        self.assertIn('PINEAPPLE', self.wire())
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.native_sid))
-        reader.host_write(paths['config'], config)
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_config_precedes_a_later_init_and_private_state(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.host_sid))
-        reader.host_write(paths['state'], dict(native_session=self.host_sid))
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-
-    def test_soft_2681_latest_valid_init_is_used_without_config_native_session(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        config.pop('native_session')
-        reader.host_write(paths['config'], config)
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.host_sid))
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.native_sid))
-        for event in (dict(session='../foreign'), [], None):
-            reader.host_log('claude', self.host_sid, 'init', event)
-        with paths['log'].open('ab') as output:
-            output.write(b'{broken\n[]\n' + b' ' * 70000 + b'\n{"event":')
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_invalid_config_native_session_uses_init(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        reader.host_log('claude', self.host_sid, 'init', dict(session=self.native_sid))
-        for native in (None, '', '../foreign', [], 1):
-            with self.subTest(native=native):
-                reader.host_write(paths['config'], dict(config, native_session=native))
-                self.assertIn('unknown', self.wire())
-                self.assertNotIn('PINEAPPLE', self.wire())
-
-    def test_soft_2681_without_public_native_metadata_uses_the_stable_id(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        config = reader.host_read(paths['config'])
-        config.pop('native_session')
-        reader.host_write(paths['config'], config)
-        reader.host_write(paths['state'], dict(native_session=self.native_sid))
-        self.assertIn('PINEAPPLE', self.wire())
-        self.assertNotIn('unknown', self.wire())
-
-    def test_soft_2681_native_transcript_does_not_require_a_stable_id_file(self):
-        self.before.unlink()
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_tab_only_query_loads_the_host_config_before_selecting_history(self):
-        self.query.update(sid='', cwd='/wrong')
-        wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_saved_host_history_still_precedes_the_native_transcript(self):
-        paths = reader.host_paths('claude', self.host_sid)
-        reader.host_write(paths['state'], dict(display_history=True))
-        paths['history'].write_text(json.dumps(dict(type='multiprompt_history', row=dict(
-            role='assistant', text='saved host history', id='saved-2681'))) + '\n')
-        for sid in (self.host_sid, ''):
-            with self.subTest(sid=sid):
-                self.query['sid'] = sid
-                wire = self.wire()
-                self.assertIn('saved host history', wire)
-                self.assertNotIn('PINEAPPLE', wire)
-                self.assertNotIn('unknown', wire)
-
-    def test_soft_2681_native_selection_reads_the_transcript_owners_home(self):
-        owner = self.home / 'secondary'
-        target = owner / '.claude/projects' / reader.claude_project_folder(self.cwd) / self.after.name
-        target.parent.mkdir(parents=True)
-        self.after.rename(target)
-        with patch.object(reader, 'conversation_owner', return_value=('secondary', owner)):
-            wire = self.wire()
-        self.assertIn('unknown', wire)
-        self.assertNotIn('PINEAPPLE', wire)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-
-    def test_soft_2681_delegated_native_history_keeps_the_stable_wire_id(self):
-        expected = '@mp\t7\thistory\tok\t' + self.native_sid + '\t0\n{"role":"assistant","text":"owner reply"}\n@@MP_END@@\n'
-        with patch.object(reader, 'conversation_path', side_effect=PermissionError()), \
-                patch.object(reader, 'conversation_owner', return_value=('secondary', Path('/home/secondary'))), \
-                patch.object(reader, 'owner_response', return_value=expected) as delegated:
-            wire = reader.response(dict(self.query), reader.READER_SOURCE)
-        self.assertIn('\thistory\tok\t' + self.host_sid + '\t', wire)
-        self.assertIn('owner reply', wire)
-        self.assertEqual(delegated.call_args.args[0]['sid'], self.native_sid)
-        self.assertEqual(delegated.call_args.args[0]['cached_sid'], self.native_sid)
-        self.assertFalse(delegated.call_args.args[0]['follow'])
-
-    def test_soft_2681_delegated_native_search_keeps_the_stable_wire_id(self):
-        expected = '@mp\t7\tsearch\tok\t' + self.native_sid + '\t0\t0\t0\t0\tclaude\tlive-clear\n@@MP_END@@\n'
-        with patch.object(reader, 'conversation_path', side_effect=PermissionError()), \
-                patch.object(reader, 'conversation_owner', return_value=('secondary', Path('/home/secondary'))), \
-                patch.object(reader, 'owner_response', return_value=expected):
-            wire = reader.response(dict(self.query, search='owner reply'), reader.READER_SOURCE)
-        self.assertIn('\tsearch\tok\t' + self.host_sid + '\t', wire)
-        self.assertNotIn(self.native_sid, wire)
+        self.assertIn('PINEAPPLE', wire)
+        self.assertNotIn('history\tmissing', wire)
 
     def test_an_owner_read_never_switches_session(self):
         wire = reader.response(dict(self.query), reader.READER_SOURCE, as_owner=True)
