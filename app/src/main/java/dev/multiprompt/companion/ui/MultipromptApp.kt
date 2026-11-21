@@ -1956,6 +1956,22 @@ internal fun SessionsScreen(
         }
     }
     val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
+    val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+        val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+        tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+    }
+    val sessionListEntries = sessionGroups.sumOf { group ->
+        group.items.size + if (SessionGroups.heading(group, sessionGroups) != null) 1 else 0
+    } + (if (rooms.isNotEmpty()) 1 else 0) +
+        state.hostErrors.count { (hostId, error) -> hostId !in state.cachedHostIds && !SshProblem.isKeyRejected(error) }
+    val sessionListState = rememberLazyListState()
+    val listEnd = remember { InboxListEnd() }
+    val openSplitId = state.selectedWorkspaceId.takeIf { it == null || it in displayedWorkspaceSplitIds }
+    LaunchedEffect(sessionListState, listEnd, openSplitId, sessionListEntries) {
+        if (listEnd.revealsNewest(openSplitId, sessionListEntries, sessionListState.firstVisibleItemIndex)) {
+            sessionListState.scrollToItem(0)
+        }
+    }
     Scaffold(
         modifier = Modifier.fillMaxSize().imePadding(),
         containerColor = MaterialTheme.colorScheme.background,
@@ -2195,6 +2211,7 @@ internal fun SessionsScreen(
             Modifier
                 .fillMaxSize()
                 .horizontalSwipe(onSwitchWorkspace, PointerEventPass.Final),
+            state = sessionListState,
             contentPadding = PaddingValues(top = padding.calculateTopPadding() + 4.dp, bottom = padding.calculateBottomPadding() + 4.dp),
             reverseLayout = reversedSessions,
         ) {
@@ -2205,10 +2222,6 @@ internal fun SessionsScreen(
                 if (hostId !in state.cachedHostIds && !SshProblem.isKeyRejected(error)) {
                     item(key = "error-$hostId") { InlineError(error) }
                 }
-            }
-            val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
-                val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
-                tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
             }
             sessionGroups.forEach { group ->
                 val heading: () -> Unit = {
