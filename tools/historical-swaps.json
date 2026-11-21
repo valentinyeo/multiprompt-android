@@ -11,11 +11,6 @@
       "boundary": "app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt"
     },
     {
-      "script": ".github/workflows/verify.yml",
-      "revision": "f1e4e3ea3d25d48e4559337434a37f2f605609f7",
-      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt"
-    },
-    {
       "script": "tools/check-approved-style.sh",
       "revision": "ce2d32d",
       "boundary": "app/src/androidTest"
