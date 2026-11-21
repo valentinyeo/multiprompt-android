@@ -338,6 +338,22 @@ test('changed recipes and owned drivers are mandatory before model suggestions',
   assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/scroll.test.py' }], 1), true);
 });
 
+test('a harness change runs every journey that clicks through the shared action', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const changed = [
+    { filename: 'tools/journey-actions/action.test.py' },
+    { filename: 'tools/journey-actions/fixtures/chat-shared-verify-session-text-visible.xml' },
+    { filename: '.claude/skills/verify-multiprompt-android/scripts/journey_action.py' },
+  ];
+  assert.deepEqual(gate.changedJourneys('', changed), gate.prJourneys);
+  assert.ok(gate.changedJourneys('', changed).includes('chat-shared.md'));
+  const diff = changed.map(file => `diff --git a/${file.filename} b/${file.filename}\n+changed`).join('\n');
+  assert.deepEqual(gate.changedJourneys(diff), gate.prJourneys);
+  assert.deepEqual(verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff).features, gate.prJourneys);
+  assert.equal(verifier.noProductChange([{ filename: 'tools/journey-actions/action.test.py' }], 1), false);
+  assert.deepEqual(gate.changedJourneys('', [{ filename: '.claude/skills/verify-multiprompt-android/scripts/pins-drive.sh' }]), ['session-pins.md']);
+});
+
 test('a shared-driver change runs every journey it touches instead of deferring guards', () => {
   const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
   const files = ['.claude/skills/verify-multiprompt-android/scripts/drive.sh', `${gate.REGISTRY_PATH}/chat-shared.md`];
