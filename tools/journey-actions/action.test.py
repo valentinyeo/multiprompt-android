@@ -86,6 +86,18 @@ adb() {
         with self.assertRaisesRegex(action.Unreachable, 'overlap'):
             self.plan(covered, mode='terminal', value='')
 
+    def test_inbox_row_taps_when_session_title_is_visible_but_robot_icon_is_clipped(self):
+        xml = (Path(__file__).parent / "fixtures/chat-shared-verify-session-text-visible.xml").read_text()
+        self.assertEqual(self.plan(xml, "desc", "Robot verify-session"), "tap 540 890")
+        replay_ref = subprocess.check_output(
+            ["git", "merge-base", "HEAD", "origin/main"], cwd=ROOT, text=True
+        ).strip()
+        old = subprocess.check_output(["git", "show", f"{replay_ref}:.claude/skills/verify-multiprompt-android/scripts/journey_action.py"], cwd=ROOT, text=True)
+        namespace = {}
+        exec(compile(old, "chat-shared-reach-parent", "exec"), namespace)
+        self.assertEqual(namespace["plan"](ET.fromstring(xml), "desc", "Robot verify-session"), "swipe 540 1352 540 527")
+        print("CHAT_SHARED_REPLAY: parent reach-desc scrolls past a visible verify-session title; head taps the row")
+
     def test_release_robot_hidden_under_inbox_header_is_revealed_before_tapping(self):
         fixtures = Path(__file__).parent / 'fixtures'
         clipped = (fixtures / '3e0b2df2-release-robot-clipped.xml').read_text()
