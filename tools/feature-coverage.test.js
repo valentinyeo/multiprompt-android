@@ -542,32 +542,19 @@ test('the real judge command reports a past search change coverage gap while its
     const result = spawnSync(process.execPath, args, options);
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /pstack-verifier: PASS @/);
-    assert.match(result.stdout, /FEATURE_NOT_EXERCISED: chat-search\.open/);
+    assert.match(result.stdout, /FEATURE_NOT_EXERCISED: required journey chat-search\.md was not scheduled/);
     const recorded = JSON.parse(fs.readFileSync(report, 'utf8'));
     assert.equal(recorded.sha, fixture.headSha);
     assert.deepEqual(recorded.accepted, []);
     assert.ok(recorded.plan.outcomes.includes('chat-search.open'));
-    options.env.PR_BODY = 'No author line.';
-    const noJudge = spawnSync(process.execPath, args, options);
-    assert.equal(noJudge.status, 0, noJudge.stderr);
-    assert.match(noJudge.stdout, /pstack-verifier: PASS @/);
-    assert.match(noJudge.stdout, /No independent judge ran: AUTHOR_MODEL_MISSING/);
-    const failing = path.join(directory, 'model-failing.cjs');
-    fs.writeFileSync(failing, "global.fetch = async () => { throw new Error('DeepSeek answered 503'); };");
-    options.env.PR_BODY = 'Author model: openai/gpt-6.1-sol';
-    options.env.NODE_OPTIONS = `--require=${failing}`;
-    const down = spawnSync(process.execPath, args, options);
-    assert.equal(down.status, 0, down.stderr);
-    assert.match(down.stdout, /pstack-verifier: PASS @/);
-    assert.match(down.stdout, /Judge unavailable: /);
-    assert.match(down.stdout, /Only the journey results were checked\./);
+    assert.match(result.stdout, /Head journey results decide this check/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('pick and judge exchange required IDs and retain the outcome coverage', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
-  assert.match(workflow, /changed_outcomes: \$\{\{ steps.pick.outputs.changed_outcomes \}\}/);
-  assert.match(workflow, /CHANGED_OUTCOMES: \$\{\{ needs.pick.outputs.changed_outcomes \}\}/);
+  assert.match(workflow, /changed_outcomes: \$\{\{ steps\.pick-retry\.outputs\.changed_outcomes \|\| steps\.pick\.outputs\.changed_outcomes \|\| steps\.pick-request\.outputs\.changed_outcomes \}\}/);
+  assert.match(workflow, /CHANGED_OUTCOMES: \$\{\{ needs\.pick\.outputs\.changed_outcomes \}\}/);
   assert.match(workflow, /name: verifier-feature-coverage/);
 });
 

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const verifier = require('./verifier.cjs');
+const judgeEval = require('./judge-eval.cjs');
 const coverage = require('./coverage.cjs');
 
 const CASES = path.join(__dirname, 'cases');
@@ -23,7 +24,7 @@ function prepare(sample, directory) {
     conclusions[feature] = 'success';
   }
   const plan = coverage.planChange(sample.diff, sample.changedOutcomes);
-  const user = verifier.judgeContext({
+  const user = judgeEval.judgeContext({
     pr: sample.pr, diff: sample.diff, plan, features: sample.features,
     conclusions, directories,
   });
@@ -34,10 +35,10 @@ async function runCase(sample, { ask, output }) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'multiprompt-'));
   try {
     const prepared = prepare(sample, directory);
-    fs.writeFileSync(`${output}.request.json`, JSON.stringify({ system: verifier.JUDGE_INSTRUCTIONS, user: prepared.user }, null, 2));
-    const raw = await ask({ system: verifier.JUDGE_INSTRUCTIONS, user: prepared.user, cwd: directory });
+    fs.writeFileSync(`${output}.request.json`, JSON.stringify({ system: judgeEval.JUDGE_INSTRUCTIONS, user: prepared.user }, null, 2));
+    const raw = await ask({ system: judgeEval.JUDGE_INSTRUCTIONS, user: prepared.user, cwd: directory });
     fs.writeFileSync(`${output}.response.txt`, raw);
-    const model = verifier.parseVerdict(raw);
+    const model = judgeEval.parseVerdict(raw);
     const plan = coverage.planChange(sample.diff, [...prepared.plan.outcomes, ...model.changedOutcomes]);
     const featureProof = coverage.featureErrors({ plan, coverage: model.coverage, directories: prepared.directories, conclusions: prepared.conclusions, sha: sample.pr.head.sha });
     const ruled = verifier.applyRules({ features: sample.features, conclusions: prepared.conclusions, featureProof });
@@ -58,13 +59,13 @@ function grade(results, expected) {
   }));
 }
 
-const claude = verifier.callClaude;
+const claude = judgeEval.callClaude;
 
 async function main(env = process.env) {
   const family = process.argv[2];
   if (!FAMILIES.includes(family)) throw new Error('Choose deepseek or claude');
   const ask = family === 'deepseek'
-    ? request => verifier.callDeepSeek({ key: verifier.requireKey(env), system: request.system, user: request.user })
+    ? request => judgeEval.callDeepSeek({ key: judgeEval.requireKey(env), system: request.system, user: request.user })
     : request => claude(request, env);
   const output = path.resolve(env.REPORT_DIR || 'build/pstack-verifier');
   fs.mkdirSync(output, { recursive: true });

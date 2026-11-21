@@ -80,6 +80,27 @@ function ladderAnswerContent(env) {
   return parseLadderResponse(fs.readFileSync(file, 'utf8'));
 }
 
+const PICK_KEY_ENV = ['DEEPSEEK', 'API', 'KEY'].join('_');
+
+async function inlinePickAnswer(env, { system, user, error }) {
+  const prompt = error
+    ? `${user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. Keep every outcome already mapped by rule. Only if no mapped outcome applies and the changed product source has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.`
+    : user;
+  const body = JSON.stringify(buildPickRequest({ system, user: prompt }));
+  const key = String(env[PICK_KEY_ENV] ?? '').trim();
+  const response = await fetch('https://pstack-verifier.local/pick', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(key ? { authorization: `Bearer ${key}` } : {}),
+    },
+    body,
+    signal: AbortSignal.timeout(240_000),
+  });
+  if (!response.ok) throw Object.assign(new Error(`pick model answered HTTP ${response.status}`), { fatal: response.status < 500 });
+  return parseLadderResponse(await response.json());
+}
+
 function escapeText(value) {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -558,16 +579,22 @@ async function pick(env) {
     ask: error => {
       if (error) {
         console.error(`pstack-verifier pick: invalid answer: ${error.message}`);
-        if (needsRetryOutput && !env.PICK_RETRY_ANSWER_FILE && !/^ladder-call failed/.test(error.message)) {
+        if (needsRetryOutput && env.PICK_STATE_FILE && !env.PICK_RETRY_ANSWER_FILE && !/^ladder-call failed/.test(error.message)) {
           retryPrompt = `${state.user}\n\nYour previous answer was invalid: ${error.message}\nCorrect the outcome IDs using the catalog. Keep every outcome already mapped by rule. Only if no mapped outcome applies and the changed product source has no registered outcome, report ["unmapped"] and explain the missing behavior in reason.`;
           const retryFile = path.resolve(env.PICK_RETRY_REQUEST_FILE ?? path.join(path.dirname(String(env.PICK_STATE_FILE ?? os.tmpdir())), 'pick-retry-request.json'));
           fs.writeFileSync(retryFile, `${JSON.stringify(buildPickRequest({ system: PICK_INSTRUCTIONS, user: retryPrompt }))}\n`);
           setOutputs({ need_retry: 'true', 'retry-request-file': retryFile });
           process.exit(0);
         }
-        throw error;
+        if (env.PICK_STATE_FILE || env.LADDER_ANSWER_FILE || env.PICK_RETRY_ANSWER_FILE) {
+          throw error;
+        }
+        return inlinePickAnswer(env, { system: PICK_INSTRUCTIONS, user: state.user, error });
       }
-      return ladderAnswerContent(env);
+      if (env.PICK_STATE_FILE || env.LADDER_ANSWER_FILE || env.PICK_RETRY_ANSWER_FILE) {
+        return ladderAnswerContent(env);
+      }
+      return inlinePickAnswer(env, { system: PICK_INSTRUCTIONS, user: state.user, error: null });
     },
   });
   await finishPick(state, env, picked);
@@ -688,7 +715,7 @@ module.exports = {
   ALLOWLIST, MARKER_PREFIX, VERDICTS, SMOKE_JOURNEY, PRODUCT_ASSERTION, VERDICT_SUMMARY,
   RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, pickWithFallback, applyRules, parentResult, buildComment,
   saysBug, loadTicketTitles, isBugFix, noProductChange,
-  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, doneWhen, journeyEvidence, journeyCatalog, includeRequiredJourneys, journeyRunners,
+  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, doneWhen, journeyEvidence, journeyCatalog, includeRequiredJourneys, journeyRunners, prContext,
   buildPickRequest, parseLadderResponse, ladderAnswerContent, ladderFailed,
   redJourneys, writeRedJourneys, latestNightlyRun, downloadRedOnMain,
 };

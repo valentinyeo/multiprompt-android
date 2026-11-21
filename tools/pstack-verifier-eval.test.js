@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const verifier = require('../.github/scripts/pstack-verifier/verifier.cjs');
+const judgeEval = require('../.github/scripts/pstack-verifier/judge-eval.cjs');
 const reliability = require('../.github/scripts/pstack-verifier/eval.cjs');
 const expected = require('../.github/scripts/pstack-verifier/expected.json');
 const cases = path.join(__dirname, '../.github/scripts/pstack-verifier/cases');
@@ -43,7 +44,7 @@ test('every case uses the production prompt with no answer or label in its conte
     await reliability.runCase(sample, {
       output: path.join(directory, label),
       ask: async request => {
-        assert.equal(request.system, verifier.JUDGE_INSTRUCTIONS);
+        assert.equal(request.system, judgeEval.JUDGE_INSTRUCTIONS);
         assert.doesNotMatch(JSON.stringify(sample), /\b(?:eval|experiment|benchmark|candidate|arena|expected verdict|planted)\b/i);
         for (const name of Object.keys(expected)) assert.ok(!request.user.includes(name));
         assert.match(request.user, /HEAD \(app after the change/);
@@ -54,7 +55,7 @@ test('every case uses the production prompt with no answer or label in its conte
       },
     });
     const request = JSON.parse(fs.readFileSync(path.join(directory, `${label}.request.json`), 'utf8'));
-    assert.equal(request.system, verifier.JUDGE_INSTRUCTIONS);
+    assert.equal(request.system, judgeEval.JUDGE_INSTRUCTIONS);
   }
 });
 
@@ -109,7 +110,7 @@ test('Claude sees only stdin evidence, the same system prompt and no tools or un
     observed = { command, args, options };
     return answer('FAIL');
   });
-  assert.equal(verifier.parseVerdict(response).verdict, 'FAIL');
+  assert.equal(judgeEval.parseVerdict(response).verdict, 'FAIL');
   assert.equal(observed.command, 'claude');
   assert.equal(observed.args[observed.args.indexOf('--model') + 1], 'haiku');
   assert.equal(observed.args[observed.args.indexOf('--system-prompt') + 1], 'system');
