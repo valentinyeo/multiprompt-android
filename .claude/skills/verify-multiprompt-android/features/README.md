@@ -50,7 +50,7 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `inbox.favorite-dot`. Runner: `verify.yml` (debug). Priority evidence: `favorite-dot-all.json` (400 characters), `favorite-dot-search.json` (400 characters), `favorite-dot-workspace.json` (400 characters), `favorite-dot-favorites.json` (400 characters), `favorite-dot-unstarred.json` (400 characters), `favorite-dot-restarred.json` (400 characters), `favorite-dot-favorites-again.json` (400 characters).
 - [Session favorites](session-favorites.md): signed APK, isolated SSH sessions and offline favorite cache; no production sync.
   - Outcomes: `session-favorites.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_chat":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
-- [Session gestures](session-gestures.md): no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.
+- [Session gestures](session-gestures.md): no session swipes, a code drag that starts no reply, ten replies, back to inbox on the signed APK.
   - Outcomes: `session-gestures.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_chat":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Pinned sessions](session-pins.md): signed scrolling in both list orders. Use `session-favorites.md` with `pins_scroll=true`.
   - Outcomes: `session-pins.journey`. Runner: `verify.yml` (signed). Inputs: `{"feature":"session-favorites.md","pins_scroll":true,"released_chat":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.

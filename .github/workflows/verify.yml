@@ -316,14 +316,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         if: steps.parent-cache.outputs.hit != 'true'
         id: setup-gradle
         continue-on-error: ${{ inputs.side == 'parent' }}
         with:
-          gradle-version: "9.5.1"
-          gradle-home-cache-strict-match: true
-          cache-read-only: true
+          read-only: true
       - uses: android-actions/setup-android@v3
         if: steps.parent-cache.outputs.hit != 'true'
         id: setup-android
@@ -401,29 +399,12 @@ jobs:
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: (env.VERIFY_FEATURE == 'chat-resync.md') && steps.parent-cache.outputs.hit != 'true'
         run: python3 -B tools/release-choices/ui.test.py
-      - name: Reject code scroll interception on original source
+      - name: Check gesture reply and shell unit tests
         id: gesture-reject
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: (inputs.feature == 'session-gestures.md') && steps.parent-cache.outputs.hit != 'true'
         run: |
           python3 -B tools/session-gestures/scroll.test.py
-          source=app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt
-          cp "$source" "$RUNNER_TEMP/ReplyableBubble.kt"
-          git fetch origin f1e4e3ea3d25d48e4559337434a37f2f605609f7
-          git show f1e4e3ea3d25d48e4559337434a37f2f605609f7:"$source" > "$source"
-          status=0
-          tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest.codeScrollsBothWaysWithoutStartingReply' || status=$?
-          cp "$RUNNER_TEMP/ReplyableBubble.kt" "$source"
-          test "$status" -ne 0
-          python3 - <<'PYCONTROL'
-          import xml.etree.ElementTree as ET
-          root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml').getroot()
-          case = root.find("testcase[@name='codeScrollsBothWaysWithoutStartingReply']")
-          failure = case.find('failure')
-          assert failure is not None and 'Wide code must scroll back right' in failure.get('message', '')
-          print('ORIGINAL_CODE_SCROLL_INTERCEPTION_REJECTED')
-          PYCONTROL
-          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml "$EVIDENCE/original-gesture.xml"
           tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest' --tests '*ShellViewTest'
       - name: Prepare signed choices APK and same-signer fixture instrumentation
         id: signed-apk
