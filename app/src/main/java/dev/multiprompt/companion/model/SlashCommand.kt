@@ -9,7 +9,7 @@ object SlashCommand {
         "add-dir", "artifact-capabilities", "artifact-diagramming", "artifacts", "autofix-pr",
         "background", "branch", "btw", "bug", "cd", "chrome", "copy", "design-login", "diff",
         "exit", "export", "feedback", "fork", "help", "hooks", "ide", "install-github-app",
-        "install-slack-app", "keybindings", "login", "logout", "memory", "mobile", "passes",
+        "install-slack-app", "keybindings", "logout", "memory", "mobile", "passes",
         "plugin", "powerup", "privacy-settings", "radio", "release-notes", "remote-control",
         "remote-env", "resume", "rewind", "sandbox", "scroll-speed", "skills", "slides", "status",
         "statusline", "stickers", "subtask", "tasks", "teleport", "terminal-setup", "theme", "tui",

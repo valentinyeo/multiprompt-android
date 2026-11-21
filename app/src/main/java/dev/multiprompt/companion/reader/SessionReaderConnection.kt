@@ -282,6 +282,9 @@ class SessionReaderConnection(
     suspend fun changePiModel(model: PiModel): MessageActionResult =
         historyConnection?.changePiModel(model) ?: MessageActionResult.Rejected("Chat is not ready")
 
+    suspend fun piLogin(providerId: String?): MessageActionResult =
+        historyConnection?.piLogin(providerId) ?: MessageActionResult.Rejected("Chat is not ready")
+
     suspend fun sendPrompt(text: String): PromptAdmission {
         if (sharedMessages) {
             val history = historyConnection ?: return PromptAdmission.Rejected("Chat is not ready")
