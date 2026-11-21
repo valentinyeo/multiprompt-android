@@ -554,8 +554,10 @@ class ChatHistoryConnection(
                                     }
                                 }
                                 if (!published) { replica = null; continue@poll }
-                                _state.value.replica?.messages?.values.orEmpty()
-                                    .filter { it.id !in recovering && SendRecovery.due(it, recovered[it.id] ?: 0, _state.value.connected) }
+                                val shown = _state.value
+                                shown.replica?.messages?.values.orEmpty()
+                                    .filter { it.id !in recovering && !shown.history.clearedMessage(it) &&
+                                        SendRecovery.due(it, recovered[it.id] ?: 0, shown.connected) }
                                     .forEach { row ->
                                         recovering.add(row.id)
                                         recovered.merge(row.id, 1, Int::plus)
