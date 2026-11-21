@@ -256,8 +256,11 @@ class ComposerLongDraftTest {
             "the draft grew the field instead of the row: field=$fieldBounds",
             fieldBounds.height > (ReaderControlSize * 2).value,
         )
-        val draftTexts = descendants(bar).flatMap { texts(it) }
-        assertEquals("the composer row shows only the draft, no hint", listOf(longDraft), draftTexts)
+        val barTexts = descendants(bar).flatMap { texts(it) }
+        val editable = descendants(bar).mapNotNull { it.config.getOrNull(SemanticsProperties.EditableText)?.text }
+        println("COMPOSER_TEXTS bar=$barTexts editable=$editable")
+        assertTrue("the composer row shows no hint beside the draft: $barTexts", barTexts.isEmpty())
+        assertTrue("the composer field holds the whole draft: $editable", editable.any { it == longDraft })
     }
 
     @Test fun aDraftThatFitsStillDrawsTheSkillPill() {
