@@ -32,6 +32,7 @@ finish() {
             code=1
         fi
     else
+        recorder_reap || code=1
         code=1
     fi
     if [[ -f "$FIXTURE/offline-proxy.pid" ]]; then kill "$(cat "$FIXTURE/offline-proxy.pid")" || code=1; fi

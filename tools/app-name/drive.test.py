@@ -1,6 +1,10 @@
 import importlib.util
+import os
+import signal
+import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -42,6 +46,67 @@ class FrozenPackagesTest(unittest.TestCase):
         ):
             with self.subTest(output=output), self.assertRaises(RuntimeError):
                 drive.frozen_packages(output)
+
+
+WEDGED_ADB = '''#!/usr/bin/env bash
+case "$*" in
+  *screenrecord*) trap '' INT TERM HUP; while :; do sleep 1; done ;;
+esac
+exit 0
+'''
+
+
+class RecorderExitTest(unittest.TestCase):
+    def survivors(self, binary):
+        result = subprocess.run(['pgrep', '-af', str(binary)], capture_output=True, text=True)
+        return [line for line in result.stdout.splitlines() if str(binary) in line]
+
+    def stop_group(self, process, binary):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        for line in self.survivors(binary):
+            try:
+                os.kill(int(line.split(None, 1)[0]), signal.SIGKILL)
+            except (ProcessLookupError, ValueError):
+                pass
+        process.wait()
+
+    def test_stop_recording_kills_the_wedged_client_and_device_recorder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            binary = home / 'bin' / 'adb'
+            binary.parent.mkdir()
+            binary.write_text(WEDGED_ADB)
+            binary.chmod(0o755)
+            proof = object.__new__(drive.Proof)
+            proof.evidence = home
+            proof.device_pid = '4321'
+            proof.recorder_log = (home / 'screenrecord.log').open('wb')
+            proof.recorder = subprocess.Popen(
+                ['adb', 'shell', 'screenrecord --time-limit 0 /data/local/tmp/app-name-update.mp4 & wait'],
+                stdout=proof.recorder_log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                env=dict(os.environ, PATH=f'{binary.parent}{os.pathsep}{os.environ["PATH"]}'),
+            )
+            self.addCleanup(self.stop_group, proof.recorder, binary)
+            calls = []
+
+            def fake_adb(*args, **kwargs):
+                calls.append(args)
+                return SimpleNamespace(returncode=0, stdout=b'')
+
+            with patch.object(drive, 'adb', side_effect=fake_adb), patch.object(drive, 'RECORDER_STOP_SECONDS', 1, create=True):
+                with self.assertRaises(RuntimeError):
+                    proof.stop_recording()
+            self.assertIn(('shell', 'kill', '-9', '4321'), calls)
+            for attempt in range(20):
+                if not self.survivors(binary):
+                    break
+                time.sleep(0.1)
+            self.assertEqual(self.survivors(binary), [], 'a wedged adb client outlived stop_recording')
 
 
 def update_page(button_enabled):
