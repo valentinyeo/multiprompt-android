@@ -14,14 +14,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 
-internal val TopFadeTail = 24.dp
-
 @Composable
 internal fun TopFade(content: @Composable ColumnScope.() -> Unit) {
     val background = MaterialTheme.colorScheme.background
     Column(
         Modifier.fillMaxWidth().testTag("top-fade").drawBehind {
-            val height = size.height + TopFadeTail.toPx()
+            val height = size.height + 24.dp.toPx()
             val solid = (size.height / height).coerceIn(0.01f, 0.99f)
             val fade = 1f - solid
             drawRect(
