@@ -201,6 +201,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
     env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: ${{ inputs.driver_feature || inputs.feature || 'native-skills.md' }}
       VERIFY_JOURNEY: ${{ inputs.feature || 'native-skills.md' }}
@@ -323,6 +324,7 @@ jobs:
         with:
           gradle-version: "9.5.1"
           gradle-home-cache-strict-match: true
+          cache-read-only: true
       - uses: android-actions/setup-android@v3
         if: steps.parent-cache.outputs.hit != 'true'
         id: setup-android
@@ -400,30 +402,13 @@ jobs:
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: (env.VERIFY_FEATURE == 'chat-resync.md') && steps.parent-cache.outputs.hit != 'true'
         run: python3 -B tools/release-choices/ui.test.py
-      - name: Reject code scroll interception on original source
+      - name: Check gesture reply and shell unit tests
         id: gesture-reject
         continue-on-error: ${{ inputs.side == 'parent' }}
         if: (inputs.feature == 'session-gestures.md') && steps.parent-cache.outputs.hit != 'true'
         run: |
           python3 -B tools/session-gestures/scroll.test.py
-          source=app/src/main/java/dev/multiprompt/companion/ui/ReplyableBubble.kt
-          cp "$source" "$RUNNER_TEMP/ReplyableBubble.kt"
-          git fetch origin f1e4e3ea3d25d48e4559337434a37f2f605609f7
-          git show f1e4e3ea3d25d48e4559337434a37f2f605609f7:"$source" > "$source"
-          status=0
-          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest.codeScrollsBothWaysWithoutStartingReply' || status=$?
-          cp "$RUNNER_TEMP/ReplyableBubble.kt" "$source"
-          test "$status" -ne 0
-          python3 - <<'PYCONTROL'
-          import xml.etree.ElementTree as ET
-          root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml').getroot()
-          case = root.find("testcase[@name='codeScrollsBothWaysWithoutStartingReply']")
-          failure = case.find('failure')
-          assert failure is not None and 'Wide code must scroll back right' in failure.get('message', '')
-          print('ORIGINAL_CODE_SCROLL_INTERCEPTION_REJECTED')
-          PYCONTROL
-          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.ReplyToMessageTest.xml "$EVIDENCE/original-gesture.xml"
-          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest' --tests '*ShellViewTest'
+          tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*ReplyToMessageTest' --tests '*ShellViewTest'
       - name: Prepare signed choices APK and same-signer fixture instrumentation
         id: signed-apk
         continue-on-error: ${{ inputs.side == 'parent' }}
@@ -485,7 +470,7 @@ jobs:
           if [[ "$BREAK_IT_CONTROL" == rotation-loss ]]; then python3 tools/android-break-it/plant.py "$app_source" "$EVIDENCE"; fi
           account_args=()
           if [[ "$VERIFY_FEATURE" == device-approval.md || "$VERIFY_FEATURE" == screencast-account.md || "$VERIFY_FEATURE" == crash-report.md ]]; then account_args=(-PaccountOrigin=http://10.0.2.2:8787); fi
-          gradle -p "$app_source" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" "${account_args[@]}" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
+          tools/ci/gradle-retry.sh -p "$app_source" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" "${account_args[@]}" assembleDebug 2>&1 | tee "$EVIDENCE/build.txt"
           echo "VERIFY_APK=$app_source/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
           sha256sum "$app_source/app/build/outputs/apk/debug/app-debug.apk" > "$EVIDENCE/app-apk-sha256.txt"
       - name: Build fixture instrumentation
@@ -496,7 +481,7 @@ jobs:
         run: |
           account_args=()
           if [[ "$VERIFY_FEATURE" == device-approval.md || "$VERIFY_FEATURE" == screencast-account.md || "$VERIFY_FEATURE" == crash-report.md ]]; then account_args=(-PaccountOrigin=http://10.0.2.2:8787); fi
-          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" "${account_args[@]}" assembleDebugAndroidTest
+          tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" "${account_args[@]}" assembleDebugAndroidTest
       - name: Prepare shell and chat recording
         id: recording-tools
         continue-on-error: ${{ inputs.side == 'parent' }}

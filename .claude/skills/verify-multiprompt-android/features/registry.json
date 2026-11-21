@@ -393,7 +393,7 @@
     },
     "session-gestures.md": {
       "name": "Session gestures",
-      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "description": "no session swipes, a code drag that starts no reply, ten replies, back to inbox on the signed APK.",
       "runner": {
         "kind": "signed",
         "workflow": "verify.yml",
@@ -1270,7 +1270,7 @@
       "match": []
     },
     "session-gestures.journey": {
-      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "description": "no session swipes, a code drag that starts no reply, ten replies, back to inbox on the signed APK.",
       "journey": "session-gestures.md",
       "sideEffect": false,
       "match": []

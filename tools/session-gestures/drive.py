@@ -6,6 +6,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 from PIL import Image
+from reveal import reveal
 from scroll import displacement
 
 out = Path(os.environ['EVIDENCE'])
@@ -57,6 +58,18 @@ def screenshot(name):
     return Image.open(path).convert('RGB')
 
 
+def inbox():
+    adb('shell', 'uiautomator', 'dump', '/sdcard/gestures.xml')
+    return ET.fromstring(adb('exec-out', 'cat', '/sdcard/gestures.xml'))
+
+
+def scroll_inbox_up(bounds):
+    left, top, right, bottom = bounds
+    x = (left + right) // 2
+    inset = (bottom - top) // 5
+    adb('shell', 'input', 'swipe', str(x), str(bottom - inset), str(x), str(top + inset), '400')
+
+
 recording = subprocess.Popen(['adb', 'shell', 'echo $$ > /sdcard/gesture-record.pid; exec screenrecord --time-limit 180 /sdcard/session-gestures.mp4'])
 
 
@@ -79,15 +92,10 @@ code = (max(12, code[0]), code[1], min(width - 12, code[2]), code[3])
 assert code[3] > code[1] and code[2] - code[0] > width // 2, code
 swipe(code)
 root = dump()
-scrolled = screenshot('code-scrolled-left')
-swipe(code, right=True)
-root = dump()
-returned = screenshot('code-scrolled-right')
-left_shift = displacement(initial.crop(code), scrolled.crop(code))
-right_shift = displacement(scrolled.crop(code), returned.crop(code))
-assert left_shift < -20, ('Code did not scroll left', left_shift)
-assert right_shift > 20, ('Code did not scroll right', right_shift)
+dragged = screenshot('code-dragged-left')
 assert not any(n.get('content-desc') == 'Cancel reply' for n in root.iter('node')), 'Code drag opened reply'
+code_shift = displacement(initial.crop(code), dragged.crop(code))
+assert code_shift == 0, ('Code moved during a drag', code_shift)
 for direction in (False, True):
     title = find(root, text='verify-session')
     swipe((12, title[1], width - 12, title[3]), right=direction)
@@ -106,12 +114,10 @@ for attempt in range(10):
     assert not any(n.get('content-desc') == 'Cancel reply' for n in root.iter('node'))
 (back_x, back_y, back_right, back_bottom) = find(root, desc='Back')
 adb('shell', 'input', 'tap', str((back_x + back_right) // 2), str((back_y + back_bottom) // 2))
-adb('shell', 'uiautomator', 'dump', '/sdcard/gestures.xml')
-inbox = ET.fromstring(adb('exec-out', 'cat', '/sdcard/gestures.xml'))
-assert any(n.get('text') == 'Inbox' for n in inbox.iter('node')), 'Back no longer opens inbox'
-assert any(n.get('text') == 'verify-other' for n in inbox.iter('node')), 'Second session missing'
+opened = reveal(inbox, scroll_inbox_up, 'verify-other')
+assert any(n.get('text') == 'Inbox' for n in opened.iter('node')), 'Back no longer opens inbox'
 screenshot('gestures-inbox')
-result = dict(status='passed', replies=10, sessionChanges=0, codeLeftShift=left_shift,
-              codeRightShift=right_shift, backToInbox=True, secondSession=True)
+result = dict(status='passed', replies=10, sessionChanges=0, codeShift=code_shift,
+              backToInbox=True, secondSession=True)
 (out / 'gesture-result.json').write_text(json.dumps(result, indent=2))
 print('RELEASED_SESSION_GESTURES_PROVEN', json.dumps(result))

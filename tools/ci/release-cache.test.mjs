@@ -83,5 +83,15 @@ test('verify journeys avoid stale dependency metadata from older Gradle home cac
   const steps = blocks(read('verify.yml'));
   assert.equal(steps.length, 1, 'verify.yml setup-gradle step count changed, recheck the cache rule');
   assert.match(steps[0], /^\s+gradle-home-cache-strict-match:\s*true\s*$/m);
+  assert.match(steps[0], /^\s+cache-read-only:\s*true\s*$/m);
   assert.doesNotMatch(steps[0], /gradle-home-cache-excludes:\s*\n\s*caches\/modules-2/);
+});
+
+test('verify journey jobs restore the Android tests build cache and retry Gradle downloads', () => {
+  const verify = read('verify.yml');
+  const buildJob = jobBody(read('test.yml'), 'build');
+  assert.doesNotMatch(buildJob, /cache-read-only:\s*true/, 'build must keep writing the cache phone journeys restore');
+  assert.match(verify, /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_JOB:\s*build\s*$/m);
+  assert.match(verify, /tools\/ci\/gradle-retry\.sh -p "\$app_source"[^\n]*assembleDebug/);
+  assert.match(verify, /tools\/ci\/gradle-retry\.sh[^\n]*assembleDebugAndroidTest/);
 });
