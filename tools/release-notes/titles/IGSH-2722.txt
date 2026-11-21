@@ -1,0 +1,1 @@
+PR checker blocks shared chat reader changes: 46 journeys over cap

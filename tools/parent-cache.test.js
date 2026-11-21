@@ -29,7 +29,7 @@ test('cache keys bind the base SHA, journey and complete driver inputs, not tick
   const git = (...args) => execFileSync('git', args, { cwd: root, stdio: 'pipe' });
   git('init');
   file('tools/runtime.sh', 'first');
-  file('tools/release-notes/ticket-titles.json', '{}');
+  file('tools/release-notes/titles/IGSH-1684.txt', 'title\n');
   file('.claude/skills/verify-multiprompt-android/scripts/drive.sh', 'driver');
   git('add', '.');
   const first = cacheKey(sha, 'hosts.md', root);
@@ -37,7 +37,7 @@ test('cache keys bind the base SHA, journey and complete driver inputs, not tick
   assert.notEqual(first, cacheKey('b'.repeat(40), 'hosts.md', root));
   assert.notEqual(first, cacheKey(sha, 'terminal.md', root));
   assert.notEqual(cacheKey(sha, 'session-pins.md', root), cacheKey(sha, 'session-favorites.md', root));
-  file('tools/release-notes/ticket-titles.json', '{"IGSH-2687":"title"}');
+  file('tools/release-notes/titles/IGSH-2687.txt', 'title\n');
   assert.equal(first, cacheKey(sha, 'hosts.md', root));
   file('tools/runtime.sh', 'changed');
   assert.notEqual(first, cacheKey(sha, 'hosts.md', root));

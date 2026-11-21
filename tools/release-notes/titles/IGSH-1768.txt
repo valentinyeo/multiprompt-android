@@ -1,0 +1,1 @@
+Android chats keep working without hidden terminals

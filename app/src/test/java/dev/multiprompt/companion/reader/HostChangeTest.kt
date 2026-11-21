@@ -39,7 +39,8 @@ class HostChangeTest {
         assertEquals(listOf(HostChange.FABLE), HostChange.entries.filter { it.active(HostSettings("fable", "", "", true), null, null) })
         assertTrue(HostChange.FABLE.active(null, "Fable 5.1", null))
         assertTrue(HostChange.FABLE.active(null, "claude-fable-5-1", null))
-        assertFalse(HostChange.OPUS.active(HostSettings("fable", "", "", true), "Opus 4.1", null))
+        assertTrue(HostChange.OPUS.active(HostSettings("fable", "", "", true), "Opus 4.1", null))
+        assertFalse(HostChange.FABLE.active(HostSettings("fable", "", "", true), "Opus 4.1", null))
     }
 
     @Test fun noticesMatchTheDesktop() {
@@ -49,9 +50,9 @@ class HostChangeTest {
         assertEquals("Could not change permission mode; try again", HostChange.BYPASS.failure)
     }
 
-    @Test fun theActiveChoiceFollowsTheHostSettings() {
+    @Test fun theActiveModelFollowsTheLiveChatNotTheSavedPick() {
         val settings = HostSettings("opus", "high", "acceptEdits", true)
-        assertEquals(listOf(HostChange.OPUS, HostChange.HIGH, HostChange.EDITS),
+        assertEquals(listOf(HostChange.SONNET, HostChange.LOW, HostChange.EDITS),
             HostChange.entries.filter { it.active(settings, "Sonnet 4.5", "low") })
     }
 

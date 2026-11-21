@@ -1,0 +1,1 @@
+Android: Claude commands like /clear in the slash menu

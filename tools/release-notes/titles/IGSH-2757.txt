@@ -1,0 +1,1 @@
+PR checker judges a change with the same AI that wrote it

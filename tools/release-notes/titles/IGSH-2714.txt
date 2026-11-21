@@ -1,0 +1,1 @@
+PR checks give a verdict in about 20 minutes

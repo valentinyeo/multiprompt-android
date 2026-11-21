@@ -1,0 +1,1 @@
+Android: yellow dot on starred chats in every list

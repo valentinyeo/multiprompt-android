@@ -1,0 +1,1 @@
+Inbox folder bar: selected folder hidden and pills cut off
