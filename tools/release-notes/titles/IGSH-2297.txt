@@ -1,0 +1,1 @@
+Android: load rooms only when the rooms screen is open

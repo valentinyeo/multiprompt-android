@@ -1,0 +1,1 @@
+Android: check for a new version when the app opens

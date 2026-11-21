@@ -1,0 +1,1 @@
+Android: chat updates stay fast after slash commands

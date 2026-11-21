@@ -1,0 +1,1 @@
+Android: add a chat to a group and remove it

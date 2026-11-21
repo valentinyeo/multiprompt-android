@@ -1,0 +1,1 @@
+PR checker uses Token Ladder and drops the text judge
