@@ -1671,6 +1671,38 @@ def pin_hosted_claude(q, agent, as_owner=False):
     return q
 
 
+def hosted_claude_transcript_sid(sid, config):
+    native = config.get("native_session") if isinstance(config, dict) else None
+    if isinstance(native, str) and SESSION_ID.fullmatch(native):
+        return native
+    try:
+        with host_paths("claude", sid)["log"].open("rb") as source:
+            end = source.seek(0, os.SEEK_END)
+            pending = b""
+            while end:
+                count = min(end, 65536)
+                end -= count
+                source.seek(end)
+                lines = (source.read(count) + pending).split(b"\n")
+                pending = lines.pop(0) if end else b""
+                for raw in reversed(lines):
+                    event = load_line(raw)
+                    detail = event.get("detail") if isinstance(event, dict) and event.get("event") == "init" else None
+                    native = detail.get("session") if isinstance(detail, dict) else None
+                    if isinstance(native, str) and SESSION_ID.fullmatch(native):
+                        return native
+    except OSError:
+        pass
+    return sid
+
+
+def hosted_claude_live_native(agent, sid, hosted):
+    state_native = host_session_state(agent, sid).get("native_session")
+    if isinstance(state_native, str) and SESSION_ID.fullmatch(state_native) and state_native != sid:
+        return state_native
+    return hosted_claude_transcript_sid(sid, hosted) if hosted else sid
+
+
 def resolve_response_path(q, source=None, as_owner=False):
     rid = q["id"]
     agent = q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q["codex"] else "claude"
@@ -1714,7 +1746,7 @@ def resolve_response_path(q, source=None, as_owner=False):
             hosted = None
         return (agent, sid, hosted, None) if hosted is not None else (agent, sid, None, empty_history_response(q, sid, tmux, agent))
     if agent == "claude" and path is not None and sid and not as_owner and host_dispatch_switch(agent, sid):
-        native = host_session_state(agent, sid).get("native_session")
+        native = hosted_claude_live_native(agent, sid, hosted)
         if isinstance(native, str) and SESSION_ID.fullmatch(native) and native != sid:
             try:
                 cleared = conversation_path(agent, native, cwd)
@@ -1736,6 +1768,14 @@ def resolve_response_path(q, source=None, as_owner=False):
                 delegated = owner_response(q, owner, source)
                 if delegated != missing_response(q, "session transcript not found"):
                     return agent, sid, None, delegated
+
+    if path is None and not denied and agent == "claude" and sid and not as_owner and host_dispatch_switch(agent, sid):
+        native = hosted_claude_live_native(agent, sid, hosted)
+        if isinstance(native, str) and SESSION_ID.fullmatch(native) and native != sid:
+            try:
+                path = conversation_path(agent, native, cwd)
+            except PermissionError:
+                path = None
 
     if path is None and not denied and agent == "claude" and sid and host_dispatch_switch(agent, sid):
         try:

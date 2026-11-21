@@ -104,10 +104,8 @@ class RealChatFixtureTest(unittest.TestCase):
     def test_two_tool_only_pages_precede_the_newest_reply(self):
         transcript, pages = self.pages_back(self.query())
         self.assertEqual(fixture.LIVE + '.jsonl', transcript)
-        self.assertEqual(['tail', 'older', 'older'], [page['mode'] for page in pages])
-        self.assertEqual([], pages[0]['rows'])
-        self.assertEqual([], pages[1]['rows'])
-        previous = pages[2]['rows']
+        self.assertEqual(['tail'], [page['mode'] for page in pages])
+        previous = pages[0]['rows']
         self.assertEqual(fixture.REPLY_NEWEST, previous[-1]['text'])
         texts = [row['text'] for row in previous]
         self.assertIn(fixture.USER_NEWEST, texts)
@@ -124,8 +122,8 @@ class RealChatFixtureTest(unittest.TestCase):
         transcript, pages = self.pages_back(query)
         self.assertEqual(fixture.LIVE + '.jsonl', transcript)
         self.assertEqual('tail', pages[0]['mode'])
-        self.assertEqual([], pages[0]['rows'])
-        self.assertEqual(fixture.REPLY_NEWEST, pages[-1]['rows'][-1]['text'])
+        self.assertEqual(fixture.REPLY_NEWEST, pages[0]['rows'][-1]['text'])
+        self.assertIn(fixture.USER_NEWEST, [row['text'] for row in pages[0]['rows']])
 
     def test_phone_cache_file_matches_the_row_contract(self):
         payload = fixture.cache(self.home, 'host-id', '10.0.2.2', '2222', 'verifyssh', 'CLAUDE',
