@@ -94,11 +94,15 @@ object TmuxParser {
                 hostSessionId = hostSessionId,
             )
         }
-        val replies = parseLiveReplies(output)
-        val providers = parseHostProviders(output)
+        val etaPayload = etaPayload(output).orEmpty()
+        val replies = TmuxText.parseLiveReplies(etaPayload)
+        val providers = TmuxText.parseHostProviders(etaPayload)
+        val hostSessionIds = TmuxText.parseHostSessionIds(etaPayload)
         return sessions.map { session ->
-            val hosted = providers[session.name]?.takeIf { session.liveChat }
-                ?.let { session.copy(hostProvider = it) } ?: session
+            val sid = session.hostSessionId.ifBlank { hostSessionIds[session.name].orEmpty() }
+            val withSid = if (sid != session.hostSessionId) session.copy(hostSessionId = sid) else session
+            val hosted = providers[withSid.name]?.takeIf { withSid.liveChat }
+                ?.let { withSid.copy(hostProvider = it) } ?: withSid
             replies[hosted.name]?.takeIf { hosted.liveChat }?.let {
                 hosted.copy(replyAtEpochSeconds = it.atEpochSeconds, replyWaiting = it.waiting)
             } ?: hosted
@@ -108,15 +112,18 @@ object TmuxParser {
     }
 
     fun parseLiveReplies(output: String): Map<String, TmuxText.LiveReply> =
-        etaPayload(output)?.let(TmuxText::parseLiveReplies).orEmpty()
+        TmuxText.parseLiveReplies(etaPayload(output).orEmpty())
+
+    fun parseHostSessionIds(output: String): Map<String, String> =
+        TmuxText.parseHostSessionIds(etaPayload(output).orEmpty())
 
     fun shellQuote(value: String): String = "'" + value.replace("'", "'\"'\"'") + "'"
 
     fun parseHostProviders(output: String): Map<String, String> =
-        etaPayload(output)?.let(TmuxText::parseHostProviders).orEmpty()
+        TmuxText.parseHostProviders(etaPayload(output).orEmpty())
 
     fun parseEtaStates(output: String): Map<String, TmuxText.SessionEtaState> =
-        etaPayload(output)?.let(TmuxText::parseSessionEtaStates).orEmpty()
+        TmuxText.parseSessionEtaStates(etaPayload(output).orEmpty())
 
     private fun etaPayload(output: String): String? = output.lineSequence()
         .firstOrNull { it.startsWith(TmuxCommands.ETA_PREFIX) }
