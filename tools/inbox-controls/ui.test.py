@@ -165,7 +165,7 @@ tap_text() { [[ "$screen" == Settings ]]; }
         self.assertFalse(any(n.get('text') == 'verify-session' for n in nodes))
         source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
         helpers = '\n'.join(name + '() {' + source.split(name + '() {', 1)[1].split('\n}', 1)[0] + '\n}'
-                            for name in ['hold_inbox_session', 'find_inbox_session', 'open_inbox_reminder'])
+                            for name in ['hold_inbox_session', 'find_inbox_session', 'open_inbox_reminder', 'focus_inbox_search'])
         shell = '''search_open=false
 searched=false
 cleared=false
@@ -220,6 +220,25 @@ inbox_control_state() { [[ "$searched" == true && "$1" == inbox-refreshed ]]; }
             root.write(self.xml)
             result = subprocess.run([sys.executable, str(tool), str(self.xml), 'field-value', '', 'verify-session'], capture_output=True, text=True)
             self.assertEqual(result.returncode == 0, value == 'verify-session')
+
+    def test_short_viewport_search_waits_for_the_editor_to_take_focus(self):
+        import subprocess
+        source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
+        body = source.split('focus_inbox_search() {', 1)[1].split('\n}', 1)[0]
+        shell = '''attempts=0
+select_node() {
+    [[ "$1" == focused-field && "$2" == '' ]] || return 1
+    attempts=$((attempts + 1))
+    (( attempts >= 3 ))
+}
+tap_node() { [[ "$1" == field && "$2" == 'Search all sessions' ]]; }
+sleep() { :; }
+''' + 'focus_inbox_search() {' + body + '\n}' + '''
+focus_inbox_search
+(( attempts == 3 ))
+'''
+        result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_refresh_receipts_contain_only_new_host_commands(self):
         import re

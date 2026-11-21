@@ -135,9 +135,20 @@ hold_inbox_session() {
     read -r x y <<< "$point"
     adb shell input swipe "$x" "$y" "$x" "$y" 800
 }
+focus_inbox_search() {
+    local attempt
+    for attempt in {1..10}; do
+        if select_node focused-field '' >/dev/null 2>&1; then return 0; fi
+        tap_node field 'Search all sessions' >/dev/null 2>&1 || true
+        sleep 1
+    done
+    printf 'INBOX_SEARCH_NOT_FOCUSED: the session search field never took focus\n' >&2
+    return 1
+}
 find_inbox_session() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
+        focus_inbox_search
         select_node focused-field '' >/dev/null
         clear_field ''
         adb shell input text verify-session
