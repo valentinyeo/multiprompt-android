@@ -3544,8 +3544,7 @@ internal fun ReaderScreen(
                     recordingPrompt = false
                 }
             }
-            return@sendDraft
-        }
+        } else {
         val composedPrompt = PromptComposer.composeMessage(ChatMention.annotate(draftText, mentionPicks, mentionChats), imageAttachments, replyTo, reader.nativeSkills)
         if (composedPrompt.isNotBlank() &&
             !reader.sending &&
