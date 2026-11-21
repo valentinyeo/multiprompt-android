@@ -53,7 +53,12 @@ assert_chat open
 "$mpa" key back
 "$mpa" read --wait-text Inbox
 assert_one_inbox_row inbox-after-open
-"$mpa" launch --force-stop --wait-text Inbox
+"$mpa" launch --force-stop
+if "$mpa" read --select text --value 'Use without account (debug)' --timeout 15 > /dev/null 2>&1; then
+  printf 'FRESH_START_RELAUNCH_REENTERED_DEBUG_ACCOUNT\n' | tee "$EVIDENCE/fresh-start-relaunch.txt"
+  "$mpa" tap text 'Use without account (debug)'
+fi
+"$mpa" read --select desc --value "Robot $fixture_session" --timeout 60
 "$mpa" tap text All
 "$mpa" read --select desc --value "Robot $fixture_session" --timeout 30
 assert_one_inbox_row inbox-after-relaunch
