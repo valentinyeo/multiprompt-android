@@ -653,10 +653,10 @@ internal fun KitNameField(
     keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) {
     val colors = kit()
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, style = Kit.Hint, color = if (error != null) colors.danger else colors.textMuted)
         Column(
-            Modifier.fillMaxWidth().kitSurface(ControlShape, colors.surface).padding(horizontal = 14.dp, vertical = 12.dp),
+            modifier.fillMaxWidth().kitSurface(ControlShape, colors.surface).padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             BasicTextField(

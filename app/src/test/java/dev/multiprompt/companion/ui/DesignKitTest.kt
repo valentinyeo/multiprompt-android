@@ -460,7 +460,7 @@ class DesignKitTest {
         listOf(false to "rename-night", true to "rename-day").forEach { (sunlight, tag) ->
             val palette = kitPalette(sunlight)
             compose.setContent {
-                MultipromptTheme(sunlight = sunlight) {
+                MultipromptTheme(sunlight = sunlight, material3 = false) {
                     KitSheetSurface(Modifier.testTag("rename-session-sheet")) {
                         RenameSessionSheetBody(
                             draft = "Runner",
@@ -474,12 +474,14 @@ class DesignKitTest {
             }
             compose.onNodeWithText("Rename session").assertIsDisplayed()
             val sheet = capture("$tag-sheet", compose.onNodeWithTag("rename-session-sheet"))
-            assertPixel(sheet, 20, sheet.height - 8, palette.sheet, "$tag sheet fill")
+            assertPixel(sheet, 4, sheet.height - 4, palette.sheet, "$tag sheet fill")
             val field = capture("$tag-field", compose.onNodeWithTag("rename-name-field"))
             assertPixel(field, field.width / 2, field.height - 8, palette.surface, "$tag field fill")
+            assertPixel(field, 4, 4, palette.outline, "$tag field outline")
             val heading = capture("$tag-heading", compose.onNodeWithText("Rename session"))
-            assertPixel(heading, 2, heading.height / 2, palette.text, "$tag heading text")
+            assertPixel(heading, 4, heading.height / 2, palette.text, "$tag heading text")
             val cancel = capture("$tag-cancel", compose.onNodeWithText("Cancel"))
+            assertPixel(cancel, 4, 0, palette.outline, "$tag cancel outline")
             assertPixel(cancel, cancel.width / 2, cancel.height / 2, palette.text, "$tag cancel label")
         }
     }
