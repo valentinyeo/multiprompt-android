@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import dev.multiprompt.companion.data.BotLook
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -35,6 +36,13 @@ internal data class BotAppearance(val face: Int, val color: Int) {
         }
     }
 }
+
+internal data class BotAvatarSource(val name: String, val workspaceColor: Int, val look: BotLook?) {
+    val appearance: BotAppearance get() = BotAppearance.forSession(name, workspaceColor, look?.face, look?.color)
+}
+
+internal fun botAvatarSource(name: String, workspaceColor: Int, look: BotLook?): BotAvatarSource =
+    BotAvatarSource(name, workspaceColor, look)
 
 internal const val BOT_FACES = 20
 internal const val BOT_COLORS = 8
@@ -217,9 +225,19 @@ internal fun BotAvatar(
     color: Int? = null,
     picture: String? = null,
 ) {
-    val appearance = remember(sessionName, workspaceColor, face, color) { BotAppearance.forSession(sessionName, workspaceColor, face, color) }
+    BotAvatar(botAvatarSource(sessionName, workspaceColor, BotLook(picture, face, color)), diameter, modifier)
+}
+
+@Composable
+internal fun BotAvatar(
+    source: BotAvatarSource,
+    diameter: Dp = 48.dp,
+    modifier: Modifier = Modifier,
+) {
+    val appearance = remember(source) { source.appearance }
+    val picture = source.look?.picture
     if (picture != null) {
-        Box(modifier.size(diameter).clip(BotTileShape).semantics { contentDescription = "Robot $sessionName" }) {
+        Box(modifier.size(diameter).clip(BotTileShape).semantics { contentDescription = "Robot ${source.name}" }) {
             AsyncImage(
                 model = picture,
                 contentDescription = null,
@@ -232,7 +250,7 @@ internal fun BotAvatar(
     val marks = remember(appearance) { botMarks(appearance.face, appearance.color) }
     val start = remember(appearance) { BotPainter(appearance.face).point(0f, 0f) }
     val end = remember(appearance) { BotPainter(appearance.face).point(256f, 256f) }
-    Canvas(modifier.size(diameter).clip(BotTileShape).semantics { contentDescription = "Robot $sessionName" }) {
+    Canvas(modifier.size(diameter).clip(BotTileShape).semantics { contentDescription = "Robot ${source.name}" }) {
         drawRect(Color(TILE))
         val scale = minOf(size.width, size.height) / 256f
         marks.forEach { mark ->
