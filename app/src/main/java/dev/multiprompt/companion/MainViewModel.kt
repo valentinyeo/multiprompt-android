@@ -1170,7 +1170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val key = SessionReadStore.key(session.hostId, session.name)
         ReplyNotifier.cancel(app, key)
         _state.value.terminal?.close()
-        warmReaders[key]?.takeUnless { it.matches(host, session.agent) }?.let {
+        warmReaders[key]?.takeUnless { it.matches(host, session.agent, session.hostSessionId) }?.let {
             warmReaders.remove(key)
             warmReaderTouchedAt.remove(key)
             it.close()
