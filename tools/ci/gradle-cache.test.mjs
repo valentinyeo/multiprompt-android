@@ -30,6 +30,11 @@ test('a read only phone test job restores the newest cache so the Compose plugin
     'read only jobs must allow the cache prefix fallback that the strict match blocks'
   );
   assert.match(action, /^\s+cache-read-only: \$\{\{ inputs\.read-only == 'true' \}\}$/m);
+  assert.match(
+    action,
+    /Restore legacy Gradle cache without the warmed prefix[\s\S]*GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: ''[\s\S]*cache-overwrite-existing: true/,
+    'read only jobs must restore main build cache entries when the warmed prefix is still cold'
+  );
 });
 
 test('every read only Gradle job names the job whose cache it restores', () => {
@@ -43,6 +48,31 @@ test('every read only Gradle job names the job whose cache it restores', () => {
       `${file} restores a read only cache without naming the job that saves it`
     );
   }
+});
+
+test('Android tests names a shared Gradle cache prefix so pull requests restore main Robolectric jars', () => {
+  const workflow = read('test.yml');
+  assert.match(
+    workflow,
+    /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m
+  );
+  assert.match(
+    read('release.yml'),
+    /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m
+  );
+  assert.match(
+    read('verify.yml'),
+    /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m
+  );
+});
+
+test('pull request build jobs restore the warmed cache instead of writing a fresh one without Robolectric jars', () => {
+  const build = jobBody(read('test.yml'), 'build');
+  assert.match(
+    build,
+    /read-only:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*\}\}/,
+    'build must stay read only on pull requests so parallel checker jobs restore main Robolectric jars'
+  );
 });
 
 test('the job that writes the cache warms the Robolectric jars the read only jobs restore', () => {

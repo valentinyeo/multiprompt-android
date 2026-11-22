@@ -14,6 +14,7 @@ runs:
         gradle-home-cache-strict-match: ${{ inputs.read-only != 'true' }}
         cache-read-only: ${{ inputs.read-only == 'true' }}
     - name: Robolectric test jars on disk
+      id: robolectric_jars
       shell: bash
       run: |
         cache="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/org.robolectric"
@@ -21,7 +22,32 @@ runs:
         native_runtime=$({ find "$cache" -name 'nativeruntime-dist-compat-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
         echo "robolectric cache: android-all-instrumented=$android_all nativeruntime-dist-compat=$native_runtime"
         if [ "$android_all" -gt 0 ] && [ "$native_runtime" -gt 0 ]; then
+          echo "miss=false" >> "$GITHUB_OUTPUT"
           echo "robolectric cache hit: this job resolves the Robolectric jars from the restored Gradle cache"
         else
+          echo "miss=true" >> "$GITHUB_OUTPUT"
           echo "robolectric cache miss: this job downloads the Robolectric jars from Maven Central"
+        fi
+    - name: Restore legacy Gradle cache without the warmed prefix
+      if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
+      uses: gradle/actions/setup-gradle@v4
+      env:
+        GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: ''
+      with:
+        gradle-version: "9.5.1"
+        gradle-home-cache-strict-match: false
+        cache-read-only: true
+        cache-overwrite-existing: true
+    - name: Robolectric test jars after legacy cache fallback
+      if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
+      shell: bash
+      run: |
+        cache="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/org.robolectric"
+        android_all=$({ find "$cache" -name 'android-all-instrumented-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
+        native_runtime=$({ find "$cache" -name 'nativeruntime-dist-compat-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
+        echo "robolectric cache after legacy fallback: android-all-instrumented=$android_all nativeruntime-dist-compat=$native_runtime"
+        if [ "$android_all" -gt 0 ] && [ "$native_runtime" -gt 0 ]; then
+          echo "robolectric legacy cache hit: this job resolves the Robolectric jars from main's build cache"
+        else
+          echo "robolectric legacy cache miss: this job still downloads the Robolectric jars from Maven Central"
         fi
