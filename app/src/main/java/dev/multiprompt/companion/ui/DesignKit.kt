@@ -49,11 +49,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -102,8 +105,15 @@ internal object Kit {
     val Label = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 12.sp, lineHeight = 16.sp, letterSpacing = 1.sp)
 }
 
-internal fun Modifier.kitSurface(shape: androidx.compose.ui.graphics.Shape = Kit.PillShape, fill: Color = Kit.Surface): Modifier =
-    background(fill, shape).border(Kit.OutlineWidth, Kit.Outline, shape).clip(shape)
+@Composable
+internal fun Modifier.kitSurface(
+    shape: androidx.compose.ui.graphics.Shape = Kit.PillShape,
+    fill: Color? = null,
+): Modifier {
+    val colors = kit()
+    val paint = fill ?: colors.surface
+    return background(paint, shape).border(Kit.OutlineWidth, colors.outline, shape).clip(shape)
+}
 
 @Composable
 internal fun KitRoundButton(
@@ -232,7 +242,8 @@ internal fun KitPrimaryButton(
     enabled: Boolean = true,
     destructive: Boolean = false,
 ) {
-    val fill = if (destructive) Kit.Danger else Kit.Text
+    val colors = kit()
+    val fill = if (destructive) colors.danger else colors.text
     Box(
         modifier.heightIn(min = Kit.ControlHeight).alpha(if (enabled) 1f else 0.45f)
             .clip(Kit.PillShape).background(fill, Kit.PillShape)
@@ -240,7 +251,7 @@ internal fun KitPrimaryButton(
             .padding(horizontal = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = Kit.BodyStrong, color = Kit.Page, maxLines = 1)
+        Text(text, style = Kit.BodyStrong, color = colors.page, maxLines = 1)
     }
 }
 
@@ -252,6 +263,7 @@ internal fun KitSecondaryButton(
     enabled: Boolean = true,
     destructive: Boolean = false,
 ) {
+    val colors = kit()
     Box(
         modifier.heightIn(min = Kit.ControlHeight).alpha(if (enabled) 1f else 0.45f)
             .kitSurface()
@@ -259,7 +271,7 @@ internal fun KitSecondaryButton(
             .padding(horizontal = 24.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = Kit.BodyStrong, color = if (destructive) Kit.Danger else Kit.Text, maxLines = 1)
+        Text(text, style = Kit.BodyStrong, color = if (destructive) colors.danger else colors.text, maxLines = 1)
     }
 }
 
@@ -395,16 +407,17 @@ internal fun KitSheetSurface(
     maxContentHeight: Dp = Dp.Unspecified,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val colors = kit()
     Column(
         modifier
             .fillMaxWidth()
             .navigationBarsPadding()
             .then(if (maxContentHeight != Dp.Unspecified) Modifier.heightIn(max = maxContentHeight) else Modifier)
-            .background(Kit.Sheet, Kit.SheetShape)
+            .background(colors.sheet, Kit.SheetShape)
             .padding(horizontal = Kit.SideChange, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Box(Modifier.align(Alignment.CenterHorizontally).width(32.dp).height(4.dp).background(Kit.TextMuted, CircleShape))
+        Box(Modifier.align(Alignment.CenterHorizontally).width(32.dp).height(4.dp).background(colors.textMuted, CircleShape))
         content()
     }
 }
@@ -426,11 +439,12 @@ internal fun ColumnScope.KitSheetScrollColumn(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun KitSheet(onDismiss: () -> Unit, dismissible: Boolean = true, content: @Composable ColumnScope.() -> Unit) {
+    val colors = kit()
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { dismissible || it != SheetValue.Hidden }),
         properties = ModalBottomSheetProperties(shouldDismissOnBackPress = dismissible, shouldDismissOnClickOutside = dismissible),
-        containerColor = Kit.Sheet,
+        containerColor = colors.sheet,
         dragHandle = null,
         shape = Kit.SheetShape,
     ) {
@@ -625,5 +639,77 @@ internal fun KitMatchMarker(text: String, current: Boolean, modifier: Modifier =
     val color = if (current) Kit.Page else Kit.Text
     Box(modifier.background(fill, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 2.dp)) {
         Text(text, style = Kit.Body, color = color, maxLines = 1)
+    }
+}
+
+@Composable
+internal fun KitNameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    error: String? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+) {
+    val colors = kit()
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = Kit.Hint, color = if (error != null) colors.danger else colors.textMuted)
+        Column(
+            modifier.fillMaxWidth().kitSurface(ControlShape, colors.surface).padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                singleLine = true,
+                textStyle = Kit.Body.copy(color = colors.text),
+                cursorBrush = SolidColor(colors.text),
+                keyboardOptions = keyboardOptions,
+                keyboardActions = keyboardActions,
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = label },
+            )
+            error?.let { message ->
+                Text(message, style = Kit.Hint, color = colors.danger)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun RenameSessionSheetBody(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    error: String?,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = kit()
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Rename session", style = Kit.Heading, color = colors.text)
+        KitNameField(
+            value = draft,
+            onValueChange = onDraftChange,
+            label = "Name",
+            error = error,
+            modifier = Modifier.testTag("rename-name-field"),
+            keyboardActions = KeyboardActions(onDone = { onRename() }),
+        )
+        KitSecondaryButton("Cancel", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+        KitPrimaryButton("Rename", onClick = onRename, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+internal fun RenameSessionSheet(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    error: String?,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+) {
+    KitSheet(onDismiss = onDismiss) {
+        RenameSessionSheetBody(draft, onDraftChange, error, onDismiss, onRename)
     }
 }
