@@ -29,7 +29,7 @@ class MentionNamesTest {
 
     @Test fun aLiveChatIsMentionedByTheNameTheChatListShows() {
         assertEquals(
-            listOf(MentionChat("SF Design Lead", "live-design-5511")),
+            listOf(MentionChat("SF Design Lead", "live-design-5511", host.id)),
             state.mentionChats(current),
         )
     }
