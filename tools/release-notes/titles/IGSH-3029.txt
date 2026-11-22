@@ -1,0 +1,1 @@
+Launcher, hosts and reader tests match the current app
