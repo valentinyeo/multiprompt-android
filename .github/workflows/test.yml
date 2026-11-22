@@ -26,6 +26,8 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: ./.github/actions/gradle-ci
+      - name: Warm the Robolectric test jars for the read only jobs
+        run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:syncRobolectricAndroidAll :app:generateDebugUnitTestLintModel
       - name: Build the app
         run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug
 
