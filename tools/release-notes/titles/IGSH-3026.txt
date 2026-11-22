@@ -1,0 +1,1 @@
+Merge checker wait mode works on this server

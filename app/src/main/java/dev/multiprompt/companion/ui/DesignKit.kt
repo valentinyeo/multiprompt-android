@@ -8,11 +8,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
@@ -87,8 +89,11 @@ internal object Kit {
     val BubbleGap = 6.dp
     val SideChange = 16.dp
     val RowHeight = 52.dp
-    val RoundButton = 40.dp
     val ControlHeight = 48.dp
+    val ControlInnerSize = 36.dp
+    val ControlIconSize = 20.dp
+    val InnerInset = (ControlHeight - ControlInnerSize) / 2
+    val ControlTextInset = 5.dp
 
     val Heading = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 20.sp, lineHeight = 30.sp)
     val Body = TextStyle(fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 26.sp)
@@ -110,11 +115,65 @@ internal fun KitRoundButton(
     enabled: Boolean = true,
 ) {
     Box(
-        modifier.size(Kit.RoundButton).alpha(if (enabled) 1f else 0.45f).kitSurface(CircleShape).clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        modifier
+            .size(Kit.ControlHeight)
+            .alpha(if (enabled) 1f else 0.45f)
+            .kitSurface(CircleShape)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, description, Modifier.size(20.dp), tint = tint)
+        Icon(icon, description, Modifier.size(Kit.ControlIconSize), tint = tint)
     }
+}
+
+@Composable
+internal fun KitInnerControl(
+    modifier: Modifier = Modifier,
+    fill: Color = Kit.SurfaceRaised,
+    outlined: Boolean = true,
+    enabled: Boolean = true,
+    onClick: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
+) {
+    Box(
+        modifier
+            .size(Kit.ControlInnerSize)
+            .alpha(if (enabled) 1f else 0.45f)
+            .then(if (outlined) Modifier.kitSurface(CircleShape, fill) else Modifier.clip(CircleShape).background(fill, CircleShape))
+            .let { if (onClick != null) it.clickable(enabled = enabled, role = Role.Button, onClick = onClick) else it },
+        contentAlignment = Alignment.Center,
+        content = content,
+    )
+}
+
+@Composable
+internal fun KitInnerButton(
+    onClick: () -> Unit,
+    icon: ImageVector,
+    description: String,
+    modifier: Modifier = Modifier,
+    fill: Color = Kit.SurfaceRaised,
+    tint: Color = Kit.Text,
+    outlined: Boolean = true,
+    enabled: Boolean = true,
+) {
+    KitInnerControl(modifier = modifier, fill = fill, outlined = outlined, enabled = enabled, onClick = onClick) {
+        Icon(icon, description, Modifier.size(Kit.ControlIconSize), tint = tint)
+    }
+}
+
+@Composable
+internal fun KitComposerPill(
+    modifier: Modifier = Modifier,
+    fill: Color = Kit.Surface,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier.fillMaxWidth().heightIn(min = Kit.ControlHeight).kitSurface(fill = fill).padding(Kit.InnerInset),
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(Kit.InnerInset),
+        content = content,
+    )
 }
 
 @Composable
@@ -134,7 +193,7 @@ internal fun KitExpandButton(
 @Composable
 internal fun KitTitlePill(text: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     Box(
-        modifier.heightIn(min = Kit.RoundButton).kitSurface().let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it }
+        modifier.heightIn(min = Kit.ControlHeight).kitSurface().let { if (onClick != null) it.clickable(role = Role.Button, onClick = onClick) else it }
             .padding(horizontal = 20.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -229,7 +288,7 @@ internal fun <T> KitSegmented(
         options.forEach { (value, label) ->
             val isSelected = value == selected
             Box(
-                Modifier.weight(1f).height(40.dp).clip(Kit.PillShape)
+                Modifier.weight(1f).fillMaxHeight().clip(Kit.PillShape)
                     .background(if (isSelected) Kit.SurfaceRaised else Color.Transparent, Kit.PillShape)
                     .selectable(isSelected, role = Role.RadioButton) { onSelect(value) },
                 contentAlignment = Alignment.Center,
@@ -533,7 +592,7 @@ internal fun KitSearchBox(
     focusRequester: FocusRequester? = null,
 ) {
     Row(
-        modifier.height(Kit.RoundButton).kitSurface().padding(horizontal = 16.dp),
+        modifier.height(Kit.ControlHeight).kitSurface().padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         BasicTextField(

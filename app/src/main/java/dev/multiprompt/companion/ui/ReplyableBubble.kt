@@ -304,6 +304,11 @@ internal fun ReplyReference(
     modifier: Modifier = Modifier,
     onJump: () -> Unit,
 ) {
+    val hint = chatHintColor(sunlight)
+    val reference = remember(reply.quoted) { reply.reference }
+    val quoted = remember(reference, hint) {
+        markdownAnnotated(reference.runs, hint, hint.copy(alpha = 0.10f))
+    }
     BoxWithConstraints(modifier.fillMaxWidth()) {
         Row(
             Modifier.align(Alignment.CenterEnd).widthIn(max = maxWidth * ChatUserMaxWidthFraction)
@@ -312,11 +317,11 @@ internal fun ReplyReference(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Icon(Icons.Default.Reply, contentDescription = null, tint = chatHintColor(sunlight), modifier = Modifier.size(14.dp))
+            Icon(Icons.Default.Reply, contentDescription = null, tint = hint, modifier = Modifier.size(14.dp))
             Text(
-                reply.preview,
+                quoted,
                 modifier = Modifier.weight(1f, fill = false).testTag("reply-reference-text"),
-                color = chatHintColor(sunlight),
+                color = hint,
                 fontSize = (12f * fontScale).sp,
                 maxLines = 1,
                 softWrap = false,
