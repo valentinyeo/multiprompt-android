@@ -239,6 +239,7 @@ select_node() {
 }
 tap_desc() { :; }
 tap_node() { :; }
+adb() { :; }
 sleep() { :; }
 ''' + 'focus_inbox_search() {' + body + '\n}' + '''
 focus_inbox_search

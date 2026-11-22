@@ -135,12 +135,28 @@ hold_inbox_session() {
     read -r x y <<< "$point"
     adb shell input swipe "$x" "$y" "$x" "$y" 800
 }
+reset_inbox_search() {
+    local attempt
+    for attempt in {1..5}; do
+        select_node desc 'Close session search' >/dev/null 2>&1 || return 0
+        tap_desc 'Close session search'
+        sleep 1
+    done
+    return 1
+}
 focus_inbox_search() {
     local attempt
     for attempt in {1..15}; do
         if select_node focused-field '' >/dev/null 2>&1; then return 0; fi
         if select_node desc 'Close session search' >/dev/null 2>&1; then
-            tap_node editor '' >/dev/null 2>&1 || true
+            if (( attempt % 3 == 1 )); then
+                tap_desc 'Close session search'
+                sleep 1
+                tap_desc 'Search sessions'
+                sleep 1
+            else
+                tap_node editor '' >/dev/null 2>&1 || adb shell input tap 540 316
+            fi
         else
             tap_desc 'Search sessions' >/dev/null 2>&1 || true
         fi
@@ -234,6 +250,7 @@ inbox_control_state reminder-dismissed '{"text":["Inbox"],"desc":["Robot verify-
 adb shell wm size 1080x1280
 wait_for_text Inbox
 sleep 2
+reset_inbox_search
 open_inbox_reminder
 inbox_control_state reminder-scroll-top '{"text":["In 30 minutes"],"absent":["Custom time"]}'
 tap_node field 'Custom time' reveal
