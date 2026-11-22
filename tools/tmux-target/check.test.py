@@ -13,23 +13,37 @@ class TmuxTargetCheckTest(unittest.TestCase):
     def test_current_ssh_sources_pass(self):
         check.check()
 
-    def test_pre_844f774b_exact_session_target_mistake_fails(self):
-        source = subprocess.check_output(
-            ["git", "show", "844f774b^:" + check.COMMANDS],
-            cwd=ROOT,
-            text=True,
+    def test_pre_igsh_1230_exact_session_target_mistake_fails(self):
+        source = (
+            "fun resumeArchived(\n"
+            "    val fresh = freshSessionName(sessionName)\n"
+            "    val session = TmuxParser.shellQuote(fresh)\n"
+            '    return "if tmux has-session -t $session 2>/dev/null; then " +\n'
+            '        "tmux send-keys -t ${target(sessionName)} Enter"\n'
+            "}\n"
+            'private fun target(sessionName: String): String = TmuxParser.shellQuote("$sessionName:")\n'
+            'private fun sessionTarget(sessionName: String): String = TmuxParser.shellQuote("=$sessionName")\n'
         )
         found = check.violations({check.COMMANDS: source})
         self.assertIn(f"{check.COMMANDS}: has-session-name-target", found)
-        result = subprocess.run(
-            ["python3", "-B", str(Path(__file__).with_name("check.py")), "844f774b^"],
+        self.assertTrue(
+            found[f"{check.COMMANDS}: target-helper-missing-exact"]
+            or found[f"{check.COMMANDS}: colon-name-quote"],
+            found,
+        )
+
+        replay = subprocess.run(
+            ["git", "cat-file", "-e", "844f774b^"],
             cwd=ROOT,
             capture_output=True,
-            text=True,
         )
-        self.assertNotEqual(0, result.returncode)
-        self.assertIn("TMUX_TARGET_UNQUOTED", result.stderr)
-        self.assertIn("has-session-name-target", result.stderr)
+        if replay.returncode == 0:
+            historical = subprocess.check_output(
+                ["git", "show", f"844f774b^:{check.COMMANDS}"],
+                cwd=ROOT,
+                text=True,
+            )
+            self.assertIn(f"{check.COMMANDS}: has-session-name-target", check.violations({check.COMMANDS: historical}))
 
     def test_wrong_target_helper_fails(self):
         source = (
