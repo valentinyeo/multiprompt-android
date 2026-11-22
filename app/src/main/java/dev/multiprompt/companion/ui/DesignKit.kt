@@ -684,7 +684,7 @@ internal fun RenameSessionSheet(
 ) {
     val colors = kit()
     KitSheet(onDismiss = onDismiss) {
-        Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Rename session", style = Kit.Heading, color = colors.text)
             KitNameField(
                 value = draft,
@@ -692,7 +692,7 @@ internal fun RenameSessionSheet(
                 label = "Name",
                 error = error,
                 modifier = Modifier.testTag("rename-name-field"),
-                keyboardActions = KeyboardActions(onDone = onRename),
+                keyboardActions = KeyboardActions(onDone = { onRename() }),
             )
             KitSecondaryButton("Cancel", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
             KitPrimaryButton("Rename", onClick = onRename, modifier = Modifier.fillMaxWidth())
