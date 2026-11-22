@@ -226,12 +226,19 @@ inbox_control_state() { [[ "$searched" == true && "$1" == inbox-refreshed ]]; }
         source = (Path(__file__).resolve().parents[2] / '.claude/skills/verify-multiprompt-android/scripts/inbox-controls-drive.sh').read_text()
         body = source.split('focus_inbox_search() {', 1)[1].split('\n}', 1)[0]
         shell = '''attempts=0
+close_search_visible=1
 select_node() {
-    [[ "$1" == focused-field && "$2" == '' ]] || return 1
-    attempts=$((attempts + 1))
-    (( attempts >= 3 ))
+    if [[ "$1" == focused-field && "$2" == '' ]]; then
+        attempts=$((attempts + 1))
+        (( attempts >= 3 ))
+    elif [[ "$1" == desc && "$2" == 'Close session search' ]]; then
+        (( close_search_visible ))
+    else
+        return 1
+    fi
 }
-tap_node() { [[ "$1" == field && "$2" == 'Search all sessions' ]]; }
+tap_desc() { :; }
+tap_node() { :; }
 sleep() { :; }
 ''' + 'focus_inbox_search() {' + body + '\n}' + '''
 focus_inbox_search

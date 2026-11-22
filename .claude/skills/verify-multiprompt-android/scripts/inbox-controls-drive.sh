@@ -137,8 +137,13 @@ hold_inbox_session() {
 }
 focus_inbox_search() {
     local attempt
-    for attempt in {1..10}; do
+    for attempt in {1..15}; do
         if select_node focused-field '' >/dev/null 2>&1; then return 0; fi
+        if select_node desc 'Close session search' >/dev/null 2>&1; then
+            tap_node editor '' >/dev/null 2>&1 || true
+        else
+            tap_desc 'Search sessions' >/dev/null 2>&1 || true
+        fi
         tap_node field 'Search all sessions' >/dev/null 2>&1 || true
         sleep 1
     done
@@ -227,6 +232,8 @@ open_inbox_reminder
 adb shell input keyevent KEYCODE_BACK
 inbox_control_state reminder-dismissed '{"text":["Inbox"],"desc":["Robot verify-session"],"absent":["Remind me"]}'
 adb shell wm size 1080x1280
+wait_for_text Inbox
+sleep 2
 open_inbox_reminder
 inbox_control_state reminder-scroll-top '{"text":["In 30 minutes"],"absent":["Custom time"]}'
 tap_node field 'Custom time' reveal
