@@ -209,6 +209,39 @@ class DesignKitTest {
     }
 
     @Test
+    fun multiLineComposerUsesFixedCornersAndDoesNotClipButtons() {
+        val grown = (Kit.ControlHeight * 2).value.toInt()
+        compose.setContent {
+            Page {
+                KitComposerPill(Modifier.testTag("composer-pill").height(grown.dp)) {
+                    KitInnerButton({}, Icons.Default.Add, "Attach", Modifier.testTag("attach"))
+                    Box(Modifier.weight(1f))
+                    KitInnerButton({}, Icons.Default.Mic, "Start dictation", Modifier.testTag("mic"))
+                    KitInnerControl(modifier = Modifier.testTag("send"), fill = Kit.Text, outlined = false, onClick = {}) {
+                        Icon(Icons.Default.MoreVert, null, Modifier.size(Kit.ControlIconSize), tint = Kit.Page)
+                    }
+                }
+            }
+        }
+        val block = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
+            .substringAfter("fun KitComposerPill")
+            .substringBefore("fun KitExpandButton")
+        assertTrue("composer uses fixed corners", block.contains("Kit.ComposerShape"))
+        assertFalse("composer must not use percent pill corners", block.contains("Kit.PillShape"))
+        val pill = capture("composer-pill")
+        val corner = (Kit.ControlHeight / 2).value.toInt() + 4
+        assertPixel(pill, corner, corner, Kit.Surface, "upper-left keeps a fixed corner radius")
+        val inner = Kit.ControlInnerSize.value.toInt()
+        listOf("attach", "mic", "send").forEach { tag ->
+            val circle = capture(tag)
+            assertEquals("$tag stays full size when the composer grows", inner, circle.width)
+            assertEquals("$tag stays full size when the composer grows", inner, circle.height)
+            val fill = if (tag == "send") Kit.Text else Kit.SurfaceRaised
+            assertPixel(circle, inner / 2, inner - 3, fill, "$tag bottom edge stays painted")
+        }
+    }
+
+    @Test
     fun expandButtonIsASmallRoundSurfaceControl() {
         var clicks = 0
         compose.setContent {
