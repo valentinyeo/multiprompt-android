@@ -1,13 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
-
-const moduleRequire = createRequire(import.meta.url);
-const { downloadRedOnMain } = moduleRequire('../.github/scripts/pstack-verifier/verifier.cjs');
 
 export const requiredChecks = [
   'build',
@@ -33,6 +29,11 @@ export const retiringChecks = [
 ];
 export const emptyJourneyMatrix = /^(?:parent )?journey \$\{\{ matrix\.feature \}\}(?: \/ .*)?$/;
 export const journeyVerifyCheck = /^journey (.+) \/ verify$/;
+export const nightlyWorkflow = 'android-full.yml';
+export const nightlyJobName = /^nightly (.+) \/ verify$/;
+export const nightlyJobsPerPage = 100;
+export const nightlyJobPages = 10;
+export const nightlyFailures = new Set(['failure', 'timed_out', 'startup_failure']);
 export const intervalMs = 300_000;
 export const timeoutMs = 1_800_000;
 export const repo = 'valentinyeo/multiprompt-android';
@@ -54,10 +55,48 @@ function checkFailed(check) {
   return true;
 }
 
-export function loadRedOnMainJourneys() {
-  const directory = join(tmpdir(), `multiprompt-android-red-on-main-${process.pid}`);
-  mkdirSync(directory, { recursive: true });
-  return downloadRedOnMain(repo, directory);
+export function ghApiRequest(path, run = execFileSync) {
+  const options = { encoding: 'utf8', timeout: 60_000, maxBuffer: 16 * 1024 * 1024 };
+  return JSON.parse(run('gh', ['api', path], options));
+}
+
+export function newestNightlyRun(fetch = ghApiRequest) {
+  const body = fetch(`repos/${repo}/actions/workflows/${nightlyWorkflow}/runs?branch=main&per_page=30`);
+  const listed = Array.isArray(body?.workflow_runs) ? body.workflow_runs : [];
+  const runs = listed.filter(run => run.event === 'schedule' && run.head_branch === 'main' && run.status !== 'queued' && run.status !== 'requested' && run.status !== 'waiting');
+  runs.sort((a, b) => (Date.parse(b.created_at ?? '') || 0) - (Date.parse(a.created_at ?? '') || 0) || (b.id ?? 0) - (a.id ?? 0));
+  const latest = runs[0];
+  if (!latest?.id) return { id: '', url: '', reason: 'no android-full nightly run on main has started yet' };
+  return { id: String(latest.id), url: String(latest.html_url ?? ''), reason: '' };
+}
+
+export function nightlyRedJourneys(runId, fetch = ghApiRequest) {
+  const red = new Set();
+  for (let page = 1; page <= nightlyJobPages; page++) {
+    const body = fetch(`repos/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=${nightlyJobsPerPage}&page=${page}`);
+    const jobs = Array.isArray(body?.jobs) ? body.jobs : [];
+    for (const job of jobs) {
+      const match = nightlyJobName.exec(job?.name ?? '');
+      if (match && job.status === 'completed' && nightlyFailures.has(job.conclusion)) red.add(match[1]);
+    }
+    if (jobs.length < nightlyJobsPerPage) return [...red].sort();
+  }
+  throw new Error(`Nightly run ${runId} has more than ${nightlyJobsPerPage * nightlyJobPages} jobs to read`);
+}
+
+export function loadRedOnMainJourneys({ fetch = ghApiRequest, report = console.error } = {}) {
+  try {
+    const nightly = newestNightlyRun(fetch);
+    if (!nightly.id) {
+      report(`No journey counts as red on main: ${nightly.reason}.`);
+      return { journeys: [], url: '', note: nightly.reason };
+    }
+    return { journeys: nightlyRedJourneys(nightly.id, fetch), url: nightly.url, note: '' };
+  } catch (error) {
+    const note = `No journey counts as red on main: the newest nightly run could not be read (${String(error?.message ?? error).slice(0, 200)})`;
+    report(note);
+    return { journeys: [], url: '', note };
+  }
 }
 
 export function reportToleratedRedOnMain(status, report = console.error) {
