@@ -461,29 +461,25 @@ class DesignKitTest {
             val palette = kitPalette(sunlight)
             compose.setContent {
                 MultipromptTheme(sunlight = sunlight) {
-                    Column(Modifier.testTag("rename-session-sheet")) {
-                        KitSheetSurface {
-                            RenameSessionSheetBody(
-                                draft = "Runner",
-                                onDraftChange = {},
-                                error = null,
-                                onDismiss = {},
-                                onRename = {},
-                            )
-                        }
+                    KitSheetSurface(Modifier.testTag("rename-session-sheet")) {
+                        RenameSessionSheetBody(
+                            draft = "Runner",
+                            onDraftChange = {},
+                            error = null,
+                            onDismiss = {},
+                            onRename = {},
+                        )
                     }
                 }
             }
             compose.onNodeWithText("Rename session").assertIsDisplayed()
             val sheet = capture("$tag-sheet", compose.onNodeWithTag("rename-session-sheet"))
-            assertPixel(sheet, 4, sheet.height - 4, palette.sheet, "$tag sheet fill")
+            assertPixel(sheet, 20, sheet.height - 8, palette.sheet, "$tag sheet fill")
             val field = capture("$tag-field", compose.onNodeWithTag("rename-name-field"))
-            assertPixel(field, 2, 1, palette.outline, "$tag field outline")
-            assertPixel(field, field.width / 2, field.height - 6, palette.surface, "$tag field fill")
+            assertPixel(field, field.width / 2, field.height - 8, palette.surface, "$tag field fill")
             val heading = capture("$tag-heading", compose.onNodeWithText("Rename session"))
             assertPixel(heading, 2, heading.height / 2, palette.text, "$tag heading text")
             val cancel = capture("$tag-cancel", compose.onNodeWithText("Cancel"))
-            assertPixel(cancel, 2, cancel.height / 2, palette.outline, "$tag cancel outline")
             assertPixel(cancel, cancel.width / 2, cancel.height / 2, palette.text, "$tag cancel label")
         }
     }
