@@ -32,18 +32,13 @@ test('a read only phone test job restores the newest cache so the Compose plugin
   assert.match(action, /^\s+cache-read-only: \$\{\{ inputs\.read-only == 'true' \}\}$/m);
   assert.doesNotMatch(
     action,
-    /Restore legacy Gradle cache without the warmed prefix[\s\S]*uses: gradle\/actions\/setup-gradle@v4[\s\S]*Restore legacy Gradle dependency cache/,
+    /uses: gradle\/actions\/setup-gradle@v4[\s\S]*uses: gradle\/actions\/setup-gradle@v4/,
     'a second setup-gradle in the same job is skipped after the first run'
   );
   assert.match(
     action,
-    /Restore legacy Gradle cache without the warmed prefix[\s\S]*uses: actions\/cache\/restore@v4[\s\S]*gradle-home-v1\|Linux-X64\|/,
-    'read only jobs must restore main build cache entries when the warmed prefix is still cold'
-  );
-  assert.match(
-    action,
-    /Restore legacy Gradle dependency cache without the warmed prefix[\s\S]*gradle-dependencies-v1-/,
-    'read only jobs must also restore dependency metadata the prefixed restore skipped'
+    /Choose Gradle cache prefix[\s\S]*startswith\(\$p\)[\s\S]*GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: \$\{\{ steps\.gradle_prefix\.outputs\.prefix \}\}/,
+    'read only jobs must drop the warmed prefix when it is still cold so setup-gradle restores main build cache entries'
   );
 });
 
@@ -66,6 +61,7 @@ test('Android tests names a shared Gradle cache prefix so pull requests restore 
     workflow,
     /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m
   );
+  assert.match(read('test.yml'), /^\s+actions: read\s*$/m, 'pull request test jobs need actions read to inspect warmed cache keys');
   assert.match(
     read('release.yml'),
     /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m

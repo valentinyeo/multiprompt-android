@@ -8,7 +8,29 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Choose Gradle cache prefix
+      id: gradle_prefix
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        prefix="${GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:-}"
+        if [ "${{ inputs.read-only }}" != 'true' ] || [ -z "$prefix" ]; then
+          printf 'prefix=%s\n' "$prefix" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        warm="${prefix}|gradle-home-v1|"
+        if gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?per_page=100" \
+            --jq --arg p "$warm" 'any(.actions_caches[]; .key | startswith($p))' | grep -qx true; then
+          echo "read only jobs restore warmed Gradle cache prefix $prefix"
+          printf 'prefix=%s\n' "$prefix" >> "$GITHUB_OUTPUT"
+        else
+          echo "warmed Gradle cache prefix $prefix is still cold; read only jobs restore main build cache"
+          echo 'prefix=' >> "$GITHUB_OUTPUT"
+        fi
     - uses: gradle/actions/setup-gradle@v4
+      env:
+        GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: ${{ steps.gradle_prefix.outputs.prefix }}
       with:
         gradle-version: "9.5.1"
         gradle-home-cache-strict-match: ${{ inputs.read-only != 'true' }}
@@ -27,33 +49,4 @@ runs:
         else
           echo "miss=true" >> "$GITHUB_OUTPUT"
           echo "robolectric cache miss: this job downloads the Robolectric jars from Maven Central"
-        fi
-    - name: Restore legacy Gradle cache without the warmed prefix
-      if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
-      uses: actions/cache/restore@v4
-      with:
-        path: ${{ env.GRADLE_USER_HOME }}/caches
-        key: legacy-gradle-home-${{ github.run_id }}-${{ github.run_attempt }}
-        restore-keys: |
-          gradle-home-v1|Linux-X64|${{ env.GRADLE_BUILD_ACTION_CACHE_KEY_JOB || github.job }}
-    - name: Restore legacy Gradle dependency cache without the warmed prefix
-      if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
-      uses: actions/cache/restore@v4
-      with:
-        path: ${{ env.GRADLE_USER_HOME }}/caches/modules-2
-        key: legacy-gradle-dependencies-${{ github.run_id }}-${{ github.run_attempt }}
-        restore-keys: |
-          gradle-dependencies-v1-
-    - name: Robolectric test jars after legacy cache fallback
-      if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
-      shell: bash
-      run: |
-        cache="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/org.robolectric"
-        android_all=$({ find "$cache" -name 'android-all-instrumented-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
-        native_runtime=$({ find "$cache" -name 'nativeruntime-dist-compat-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
-        echo "robolectric cache after legacy fallback: android-all-instrumented=$android_all nativeruntime-dist-compat=$native_runtime"
-        if [ "$android_all" -gt 0 ] && [ "$native_runtime" -gt 0 ]; then
-          echo "robolectric legacy cache hit: this job resolves the Robolectric jars from main's build cache"
-        else
-          echo "robolectric legacy cache miss: this job still downloads the Robolectric jars from Maven Central"
         fi
