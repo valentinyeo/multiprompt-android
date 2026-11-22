@@ -2366,6 +2366,11 @@ CLEAR_STORE
     shot clear-before
     clear_provider_event fail-messages
     clear_screen 'Not sent'
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Send again' && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Remove'; then break; fi
+        sleep 1
+    done
     shot clear-not-sent
     dump_ui
     python3 - "$EVIDENCE/current.xml" <<'CLEAR_ACTIONS'
