@@ -332,20 +332,34 @@ test('changed recipes and owned drivers are mandatory before model suggestions',
   assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/scroll.test.py' }], 1), true);
 });
 
-test('a harness change runs every journey that clicks through the shared action', () => {
+test('a harness-only change runs the fixed smoke set instead of every journey', () => {
   const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
   const changed = [
     { filename: 'tools/journey-actions/action.test.py' },
     { filename: 'tools/journey-actions/fixtures/chat-shared-verify-session-text-visible.xml' },
     { filename: '.claude/skills/verify-multiprompt-android/scripts/journey_action.py' },
   ];
-  assert.deepEqual(gate.changedJourneys('', changed), gate.prJourneys);
-  assert.ok(gate.changedJourneys('', changed).includes('chat-shared.md'));
+  assert.deepEqual(gate.changedJourneys('', changed), gate.HARNESS_SMOKE_JOURNEYS);
+  assert.ok(!gate.changedJourneys('', changed).includes('chat-shared.md'));
   const diff = changed.map(file => `diff --git a/${file.filename} b/${file.filename}\n+changed`).join('\n');
-  assert.deepEqual(gate.changedJourneys(diff), gate.prJourneys);
-  assert.deepEqual(verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff).features, gate.prJourneys);
+  assert.deepEqual(gate.changedJourneys(diff), gate.HARNESS_SMOKE_JOURNEYS);
+  assert.deepEqual(verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff).features, gate.HARNESS_SMOKE_JOURNEYS);
   assert.equal(verifier.noProductChange([{ filename: 'tools/journey-actions/action.test.py' }], 1), false);
   assert.deepEqual(gate.changedJourneys('', [{ filename: '.claude/skills/verify-multiprompt-android/scripts/pins-drive.sh' }]), ['session-pins.md']);
+  assert.equal(gate.MAX_PR_JOURNEYS, gate.PR_CHECK_CAP - 9);
+});
+
+test('the journey cap keeps direct feature checks ahead of harness smoke', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const recipes = gate.prJourneys.slice(0, gate.MAX_PR_JOURNEYS + 1);
+  const diff = [
+    'diff --git a/.claude/skills/verify-multiprompt-android/scripts/drive.sh b/.claude/skills/verify-multiprompt-android/scripts/drive.sh',
+    ...recipes.map(name => `diff --git a/${gate.REGISTRY_PATH}/${name} b/${gate.REGISTRY_PATH}/${name}`),
+  ].join('\nchanged\n') + '\n+changed';
+  const selected = verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff);
+  assert.equal(selected.features.length, gate.MAX_PR_JOURNEYS);
+  for (const name of recipes.slice(0, gate.MAX_PR_JOURNEYS)) assert.ok(selected.features.includes(name), name);
+  assert.ok(selected.dropped.length >= 1);
 });
 
 test('a shared-driver change runs every journey it touches instead of deferring guards', () => {

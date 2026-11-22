@@ -314,6 +314,149 @@ test('a journey red on main is tolerated when pstack-verifier passed', async () 
   assert.match(lines.join('\n'), /Red on main tolerated \(nightly https:\/\/github\.com\/example\/actions\/runs\/1\): chat-shared\.md, session-gestures\.md/);
 });
 
+const nightlyRunUrl = 'https://github.com/valentinyeo/multiprompt-android/actions/runs/44980692049';
+
+function nightlyRun(overrides = {}) {
+  return {
+    id: 44980692049, event: 'schedule', head_branch: 'main', status: 'in_progress',
+    created_at: '2026-11-22T03:27:07Z', html_url: nightlyRunUrl, ...overrides,
+  };
+}
+
+function nightlyFetch(runs, jobs, calls = []) {
+  return path => {
+    calls.push(path);
+    const runId = /^repos\/[^/]+\/[^/]+\/actions\/runs\/(\d+)\/jobs/.exec(path)?.[1];
+    if (runId) return { jobs: jobs[runId] ?? [] };
+    return { workflow_runs: runs };
+  };
+}
+
+function nightlyJob(name, conclusion = 'success', status = 'completed') {
+  return { name: `nightly ${name} / verify`, status, conclusion };
+}
+
+test('the newest nightly is the newest scheduled android-full run on main', async () => {
+  const { newestNightlyRun, nightlyWorkflow, repo } = await gate;
+  const calls = [];
+  const fetch = nightlyFetch([
+    nightlyRun({ id: 11, status: 'queued', created_at: '2026-11-23T03:27:00Z', html_url: 'https://example/runs/11' }),
+    nightlyRun({ id: 12, status: 'completed', created_at: '2026-11-21T03:27:00Z', html_url: 'https://example/runs/12' }),
+    nightlyRun({ id: 13, event: 'workflow_dispatch', status: 'completed', created_at: '2026-11-22T17:00:00Z', html_url: 'https://example/runs/13' }),
+    nightlyRun({ id: 14, head_branch: 'topic', status: 'completed', created_at: '2026-11-22T09:00:00Z', html_url: 'https://example/runs/14' }),
+    nightlyRun({ id: 15, status: 'completed', created_at: '2026-11-20T03:27:00Z', html_url: 'https://example/runs/15' }),
+  ], {}, calls);
+  assert.deepEqual(newestNightlyRun(fetch), { id: '12', url: 'https://example/runs/12', reason: '' });
+  assert.deepEqual(calls, [`repos/${repo}/actions/workflows/${nightlyWorkflow}/runs?branch=main&per_page=30`]);
+  assert.equal(nightlyWorkflow, 'android-full.yml');
+});
+
+test('the nightly results are read from that run\'s newest job attempt over REST', async () => {
+  const { nightlyRedJourneys, repo } = await gate;
+  const calls = [];
+  const jobs = [nightlyJob('chat-resync.md', 'failure'), nightlyJob('skill-pills.md'), nightlyJob('reader-version.md', null, 'in_progress'), { name: 'build', status: 'completed', conclusion: 'failure' }];
+  assert.deepEqual(nightlyRedJourneys('42', nightlyFetch([], { 42: jobs }, calls)), ['chat-resync.md']);
+  assert.deepEqual(calls, [`repos/${repo}/actions/runs/42/jobs?filter=latest&per_page=100&page=1`]);
+});
+
+test('journey jobs are read across pages until the last short page', async () => {
+  const { nightlyRedJourneys, nightlyJobsPerPage } = await gate;
+  const filler = Array.from({ length: nightlyJobsPerPage }, (unused, index) => nightlyJob(`filler-${index}.md`));
+  const calls = [];
+  const fetch = path => {
+    calls.push(path);
+    return { jobs: path.endsWith('page=1') ? filler : [nightlyJob('chat-clear.md', 'failure')] };
+  };
+  assert.deepEqual(nightlyRedJourneys('9', fetch), ['chat-clear.md']);
+  assert.equal(calls.length, 2);
+});
+
+test('a journey red on the newest nightly is tolerated and one green there still blocks', async () => {
+  const { checkStatus, loadRedOnMainJourneys } = await gate;
+  const jobs = [
+    nightlyJob('chat-resync.md', 'failure'),
+    nightlyJob('assertions', 'timed_out'),
+    nightlyJob('snippets.md', 'startup_failure'),
+    nightlyJob('skill-pills.md'),
+    nightlyJob('reader-version.md', null, 'in_progress'),
+    nightlyJob('chat-clear.md', 'cancelled'),
+    nightlyJob('chat-codex.md', 'skipped'),
+  ];
+  const redOnMain = loadRedOnMainJourneys({ fetch: nightlyFetch([nightlyRun()], { 44980692049: jobs }), report: () => {} });
+  assert.deepEqual(redOnMain, {
+    journeys: ['assertions', 'chat-resync.md', 'snippets.md'], url: nightlyRunUrl, note: '',
+  });
+  const tolerated = ['chat-resync.md', 'assertions', 'snippets.md'];
+  const blocking = ['skill-pills.md', 'reader-version.md', 'chat-clear.md', 'chat-codex.md'];
+  const pr = await green();
+  pr.statusCheckRollup.push(...tolerated.concat(blocking).map(name => ({ __typename: 'CheckRun', name: `journey ${name} / verify`, status: 'COMPLETED', conclusion: 'FAILURE' })));
+  assert.throws(() => checkStatus(pr, { redOnMain }), /Checks not green/);
+  const toleratedOnly = await green();
+  toleratedOnly.statusCheckRollup.push(...tolerated.map(name => ({ __typename: 'CheckRun', name: `journey ${name} / verify`, status: 'COMPLETED', conclusion: 'FAILURE' })));
+  const status = checkStatus(toleratedOnly, { redOnMain });
+  assert.deepEqual(status.toleratedRedOnMain.sort(), [...tolerated].sort());
+  assert.equal(status.ready, true);
+  for (const name of blocking) {
+    const single = await green();
+    single.statusCheckRollup.push({ __typename: 'CheckRun', name: `journey ${name} / verify`, status: 'COMPLETED', conclusion: 'FAILURE' });
+    assert.throws(() => checkStatus(single, { redOnMain }), new RegExp(`Checks not green: journey ${name.replace(/\./g, '\\.')}`));
+  }
+});
+
+test('a required check that is not a journey is never tolerated by the nightly', async () => {
+  const { checkStatus, loadRedOnMainJourneys } = await gate;
+  const redOnMain = loadRedOnMainJourneys({
+    fetch: nightlyFetch([nightlyRun()], { 44980692049: [{ name: 'build', status: 'completed', conclusion: 'failure' }, { name: 'test', status: 'completed', conclusion: 'failure' }] }),
+    report: () => {},
+  });
+  assert.deepEqual(redOnMain.journeys, []);
+  const pr = await green();
+  pr.statusCheckRollup[0].conclusion = 'FAILURE';
+  assert.throws(() => checkStatus(pr, { redOnMain }), /Checks not green: build/);
+  const channel = await green();
+  channel.statusCheckRollup.push({ __typename: 'CheckRun', name: 'nightly build / verify', status: 'COMPLETED', conclusion: 'FAILURE' });
+  assert.throws(() => checkStatus(channel, { redOnMain }), /Checks not green/);
+});
+
+test('an unreadable or absent nightly tolerates nothing', async () => {
+  const { loadRedOnMainJourneys } = await gate;
+  const notes = [];
+  assert.deepEqual(loadRedOnMainJourneys({ fetch: nightlyFetch([], {}), report: line => notes.push(line) }), {
+    journeys: [], url: '', note: 'no android-full nightly run on main has started yet',
+  });
+  const onlyDispatch = loadRedOnMainJourneys({ fetch: nightlyFetch([nightlyRun({ event: 'workflow_dispatch' })], {}), report: () => {} });
+  assert.deepEqual(onlyDispatch.journeys, []);
+  const broken = loadRedOnMainJourneys({ fetch: () => { throw new Error('gh is not logged in'); }, report: line => notes.push(line) });
+  assert.deepEqual(broken.journeys, []);
+  assert.match(notes.join('\n'), /No journey counts as red on main/);
+  const jobsFail = loadRedOnMainJourneys({
+    fetch: nightlyFetch([nightlyRun()], {}), report: () => {},
+  });
+  assert.deepEqual(jobsFail.journeys, []);
+  const jobsError = loadRedOnMainJourneys({
+    fetch: path => (path.includes('/jobs')
+      ? (() => { throw new Error('HTTP 502'); })()
+      : { workflow_runs: [nightlyRun()] }),
+    report: () => {},
+  });
+  assert.deepEqual(jobsError.journeys, []);
+  assert.match(jobsError.note, /HTTP 502/);
+});
+
+test('nightly reads ask gh 2.45 for REST endpoints only', async () => {
+  const { ghApiRequest, repo } = await gate;
+  const calls = [];
+  const run = (command, args, options) => {
+    calls.push({ command, args, options });
+    return JSON.stringify({ total_count: 0 });
+  };
+  assert.deepEqual(ghApiRequest(`repos/${repo}/actions/runs/42/jobs?filter=latest&per_page=100&page=1`, run), { total_count: 0 });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, 'gh');
+  assert.deepEqual(calls[0].args, ['api', `repos/${repo}/actions/runs/42/jobs?filter=latest&per_page=100&page=1`]);
+  assert.equal(calls[0].options.encoding, 'utf8');
+});
+
 test('a failed journey still blocks when it is not red on main', async () => {
   const { checkStatus } = await gate;
   const pr = await green();

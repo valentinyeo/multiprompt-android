@@ -1,0 +1,1 @@
+Test-script PRs run a small phone test set, not all of them
