@@ -30,14 +30,20 @@ runs:
         fi
     - name: Restore legacy Gradle cache without the warmed prefix
       if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
-      uses: gradle/actions/setup-gradle@v4
-      env:
-        GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: ''
+      uses: actions/cache/restore@v4
       with:
-        gradle-version: "9.5.1"
-        gradle-home-cache-strict-match: false
-        cache-read-only: true
-        cache-overwrite-existing: true
+        path: ${{ env.GRADLE_USER_HOME }}/caches
+        key: legacy-gradle-home-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          gradle-home-v1|Linux-X64|${{ env.GRADLE_BUILD_ACTION_CACHE_KEY_JOB || github.job }}
+    - name: Restore legacy Gradle dependency cache without the warmed prefix
+      if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ env.GRADLE_USER_HOME }}/caches/modules-2
+        key: legacy-gradle-dependencies-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: |
+          gradle-dependencies-v1-
     - name: Robolectric test jars after legacy cache fallback
       if: inputs.read-only == 'true' && steps.robolectric_jars.outputs.miss == 'true' && env.GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX != ''
       shell: bash

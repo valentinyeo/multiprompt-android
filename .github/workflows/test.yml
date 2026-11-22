@@ -20,6 +20,8 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:

@@ -30,10 +30,20 @@ test('a read only phone test job restores the newest cache so the Compose plugin
     'read only jobs must allow the cache prefix fallback that the strict match blocks'
   );
   assert.match(action, /^\s+cache-read-only: \$\{\{ inputs\.read-only == 'true' \}\}$/m);
+  assert.doesNotMatch(
+    action,
+    /Restore legacy Gradle cache without the warmed prefix[\s\S]*uses: gradle\/actions\/setup-gradle@v4[\s\S]*Restore legacy Gradle dependency cache/,
+    'a second setup-gradle in the same job is skipped after the first run'
+  );
   assert.match(
     action,
-    /Restore legacy Gradle cache without the warmed prefix[\s\S]*GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: ''[\s\S]*cache-overwrite-existing: true/,
+    /Restore legacy Gradle cache without the warmed prefix[\s\S]*uses: actions\/cache\/restore@v4[\s\S]*gradle-home-v1\|Linux-X64\|/,
     'read only jobs must restore main build cache entries when the warmed prefix is still cold'
+  );
+  assert.match(
+    action,
+    /Restore legacy Gradle dependency cache without the warmed prefix[\s\S]*gradle-dependencies-v1-/,
+    'read only jobs must also restore dependency metadata the prefixed restore skipped'
   );
 });
 
