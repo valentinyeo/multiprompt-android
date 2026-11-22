@@ -147,8 +147,10 @@ reset_inbox_search() {
 find_inbox_session() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
-        adb shell input text verify-session
+        select_node desc 'Close session search' >/dev/null
         adb shell input keyevent KEYCODE_BACK
+        clear_field ''
+        adb shell input text verify-session
         dump_ui
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value '' verify-session
     fi

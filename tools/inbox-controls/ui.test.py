@@ -168,6 +168,7 @@ tap_text() { [[ "$screen" == Settings ]]; }
                             for name in ['hold_inbox_session', 'find_inbox_session', 'open_inbox_reminder'])
         shell = '''search_open=false
 searched=false
+cleared=false
 keyboard_hidden=true
 scripts=/driver
 EVIDENCE=/evidence
@@ -175,7 +176,7 @@ select_node() {
     if [[ "$2" == 'Close session search' ]]; then
         [[ "$search_open" == true ]]
     elif [[ "$1" == focused-field ]]; then
-        return 1
+        [[ "$search_open" == true && "$keyboard_hidden" == true ]]
     else
         [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-session' ]]
         printf '105 450\\n'
@@ -183,8 +184,7 @@ select_node() {
 }
 tap_desc() { [[ "$1" == 'Search sessions' ]]; search_open=true; keyboard_hidden=false; }
 fill() { return 1; }
-clear_field() { return 1; }
-sleep() { :; }
+clear_field() { select_node focused-field ''; cleared=true; }
 dump_ui() { :; }
 python3() { [[ "$3" == field-value && "$4" == '' && "$5" == verify-session && "$searched" == true && "$keyboard_hidden" == true ]]; }
 wait_for_text() { [[ "$1" == 'Remind me' || "$searched" == true && "$1" == '1 result across all splits' ]]; }
@@ -192,7 +192,7 @@ tap_node() { [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-ses
 hold_text() { return 1; }
 adb() {
     if [[ "$*" == 'shell input text verify-session' ]]; then
-        [[ "$search_open" == true && "$keyboard_hidden" == false ]]
+        [[ "$search_open" == true && "$keyboard_hidden" == true && "$cleared" == true ]]
         searched=true
     elif [[ "$*" == 'shell input keyevent KEYCODE_BACK' ]]; then
         keyboard_hidden=true
