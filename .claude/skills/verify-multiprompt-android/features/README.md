@@ -62,7 +62,7 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `session-settings.journey`. Runner: `verify.yml` (manual). Prerequisites: Account email OTP and a pulled account layout.
 - [Stop while the chat works](session-stop.md): Stop replaces Send while a chat is working and the box is empty. Typing brings Send back. Stop interrupts the session.
   - Outcomes: `reader.stop-while-working`. Runner: `verify.yml` (debug).
-- [Useful inbox summaries](session-summaries.md): Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.
+- [Useful inbox summaries](session-summaries.md): Android inbox rows show the waiting question, current work, or the first sentence of the last assistant reply. Model footers and shell prompts never become summaries.
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
 - [Sessions](sessions.md): Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 46 rows render.
   - Outcomes: `inbox.search`, `legacy.igsh-414`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (2500 characters), `seed-check.json` (1200 characters), `seed-search.xml` (2000 characters), `seed-deep-target.xml` (1000 characters), `seed-deep-choice.json` (900 characters), `search-keyboard.json` (1200 characters), `row-long-press-actions.xml` (1500 characters), `start-agent-picker.xml` (1400 characters).

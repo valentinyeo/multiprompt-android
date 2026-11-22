@@ -1266,15 +1266,23 @@ fi
 if [[ "$feature" == session-summaries.md ]]; then
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
+    sudo -u verifyssh tmux send-keys -t verify-session summary-question Enter
+    wait_for_text 'Which route should we use?'
+    shot summary-question
+    "$scripts/mpa" proof --name summary-question --require-text 'Which route should we use?' --forbid-text 'Create a new account'
     sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter
     wait_for_text 'Working: Reading CI logs'
     shot summary-working
+    "$scripts/mpa" proof --name summary-working --require-text 'Working: Reading CI logs' --forbid-text 'Which route should we use?'
     started=$(date +%s%3N)
     sudo -u verifyssh tmux send-keys -t verify-session summary-next Enter
     wait_for_text 'The release is ready.'
     elapsed=$(( $(date +%s%3N) - started ))
     test "$elapsed" -le 5000
     shot summary-updated
+    "$scripts/mpa" proof --name summary-updated --require-text 'The release is ready.' --forbid-text 'Which route should we use?'
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/summary-pane.txt"
+    grep -F 'Which route should we use?' "$EVIDENCE/summary-pane.txt"
     python3 - "$EVIDENCE/current.xml" <<'PYSUMMARY'
 import sys
 import xml.etree.ElementTree as ET
