@@ -280,7 +280,9 @@ data class ChatHistory(
         }
         val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions, cleared)
         val staleTail = mode == "tail" && !sourceAdvanced && olderThan(this, next)
-        return if (staleTail) this else next
+        val regressedInode = mode == "tail" && page.sid == sid && inode != 0L && page.inode != 0L &&
+            page.inode < inode && clearedAt > 0
+        return if (staleTail || regressedInode) this else next
     }
 
     companion object {

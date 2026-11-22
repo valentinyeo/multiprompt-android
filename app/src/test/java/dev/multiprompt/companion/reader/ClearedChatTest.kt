@@ -72,6 +72,16 @@ class ClearedChatTest {
     }
 
     @Test
+    fun aStaleInodeTailCannotReplaceAClearedTranscript() {
+        val shown = ChatHistory(sid = sid, inode = 2, offset = 100, mtime = stamp(2_000.0), clearedAt = 2_000.0,
+            rows = listOf(timed(0, "CLEARED_READY_2474", "new", "2026-11-21T15:00:00.000Z")))
+        val stale = page(listOf(timed(0, "CLEARED_BEFORE_2474", "old", "2026-11-21T16:00:00.000Z")), inode = 1, at = 1_500.0)
+        val after = shown.apply(stale)
+        assertEquals(shown.messages.map { it.text }, after.messages.map { it.text })
+        assertEquals(2L, after.inode)
+    }
+
+    @Test
     fun theClearBoundarySurvivesTheCachedChatAfterARestart() {
         val cache = ChatHistoryCache(temporary.newFolder("cleared-cache"))
         cache.save("host/tmux", cleared())
