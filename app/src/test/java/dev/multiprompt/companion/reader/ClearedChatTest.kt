@@ -20,8 +20,8 @@ class ClearedChatTest {
     private fun timed(offset: Long, text: String, id: String, at: String) =
         ChatHistoryProtocol.Row("user", text, id, at, offset, offset + 10)
 
-    private fun page(rows: List<ChatHistoryProtocol.Row>, inode: Long, at: Double) =
-        ChatHistoryProtocol.Page(sid, 0, 100, inode, false, stamp(at), "a".repeat(64), "tail", 0, rows)
+    private fun page(rows: List<ChatHistoryProtocol.Row>, inode: Long, at: Double, probe: String = "a".repeat(64)) =
+        ChatHistoryProtocol.Page(sid, 0, 100, inode, false, stamp(at), probe, "tail", 0, rows)
 
     private fun replica(vararg rows: MessageProtocol.Row) = MessageReplica(1, 1, rows.associateBy { it.id })
 
@@ -65,7 +65,7 @@ class ClearedChatTest {
     fun aTranscriptSwapStillAppliesWhenClearMtimeDoesNotAdvance() {
         val shown = ChatHistory(sid = sid, inode = 1, offset = 100, mtime = stamp(2_000.0),
             rows = listOf(timed(0, "VERIFY_READY_1008", "old", "2026-11-21T16:00:00.000Z")))
-        val afterClear = shown.apply(page(listOf(timed(0, "CLEARED_READY_2474", "new", "2026-11-21T15:00:00.000Z")), inode = 2, at = 1_900.0))
+        val afterClear = shown.apply(page(listOf(timed(0, "CLEARED_READY_2474", "new", "2026-11-21T15:00:00.000Z")), inode = 2, at = 1_900.0, probe = "b".repeat(64)))
         assertEquals(2L, afterClear.inode)
         assertEquals(2_000.0, afterClear.clearedAt, 0.0)
         assertEquals(listOf("CLEARED_READY_2474"), afterClear.messages.map { it.text })

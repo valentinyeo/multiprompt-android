@@ -260,7 +260,7 @@ data class ChatHistory(
             "older" -> require(sameSource && page.end == start && page.oldest == page.base)
         }
         val replaced = mode == "tail" && page.sid == sid && inode != 0L && page.inode != 0L && page.inode != inode
-        val sourceAdvanced = replaced && page.mtime > mtime
+        val sourceAdvanced = replaced && (page.mtime > mtime || page.probe != probe)
         val cleared = when {
             page.sid != sid -> 0.0
             replaced -> maxOf(clearedAt, seconds(mtime), seconds(page.mtime))
@@ -279,7 +279,7 @@ data class ChatHistory(
             return copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions, clearedAt = cleared)
         }
         val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions, cleared)
-        val staleTail = mode == "tail" && !replaced && !sourceAdvanced && olderThan(this, next)
+        val staleTail = mode == "tail" && !sourceAdvanced && olderThan(this, next)
         return if (staleTail) this else next
     }
 
