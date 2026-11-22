@@ -209,6 +209,39 @@ class DesignKitTest {
     }
 
     @Test
+    fun multiLineComposerUsesFixedCornersAndDoesNotClipButtons() {
+        val grown = (Kit.ControlHeight * 2).value.toInt()
+        compose.setContent {
+            Page {
+                KitComposerPill(Modifier.testTag("composer-pill").height(grown.dp)) {
+                    KitInnerButton({}, Icons.Default.Add, "Attach", Modifier.testTag("attach"))
+                    Box(Modifier.weight(1f))
+                    KitInnerButton({}, Icons.Default.Mic, "Start dictation", Modifier.testTag("mic"))
+                    KitInnerControl(modifier = Modifier.testTag("send"), fill = Kit.Text, outlined = false, onClick = {}) {
+                        Icon(Icons.Default.MoreVert, null, Modifier.size(Kit.ControlIconSize), tint = Kit.Page)
+                    }
+                }
+            }
+        }
+        val block = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
+            .substringAfter("fun KitComposerPill")
+            .substringBefore("fun KitExpandButton")
+        assertTrue("composer uses fixed corners", block.contains("Kit.ComposerShape"))
+        assertFalse("composer must not use percent pill corners", block.contains("Kit.PillShape"))
+        val pill = capture("composer-pill")
+        val corner = (Kit.ControlHeight / 2).value.toInt() + 4
+        assertPixel(pill, corner, corner, Kit.Surface, "upper-left keeps a fixed corner radius")
+        val inner = Kit.ControlInnerSize.value.toInt()
+        listOf("attach", "mic", "send").forEach { tag ->
+            val circle = capture(tag)
+            assertEquals("$tag stays full size when the composer grows", inner, circle.width)
+            assertEquals("$tag stays full size when the composer grows", inner, circle.height)
+            val fill = if (tag == "send") Kit.Text else Kit.SurfaceRaised
+            assertPixel(circle, inner / 2, inner - 3, fill, "$tag bottom edge stays painted")
+        }
+    }
+
+    @Test
     fun expandButtonIsASmallRoundSurfaceControl() {
         var clicks = 0
         compose.setContent {
@@ -453,6 +486,41 @@ class DesignKitTest {
         assertPixel(bitmap, 14, bitmap.height / 2, Kit.Surface, "saved fill")
         assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "saved outline")
         compose.onNodeWithText("Saved").assertExists()
+    }
+
+    private fun assertRenameSessionSheetColours(sunlight: Boolean, tag: String) {
+        val palette = kitPalette(sunlight)
+        compose.setContent {
+            MultipromptTheme(sunlight = sunlight, material3 = false) {
+                KitSheetSurface(Modifier.testTag("rename-session-sheet")) {
+                    RenameSessionSheetBody(
+                        draft = "Runner",
+                        onDraftChange = {},
+                        error = null,
+                        onDismiss = {},
+                        onRename = {},
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Rename session").assertIsDisplayed()
+        val sheet = capture("$tag-sheet", compose.onNodeWithTag("rename-session-sheet"))
+        assertPixel(sheet, 4, sheet.height - 4, palette.sheet, "$tag sheet fill")
+        val field = capture("$tag-field", compose.onNodeWithTag("rename-name-field"))
+        assertPixel(field, field.width / 2, field.height - 8, palette.surface, "$tag field fill")
+        assertPixel(field, field.width / 2, 0, palette.outline, "$tag field outline")
+        val heading = capture("$tag-heading", compose.onNodeWithText("Rename session"))
+        assertPixel(heading, 4, heading.height / 2, palette.text, "$tag heading text")
+    }
+
+    @Test
+    fun renameSessionSheetFollowsKitColoursAtNight() {
+        assertRenameSessionSheetColours(sunlight = false, tag = "rename-night")
+    }
+
+    @Test
+    fun renameSessionSheetFollowsKitColoursInDayMode() {
+        assertRenameSessionSheetColours(sunlight = true, tag = "rename-day")
     }
 
     @Test
