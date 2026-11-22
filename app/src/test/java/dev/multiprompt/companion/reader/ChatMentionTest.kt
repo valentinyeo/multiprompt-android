@@ -25,10 +25,7 @@ class ChatMentionTest {
             session("bad name", account = "Bad"),
         )
         assertEquals(
-            listOf(
-                MentionChat("SF Design Lead", "live-design", "vps"),
-                MentionChat("Multi Bot Android", "multiprompt-android", "vps"),
-            ),
+            listOf(MentionChat("SF Design Lead", "live-design"), MentionChat("Multi Bot Android", "multiprompt-android")),
             ChatMention.chats(all, here),
         )
     }

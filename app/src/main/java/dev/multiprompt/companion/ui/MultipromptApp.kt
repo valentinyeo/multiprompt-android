@@ -243,7 +243,6 @@ import dev.multiprompt.companion.model.HostDraft
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.model.DissolvedSession
-import dev.multiprompt.companion.data.BotLook
 import dev.multiprompt.companion.data.CrashReport
 import dev.multiprompt.companion.model.Workspace
 import dev.multiprompt.companion.dictation.DeepgramDictation
@@ -1941,7 +1940,11 @@ internal fun SessionsScreen(
     }
     val botLooks = remember(state.inboxSessions, visibleSessions, state.readerSession, state.accountLayout, state.botPhotoRevision) {
         (state.inboxSessions + visibleSessions).associate { session ->
-            SessionReadStore.key(session.hostId, session.name) to drafts.botLook(session)
+            SessionReadStore.key(session.hostId, session.name) to BotLook(
+                picture = drafts.shownBotPicture(session),
+                face = drafts.botFace(session),
+                color = drafts.botColor(session),
+            )
         }
     }
     val roomStrip: @Composable () -> Unit = {
@@ -2486,6 +2489,8 @@ private val LocalOpenSession = staticCompositionLocalOf<String?> { null }
 
 private class BotSelection(val keys: Set<String>, val onToggle: (TmuxSession) -> Unit)
 
+private class BotLook(val picture: String?, val face: Int?, val color: Int?)
+
 private val LocalBotLook = staticCompositionLocalOf<BotLook?> { null }
 
 private val LocalBotSelection = staticCompositionLocalOf<BotSelection?> { null }
@@ -2585,7 +2590,13 @@ private fun SessionCard(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                BotAvatar(botAvatarSource(session.name, session.workspaceColor, LocalBotLook.current))
+                BotAvatar(
+                    session.name,
+                    workspaceColor = session.workspaceColor,
+                    face = LocalBotLook.current?.face,
+                    color = LocalBotLook.current?.color,
+                    picture = LocalBotLook.current?.picture,
+                )
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         session.displayName,
@@ -2868,7 +2879,9 @@ internal fun ReaderTopBar(
     onMenuClick: () -> Unit,
     menuContent: @Composable () -> Unit,
     onBack: () -> Unit = {},
-    botLook: BotLook? = null,
+    botFace: Int? = null,
+    botColor: Int? = null,
+    botPicture: String? = null,
 ) {
     var modelMenuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     if (LocalReaderStyle.current) {
@@ -2888,7 +2901,7 @@ internal fun ReaderTopBar(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        BotAvatar(botAvatarSource(session.name, session.workspaceColor, botLook), 28.dp)
+                        BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor, picture = botPicture)
                         Text(
                             session.displayName,
                             modifier = Modifier.weight(1f, fill = false),
@@ -2923,7 +2936,7 @@ internal fun ReaderTopBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                BotAvatar(botAvatarSource(session.name, session.workspaceColor, botLook), 28.dp)
+                BotAvatar(session.name, 28.dp, workspaceColor = session.workspaceColor, face = botFace, color = botColor, picture = botPicture)
                 Box(Modifier.weight(1f)) {
                     Column(
                         Modifier
@@ -3883,7 +3896,9 @@ internal fun ReaderScreen(
                 focusRequester = searchFocus,
             ) else if (!computerOpen) ReaderTopBar(
                 onBack = onBack,
-                botLook = draftStore.botLook(session),
+                botFace = draftStore.botFace(session),
+                botColor = draftStore.botColor(session),
+                botPicture = draftStore.shownBotPicture(session),
                 session = session,
                 modelLabel = menuRuntimeLabel ?: runtimeDetails.label,
                 statusLabel = statusLabel,
@@ -4295,7 +4310,6 @@ internal fun ReaderScreen(
                 if (mentionQuery != null && mentionOptions.isNotEmpty() && !dictationActive) {
                     ChatMentionPicker(
                         chats = mentionOptions,
-                        lookFor = { chat -> draftStore.botLook(chat.hostId, chat.session) },
                         onSelect = { chat ->
                             val (value, cursor) = ChatMention.pick(prompt, mentionQuery, promptField.selection.start, chat)
                             promptField = TextFieldValue(value, selection = TextRange(cursor))
@@ -5963,11 +5977,7 @@ private fun NativeSkillPicker(
 }
 
 @Composable
-private fun ChatMentionPicker(
-    chats: List<MentionChat>,
-    lookFor: (MentionChat) -> BotLook?,
-    onSelect: (MentionChat) -> Unit,
-) {
+private fun ChatMentionPicker(chats: List<MentionChat>, onSelect: (MentionChat) -> Unit) {
     ComposerList {
         chats.forEach { chat ->
             Row(
@@ -5977,7 +5987,7 @@ private fun ChatMentionPicker(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                BotAvatar(botAvatarSource(chat.session, chat.workspaceColor, lookFor(chat)), diameter = 28.dp)
+                BotAvatar(chat.session, diameter = 28.dp)
                 Text(chat.name, style = Kit.Body, color = Kit.Text, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text("Bot", style = Kit.Hint, color = Kit.TextMuted)
             }

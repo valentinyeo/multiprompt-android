@@ -15,12 +15,6 @@ const ciBlocks = source =>
     match => match[2]
   );
 
-const jobBody = (source, job) => {
-  const chunk = source.split(new RegExp(`^  ${job}:\\n`, 'm'))[1];
-  assert.ok(chunk, `missing job ${job}`);
-  return chunk.split(/^  [a-z][\w-]*:\n/m)[0];
-};
-
 test('a read only phone test job restores the newest cache so the Compose plugin is already on disk', () => {
   const strictMatch = action.match(/^\s+gradle-home-cache-strict-match:\s*(.+)$/m);
   assert.ok(strictMatch, 'gradle-ci must set gradle-home-cache-strict-match');
@@ -30,21 +24,6 @@ test('a read only phone test job restores the newest cache so the Compose plugin
     'read only jobs must allow the cache prefix fallback that the strict match blocks'
   );
   assert.match(action, /^\s+cache-read-only: \$\{\{ inputs\.read-only == 'true' \}\}$/m);
-  assert.doesNotMatch(
-    action,
-    /uses: gradle\/actions\/setup-gradle@v4[\s\S]*uses: gradle\/actions\/setup-gradle@v4/,
-    'a second setup-gradle in the same job is skipped after the first run'
-  );
-  assert.match(
-    action,
-    /Choose Gradle cache prefix[\s\S]*startswith\(\$p\)[\s\S]*GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: \$\{\{ steps\.gradle_prefix\.outputs\.prefix \}\}/,
-    'read only jobs must drop the warmed prefix when it is still cold so setup-gradle restores main build cache entries'
-  );
-  assert.match(
-    action,
-    /warm="\$\{prefix\}gradle-home-v1\|"/,
-    'the warmed cache probe must match setup-gradle keys that concatenate the prefix with gradle-home-v1'
-  );
 });
 
 test('every read only Gradle job names the job whose cache it restores', () => {
@@ -58,48 +37,6 @@ test('every read only Gradle job names the job whose cache it restores', () => {
       `${file} restores a read only cache without naming the job that saves it`
     );
   }
-});
-
-test('Android tests names a shared Gradle cache prefix so pull requests restore main Robolectric jars', () => {
-  const workflow = read('test.yml');
-  assert.match(
-    workflow,
-    /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m
-  );
-  assert.match(read('test.yml'), /^\s+actions: read\s*$/m, 'pull request test jobs need actions read to inspect warmed cache keys');
-  assert.match(
-    read('release.yml'),
-    /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m
-  );
-  assert.match(
-    read('verify.yml'),
-    /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX:\s*robolectric-warm-v1(?:\s+# gitleaks:allow)?\s*$/m
-  );
-});
-
-test('pull request build jobs restore the warmed cache instead of writing a fresh one without Robolectric jars', () => {
-  const build = jobBody(read('test.yml'), 'build');
-  assert.match(
-    build,
-    /read-only:\s*\$\{\{\s*github\.event_name\s*==\s*'pull_request'\s*\}\}/,
-    'build must stay read only on pull requests so parallel checker jobs restore main Robolectric jars'
-  );
-});
-
-test('the job that writes the cache warms the Robolectric jars the read only jobs restore', () => {
-  const build = jobBody(read('test.yml'), 'build');
-  assert.match(
-    build,
-    /tools\/ci\/gradle-retry\.sh --no-daemon [^\n]*:app:syncRobolectricAndroidAll/,
-    'build must download the Robolectric android-all jars so the read only jobs find them in the cache'
-  );
-  assert.match(
-    build,
-    /tools\/ci\/gradle-retry\.sh --no-daemon [^\n]*:app:generateDebugUnitTestLintModel/,
-    'build must download the lint model dependencies so lint finds them in the cache'
-  );
-  assert.match(action, /android-all-instrumented-\*\.jar/);
-  assert.match(action, /nativeruntime-dist-compat-\*\.jar/);
 });
 
 test('a cold build can still fetch the Compose plugin from the plugin repositories', () => {

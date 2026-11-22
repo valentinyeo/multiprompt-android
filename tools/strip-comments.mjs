@@ -14,7 +14,7 @@ const jsLanguages = new Set(['javascript', 'typescript']);
 
 function keptReason(text, start, source) {
   if (start === 0 && text.startsWith('#!')) return 'shebang';
-  if (/eslint-(?:disable|enable)|@ts-(?:check|nocheck|ignore|expect-error)|prettier-ignore|#\s*type:\s*ignore|#\s*noqa\b|#.*coding[:=]|#Requires\b|#\s*shellcheck\b|#\s*gitleaks:allow\b|\/\/\s*noinspection\b/i.test(text)) return 'tool directive';
+  if (/eslint-(?:disable|enable)|@ts-(?:check|nocheck|ignore|expect-error)|prettier-ignore|#\s*type:\s*ignore|#\s*noqa\b|#.*coding[:=]|#Requires\b|#\s*shellcheck\b|\/\/\s*noinspection\b/i.test(text)) return 'tool directive';
   if (/^# v[0-9]+[ \t]*$/.test(text) && /^[ \t]*(?:-[ \t]+)?uses:[ \t]+[\w.-]+\/[\w./-]+@[0-9a-f]{40}[ \t]+$/.test(source.slice(source.lastIndexOf('\n', start - 1) + 1, start))) return 'tool directive';
   return null;
 }

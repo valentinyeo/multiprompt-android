@@ -2,12 +2,7 @@ package dev.multiprompt.companion.reader
 
 import dev.multiprompt.companion.model.TmuxSession
 
-data class MentionChat(
-    val name: String,
-    val session: String,
-    val hostId: String = "",
-    val workspaceColor: Int = 0,
-)
+data class MentionChat(val name: String, val session: String)
 
 data class MentionQuery(val start: Int, val text: String)
 
@@ -17,11 +12,7 @@ object ChatMention {
 
     fun chats(sessions: List<TmuxSession>, current: TmuxSession): List<MentionChat> = sessions
         .filter { it.hostId == current.hostId && it.name != current.name && SESSION.matches(it.name) }
-        .mapNotNull { session ->
-            session.displayName.trim().takeIf { it.isNotEmpty() && it.length < MAX_NAME }?.let {
-                MentionChat(it, session.name, session.hostId, session.workspaceColor)
-            }
-        }
+        .mapNotNull { session -> session.displayName.trim().takeIf { it.isNotEmpty() && it.length < MAX_NAME }?.let { MentionChat(it, session.name) } }
         .distinct()
 
     fun query(text: String, cursor: Int): MentionQuery? {
