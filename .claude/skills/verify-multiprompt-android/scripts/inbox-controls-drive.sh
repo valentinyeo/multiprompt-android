@@ -144,38 +144,13 @@ reset_inbox_search() {
     done
     return 1
 }
-focus_inbox_search() {
-    local attempt
-    for attempt in {1..15}; do
-        if select_node focused-field '' >/dev/null 2>&1; then return 0; fi
-        if select_node desc 'Close session search' >/dev/null 2>&1; then
-            if (( attempt % 3 == 1 )); then
-                tap_desc 'Close session search'
-                sleep 1
-                tap_desc 'Search sessions'
-                sleep 1
-            else
-                tap_node editor '' >/dev/null 2>&1 || adb shell input tap 540 316
-            fi
-        else
-            tap_desc 'Search sessions' >/dev/null 2>&1 || true
-        fi
-        tap_node field 'Search all sessions' >/dev/null 2>&1 || true
-        sleep 1
-    done
-    printf 'INBOX_SEARCH_NOT_FOCUSED: the session search field never took focus\n' >&2
-    return 1
-}
 find_inbox_session() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
-        focus_inbox_search
-        select_node focused-field '' >/dev/null
-        clear_field ''
         adb shell input text verify-session
+        adb shell input keyevent KEYCODE_BACK
         dump_ui
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value '' verify-session
-        adb shell input keyevent KEYCODE_BACK
     fi
     wait_for_text '1 result across all splits'
     tap_node desc 'Robot verify-session' reveal
