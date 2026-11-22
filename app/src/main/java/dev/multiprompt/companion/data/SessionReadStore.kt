@@ -7,6 +7,8 @@ import dev.multiprompt.companion.ui.AppTheme
 import dev.multiprompt.companion.ssh.TmuxText
 import org.json.JSONObject
 
+data class BotLook(val picture: String?, val face: Int?, val color: Int?)
+
 class SessionReadStore(context: Context) {
     private val preferences = context.getSharedPreferences("session_read_state", Context.MODE_PRIVATE)
 
@@ -210,8 +212,10 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
-    fun botPicture(session: TmuxSession): String? =
-        preferences.getString(BOT_PICTURE_PREFIX + key(session.hostId, session.name), null)
+    fun botPicture(session: TmuxSession): String? = botPictureByKey(key(session.hostId, session.name))
+
+    private fun botPictureByKey(sessionKey: String): String? =
+        preferences.getString(BOT_PICTURE_PREFIX + sessionKey, null)
 
     fun setBotPicture(session: TmuxSession, path: String?) {
         val prefKey = BOT_PICTURE_PREFIX + key(session.hostId, session.name)
@@ -220,8 +224,10 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
-    fun shownBotPicture(session: TmuxSession): String? =
-        botPicture(session) ?: preferences.getString(BOT_SYNCED_PHOTO_PREFIX + key(session.hostId, session.name), null)
+    fun shownBotPicture(session: TmuxSession): String? = shownBotPictureByKey(key(session.hostId, session.name))
+
+    private fun shownBotPictureByKey(sessionKey: String): String? =
+        botPictureByKey(sessionKey) ?: preferences.getString(BOT_SYNCED_PHOTO_PREFIX + sessionKey, null)
 
     fun applySyncedBotPhotos(photos: Map<String, String?>) {
         val editor = preferences.edit()
@@ -236,8 +242,10 @@ class SessionReadStore(context: Context) {
         if (changed) editor.apply()
     }
 
-    fun botFace(session: TmuxSession): Int? =
-        preferences.getInt(BOT_FACE_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..19 }
+    fun botFace(session: TmuxSession): Int? = botFaceByKey(key(session.hostId, session.name))
+
+    private fun botFaceByKey(sessionKey: String): Int? =
+        preferences.getInt(BOT_FACE_PREFIX + sessionKey, -1).takeIf { it in 0..19 }
 
     fun setBotFace(session: TmuxSession, face: Int?) {
         val prefKey = BOT_FACE_PREFIX + key(session.hostId, session.name)
@@ -246,8 +254,17 @@ class SessionReadStore(context: Context) {
         editor.apply()
     }
 
-    fun botColor(session: TmuxSession): Int? =
-        preferences.getInt(BOT_COLOR_PREFIX + key(session.hostId, session.name), -1).takeIf { it in 0..7 }
+    fun botColor(session: TmuxSession): Int? = botColorByKey(key(session.hostId, session.name))
+
+    private fun botColorByKey(sessionKey: String): Int? =
+        preferences.getInt(BOT_COLOR_PREFIX + sessionKey, -1).takeIf { it in 0..7 }
+
+    fun botLook(hostId: String, sessionName: String): BotLook {
+        val sessionKey = key(hostId, sessionName)
+        return BotLook(shownBotPictureByKey(sessionKey), botFaceByKey(sessionKey), botColorByKey(sessionKey))
+    }
+
+    fun botLook(session: TmuxSession): BotLook = botLook(session.hostId, session.name)
 
     fun applySharedBotLooks(looks: Map<String, Pair<Int?, Int?>>) {
         val editor = preferences.edit()

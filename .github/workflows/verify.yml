@@ -202,6 +202,7 @@ jobs:
     timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
     env:
       GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
+      GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: robolectric-warm-v1 # gitleaks:allow
       EVIDENCE: ${{ github.workspace }}/verification-evidence
       VERIFY_FEATURE: ${{ inputs.driver_feature || inputs.feature || 'native-skills.md' }}
       VERIFY_JOURNEY: ${{ inputs.feature || 'native-skills.md' }}
