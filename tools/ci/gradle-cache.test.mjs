@@ -40,6 +40,11 @@ test('a read only phone test job restores the newest cache so the Compose plugin
     /Choose Gradle cache prefix[\s\S]*startswith\(\$p\)[\s\S]*GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: \$\{\{ steps\.gradle_prefix\.outputs\.prefix \}\}/,
     'read only jobs must drop the warmed prefix when it is still cold so setup-gradle restores main build cache entries'
   );
+  assert.match(
+    action,
+    /warm="\$\{prefix\}gradle-home-v1\|"/,
+    'the warmed cache probe must match setup-gradle keys that concatenate the prefix with gradle-home-v1'
+  );
 });
 
 test('every read only Gradle job names the job whose cache it restores', () => {
