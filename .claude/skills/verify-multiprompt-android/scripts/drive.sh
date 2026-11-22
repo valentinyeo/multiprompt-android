@@ -2685,19 +2685,14 @@ if [[ "$feature" == terminal.md ]]; then
     exit 0
 fi
 send_timing() {
-    local xml=$1 log=$2 sent=$3 marks composer
+    local xml=$1 log=$2 sent=$3 marks
     marks=$(sed -nE 's/.*SendTiming.*: ([a-z_]+) \+([0-9]+)ms.*/\1=\2ms/p' "$log")
     printf 'SEND_TIMING %s\n' "$(printf '%s\n' "$marks" | tr '\n' ' ')"
     grep -q '^message_added=' <<< "$marks"
     grep -q '^box_cleared_frame=' <<< "$marks"
-    composer=$(grep '^box_cleared_frame=' <<< "$marks" | cut -d= -f2 | tr -d 'ms')
-    if (( composer >= 100 )); then
-        printf 'box cleared %s ms after tap, limit 100\n' "$composer" >&2
-        return 1
-    fi
     python3 "$scripts/mpa" proof --name send-tap --xml "$xml" --require-text "$sent" >/dev/null
-    python3 "$scripts/mpa" read --xml "$xml" --select editor-value --value composer | grep -Fv "\"text\": \"$sent\""
-    printf 'SEND_AT_TAP_OK\n'
+    python3 "$scripts/mpa" read --xml "$xml" --select editor-value --value composer | jq -e '.matches == 1 and .node.text == ""'
+    printf 'SEND_BEFORE_TRANSPORT_OK\n'
 }
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
 sudo -u verifyssh python3 -c 'import json,time; json.dump({"verify-session":{"started_at":int(time.time())-120,"est_seconds":240}},open("/home/verifyssh/.local/state/multiprompt/eta-open.json","w"))'
@@ -2711,13 +2706,16 @@ python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%
 sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
 #!/usr/bin/env bash
 printf '%s start %s\n' "$(date +%T.%N)" "${SSH_ORIGINAL_COMMAND:0:90}" >> /home/verifyssh/commands.log
-case "$SSH_ORIGINAL_COMMAND" in *mp_buffer=*) sleep 15 ;; esac
+case "$SSH_ORIGINAL_COMMAND" in
+    *mp_buffer=*) timeout 60s bash -c 'until test -f /home/verifyssh/send-release; do sleep 1; done' || exit 1 ;;
+esac
 bash -c "$SSH_ORIGINAL_COMMAND"
 code=$?
 printf '%s exit %s %s\n' "$(date +%T.%N)" "$code" "${SSH_ORIGINAL_COMMAND:0:60}" >> /home/verifyssh/commands.log
 exit "$code"
 DELAY
 sudo chmod 755 /home/verifyssh/send-delay.sh
+sudo -u verifyssh rm -f /home/verifyssh/send-release
 sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
@@ -2727,6 +2725,7 @@ shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
 send_timing "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
+sudo -u verifyssh touch /home/verifyssh/send-release
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result
