@@ -65,6 +65,7 @@ test('PR journeys come only from touched registry outcomes; even tooling receive
   const verifier = read('.github/scripts/pstack-verifier/verifier.cjs');
   assert.doesNotMatch(verifier, /features: \[SMOKE_JOURNEY\]/);
   assert.match(verifier, /validateFeatures\(required\)/);
+  assert.match(verifier, /capPrJourneys\(requiredFeatures/);
   assert.doesNotMatch(verifier, /\.\.\.\(picked\.smoke \? \[\] : picked\.features\)/);
   assert.doesNotMatch(workflow, /PARENT_WORKFLOW_EXIT|verifier-tooling-proof|reuse\.cjs/);
 });

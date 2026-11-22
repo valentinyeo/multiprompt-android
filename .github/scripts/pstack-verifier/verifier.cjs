@@ -122,13 +122,24 @@ function validateFeatures(raw) {
   return { features, dropped };
 }
 
-function includeRequiredJourneys(picked, plan, diff = '', changed = coverageGate.changedJourneys(diff)) {
+function includeRequiredJourneys(picked, plan, diff = '', changed, files) {
+  const selection = coverageGate.selectionForChange(diff, files);
+  const mapped = changed ?? selection.required;
+  const direct = [...new Set([...selection.direct, ...coverageGate.changedRecipes(diff, files)])];
   const required = [...new Set([
-    ...changed,
-    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
+    ...mapped,
+    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id]?.journey),
   ].filter(name => ALLOWLIST.includes(name)))];
-  const { features } = validateFeatures(required);
-  return { ...picked, features, dropped: (picked.dropped ?? []).filter(name => !required.includes(name)), smoke: false };
+  const { features: requiredFeatures } = validateFeatures(required);
+  const { features, dropped: capDropped } = coverageGate.capPrJourneys(requiredFeatures, { direct, smoke: selection.smoke });
+  const invalidDropped = (picked.dropped ?? []).filter(name => !features.includes(name));
+  return {
+    ...picked,
+    features,
+    dropped: [...new Set([...invalidDropped, ...capDropped])],
+    smoke: false,
+    harnessSmoke: selection.shared ? selection.smoke : [],
+  };
 }
 
 function journeyRunners(features) {
@@ -567,9 +578,10 @@ async function finishPick(state, env, picked) {
   if (picked.unmapped) console.error(`pstack-verifier pick: the model also answered unmapped; the ${state.codePlan.outcomes.length} code-mapped outcome(s) stand.`);
   const plan = coverageGate.planChange(state.diff, picked.changedOutcomes, state.files);
   if (plan.product && picked.changeKind === 'tooling') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
-  const selected = includeRequiredJourneys(picked, plan, state.diff, state.changed);
+  const selected = includeRequiredJourneys(picked, plan, state.diff, state.changed, state.files);
   const reason = picked.reason || 'Journeys chosen for this change.';
-  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
+  const harness = selected.harnessSmoke?.length ? ` harness_smoke=${JSON.stringify(selected.harnessSmoke)}` : '';
+  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} cap=${selected.features.length}/${coverageGate.MAX_PR_JOURNEYS}${harness} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
   setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind });
 }
 
