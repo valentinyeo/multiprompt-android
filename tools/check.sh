@@ -18,6 +18,8 @@ source_checks() {
   node --test tools/inbox-controls.test.js
   python3 -B tools/message-projection/check.py
   python3 -B tools/message-projection/check.test.py
+  python3 -B tools/tmux-target/check.py
+  python3 -B tools/tmux-target/check.test.py
   python3 -B tools/message-projection/ui.test.py
   node --test tools/verify-seed.test.js
   python3 -I tools/verify-seed.test.py
