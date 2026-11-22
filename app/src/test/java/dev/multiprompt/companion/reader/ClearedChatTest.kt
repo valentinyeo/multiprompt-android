@@ -62,6 +62,16 @@ class ClearedChatTest {
     }
 
     @Test
+    fun aTranscriptSwapStillAppliesWhenClearMtimeDoesNotAdvance() {
+        val shown = ChatHistory(sid = sid, inode = 1, offset = 100, mtime = stamp(2_000.0),
+            rows = listOf(timed(0, "VERIFY_READY_1008", "old", "2026-11-21T16:00:00.000Z")))
+        val afterClear = shown.apply(page(listOf(timed(0, "CLEARED_READY_2474", "new", "2026-11-21T15:00:00.000Z")), inode = 2, at = 1_900.0))
+        assertEquals(2L, afterClear.inode)
+        assertEquals(2_000.0, afterClear.clearedAt, 0.0)
+        assertEquals(listOf("CLEARED_READY_2474"), afterClear.messages.map { it.text })
+    }
+
+    @Test
     fun theClearBoundarySurvivesTheCachedChatAfterARestart() {
         val cache = ChatHistoryCache(temporary.newFolder("cleared-cache"))
         cache.save("host/tmux", cleared())

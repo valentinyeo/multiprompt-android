@@ -279,7 +279,7 @@ data class ChatHistory(
             return copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions, clearedAt = cleared)
         }
         val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions, cleared)
-        val staleTail = mode == "tail" && !sourceAdvanced && olderThan(this, next)
+        val staleTail = mode == "tail" && !replaced && !sourceAdvanced && olderThan(this, next)
         return if (staleTail) this else next
     }
 
