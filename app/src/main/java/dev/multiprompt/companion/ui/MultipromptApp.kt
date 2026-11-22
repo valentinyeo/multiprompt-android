@@ -1339,37 +1339,22 @@ internal fun SessionsScreen(
     }
     LaunchedEffect(signedIn) { onRefreshRooms() }
     renamePromptSession?.let { session ->
-        KitSheet(onDismiss = {
-            renamePromptSession = null
-            renameError = null
-        }) {
-            Text("Rename session", style = Kit.Heading, color = Kit.Text)
-            OutlinedTextField(
-                value = renameDraft,
-                onValueChange = {
-                    renameDraft = it
-                    renameError = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Name") },
-                supportingText = renameError?.let { message -> { Text(message) } },
-                isError = renameError != null,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    renameError = onRenameSession(session, renameDraft)
-                    if (renameError == null) renamePromptSession = null
-                }),
-            )
-            KitSecondaryButton("Cancel", onClick = {
+        RenameSessionSheet(
+            draft = renameDraft,
+            onDraftChange = {
+                renameDraft = it
+                renameError = null
+            },
+            error = renameError,
+            onDismiss = {
                 renamePromptSession = null
                 renameError = null
-            }, modifier = Modifier.fillMaxWidth())
-            KitPrimaryButton("Rename", onClick = {
+            },
+            onRename = {
                 renameError = onRenameSession(session, renameDraft)
                 if (renameError == null) renamePromptSession = null
-            }, modifier = Modifier.fillMaxWidth())
-        }
+            },
+        )
     }
     renameGroupPrompt?.let { group ->
         KitSheet(onDismiss = {
@@ -3629,37 +3614,22 @@ internal fun ReaderScreen(
         }
     }
     if (renameDialogVisible) {
-        KitSheet(onDismiss = {
-            renameDialogVisible = false
-            renameError = null
-        }) {
-            Text("Rename session", style = Kit.Heading, color = Kit.Text)
-            OutlinedTextField(
-                value = renameDraft,
-                onValueChange = {
-                    renameDraft = it
-                    renameError = null
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Name") },
-                supportingText = renameError?.let { message -> { Text(message) } },
-                isError = renameError != null,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    renameError = onRename(renameDraft)
-                    if (renameError == null) renameDialogVisible = false
-                }),
-            )
-            KitSecondaryButton("Cancel", onClick = {
+        RenameSessionSheet(
+            draft = renameDraft,
+            onDraftChange = {
+                renameDraft = it
+                renameError = null
+            },
+            error = renameError,
+            onDismiss = {
                 renameDialogVisible = false
                 renameError = null
-            }, modifier = Modifier.fillMaxWidth())
-            KitPrimaryButton("Rename", onClick = {
+            },
+            onRename = {
                 renameError = onRename(renameDraft)
                 if (renameError == null) renameDialogVisible = false
-            }, modifier = Modifier.fillMaxWidth())
-        }
+            },
+        )
     }
     if (endDialogVisible) {
         DestructiveConfirmationSheet(

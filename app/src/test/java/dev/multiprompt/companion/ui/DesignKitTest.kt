@@ -488,6 +488,41 @@ class DesignKitTest {
         compose.onNodeWithText("Saved").assertExists()
     }
 
+    private fun assertRenameSessionSheetColours(sunlight: Boolean, tag: String) {
+        val palette = kitPalette(sunlight)
+        compose.setContent {
+            MultipromptTheme(sunlight = sunlight, material3 = false) {
+                KitSheetSurface(Modifier.testTag("rename-session-sheet")) {
+                    RenameSessionSheetBody(
+                        draft = "Runner",
+                        onDraftChange = {},
+                        error = null,
+                        onDismiss = {},
+                        onRename = {},
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("Rename session").assertIsDisplayed()
+        val sheet = capture("$tag-sheet", compose.onNodeWithTag("rename-session-sheet"))
+        assertPixel(sheet, 4, sheet.height - 4, palette.sheet, "$tag sheet fill")
+        val field = capture("$tag-field", compose.onNodeWithTag("rename-name-field"))
+        assertPixel(field, field.width / 2, field.height - 8, palette.surface, "$tag field fill")
+        assertPixel(field, field.width / 2, 0, palette.outline, "$tag field outline")
+        val heading = capture("$tag-heading", compose.onNodeWithText("Rename session"))
+        assertPixel(heading, 4, heading.height / 2, palette.text, "$tag heading text")
+    }
+
+    @Test
+    fun renameSessionSheetFollowsKitColoursAtNight() {
+        assertRenameSessionSheetColours(sunlight = false, tag = "rename-night")
+    }
+
+    @Test
+    fun renameSessionSheetFollowsKitColoursInDayMode() {
+        assertRenameSessionSheetColours(sunlight = true, tag = "rename-day")
+    }
+
     @Test
     fun kitFileUsesOnlyReaderTokens() {
         val source = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
