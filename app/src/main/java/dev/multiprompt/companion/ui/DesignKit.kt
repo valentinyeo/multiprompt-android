@@ -675,6 +675,31 @@ internal fun KitNameField(
 }
 
 @Composable
+internal fun RenameSessionSheetBody(
+    draft: String,
+    onDraftChange: (String) -> Unit,
+    error: String?,
+    onDismiss: () -> Unit,
+    onRename: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = kit()
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Rename session", style = Kit.Heading, color = colors.text)
+        KitNameField(
+            value = draft,
+            onValueChange = onDraftChange,
+            label = "Name",
+            error = error,
+            modifier = Modifier.testTag("rename-name-field"),
+            keyboardActions = KeyboardActions(onDone = { onRename() }),
+        )
+        KitSecondaryButton("Cancel", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
+        KitPrimaryButton("Rename", onClick = onRename, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
 internal fun RenameSessionSheet(
     draft: String,
     onDraftChange: (String) -> Unit,
@@ -682,20 +707,7 @@ internal fun RenameSessionSheet(
     onDismiss: () -> Unit,
     onRename: () -> Unit,
 ) {
-    val colors = kit()
     KitSheet(onDismiss = onDismiss) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Rename session", style = Kit.Heading, color = colors.text)
-            KitNameField(
-                value = draft,
-                onValueChange = onDraftChange,
-                label = "Name",
-                error = error,
-                modifier = Modifier.testTag("rename-name-field"),
-                keyboardActions = KeyboardActions(onDone = { onRename() }),
-            )
-            KitSecondaryButton("Cancel", onClick = onDismiss, modifier = Modifier.fillMaxWidth())
-            KitPrimaryButton("Rename", onClick = onRename, modifier = Modifier.fillMaxWidth())
-        }
+        RenameSessionSheetBody(draft, onDraftChange, error, onDismiss, onRename)
     }
 }
