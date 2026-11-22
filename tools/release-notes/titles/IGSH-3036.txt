@@ -1,0 +1,1 @@
+Android: mention menu shows each chat's own bot face
