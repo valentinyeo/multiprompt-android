@@ -456,6 +456,33 @@ class DesignKitTest {
     }
 
     @Test
+    fun renameSessionSheetFollowsKitColoursInDayAndNight() {
+        listOf(false to "rename-night", true to "rename-day").forEach { (sunlight, tag) ->
+            val palette = kitPalette(sunlight)
+            compose.setContent {
+                MultipromptTheme(sunlight = sunlight) {
+                    RenameSessionSheet(
+                        draft = "Runner",
+                        onDraftChange = {},
+                        error = null,
+                        onDismiss = {},
+                        onRename = {},
+                    )
+                }
+            }
+            compose.onNodeWithText("Rename session").assertIsDisplayed()
+            val field = capture("$tag-field", compose.onNodeWithTag("rename-name-field"))
+            assertPixel(field, 6, 4, palette.outline, "$tag field outline")
+            assertPixel(field, 8, field.height / 2, palette.surface, "$tag field fill")
+            val heading = capture("$tag-heading", compose.onNodeWithText("Rename session"))
+            assertPixel(heading, 4, heading.height / 2, palette.text, "$tag heading text")
+            val cancel = capture("$tag-cancel", compose.onNodeWithText("Cancel"))
+            assertPixel(cancel, 8, cancel.height / 2, palette.surface, "$tag cancel fill")
+            assertPixel(cancel, cancel.width / 2, cancel.height / 2, palette.text, "$tag cancel label")
+        }
+    }
+
+    @Test
     fun kitFileUsesOnlyReaderTokens() {
         val source = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
         listOf("MaterialTheme", "colorScheme", "DropdownMenu", "AlertDialog", "Color(0x").forEach {
