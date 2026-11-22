@@ -15,6 +15,12 @@ const ciBlocks = source =>
     match => match[2]
   );
 
+const jobBody = (source, job) => {
+  const chunk = source.split(new RegExp(`^  ${job}:\\n`, 'm'))[1];
+  assert.ok(chunk, `missing job ${job}`);
+  return chunk.split(/^  [a-z][\w-]*:\n/m)[0];
+};
+
 test('a read only phone test job restores the newest cache so the Compose plugin is already on disk', () => {
   const strictMatch = action.match(/^\s+gradle-home-cache-strict-match:\s*(.+)$/m);
   assert.ok(strictMatch, 'gradle-ci must set gradle-home-cache-strict-match');
@@ -37,6 +43,22 @@ test('every read only Gradle job names the job whose cache it restores', () => {
       `${file} restores a read only cache without naming the job that saves it`
     );
   }
+});
+
+test('the job that writes the cache warms the Robolectric jars the read only jobs restore', () => {
+  const build = jobBody(read('test.yml'), 'build');
+  assert.match(
+    build,
+    /tools\/ci\/gradle-retry\.sh --no-daemon [^\n]*:app:syncRobolectricAndroidAll/,
+    'build must download the Robolectric android-all jars so the read only jobs find them in the cache'
+  );
+  assert.match(
+    build,
+    /tools\/ci\/gradle-retry\.sh --no-daemon [^\n]*:app:generateDebugUnitTestLintModel/,
+    'build must download the lint model dependencies so lint finds them in the cache'
+  );
+  assert.match(action, /android-all-instrumented-\*\.jar/);
+  assert.match(action, /nativeruntime-dist-compat-\*\.jar/);
 });
 
 test('a cold build can still fetch the Compose plugin from the plugin repositories', () => {
