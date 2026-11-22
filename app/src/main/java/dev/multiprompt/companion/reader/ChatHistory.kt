@@ -193,7 +193,13 @@ data class ChatHistory(
         }
         ordered.forEach(::append)
         unmatched.filter { it.turn != host.turn }.forEach(::appendReply)
-        cards.filter { it.message.key !in placed && it.visible }.forEach { append(it.message) }
+        val settledThrough = cards.filter { it.message.key in placed }.mapNotNull { it.shared?.position }.maxOrNull()
+        fun stale(card: Card): Boolean {
+            val row = card.shared ?: return false
+            if (settledThrough == null || row.position >= settledThrough) return false
+            return row.state == MessageProtocol.State.ACCEPTED || row.state == MessageProtocol.State.STARTED
+        }
+        cards.filter { it.message.key !in placed && it.visible && !stale(it) }.forEach { append(it.message) }
         replies.values.flatten().forEach(::appendReply)
         val canonical = scoped.associateBy { it.id }
         unresolved.filter { it.operation == "submit" && it.scope.sid == sid && canonical[it.messageId]?.text != it.text }.forEach { entry ->
