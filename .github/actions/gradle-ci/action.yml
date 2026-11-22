@@ -17,8 +17,8 @@ runs:
       shell: bash
       run: |
         cache="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/org.robolectric"
-        android_all=$(find "$cache" -name 'android-all-instrumented-*.jar' 2>/dev/null | wc -l | tr -d ' ')
-        native_runtime=$(find "$cache" -name 'nativeruntime-dist-compat-*.jar' 2>/dev/null | wc -l | tr -d ' ')
+        android_all=$({ find "$cache" -name 'android-all-instrumented-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
+        native_runtime=$({ find "$cache" -name 'nativeruntime-dist-compat-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
         echo "robolectric cache: android-all-instrumented=$android_all nativeruntime-dist-compat=$native_runtime"
         if [ "$android_all" -gt 0 ] && [ "$native_runtime" -gt 0 ]; then
           echo "robolectric cache hit: this job resolves the Robolectric jars from the restored Gradle cache"
