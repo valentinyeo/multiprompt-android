@@ -19,7 +19,7 @@ runs:
           printf 'prefix=%s\n' "$prefix" >> "$GITHUB_OUTPUT"
           exit 0
         fi
-        warm="${prefix}|gradle-home-v1|"
+        warm="${prefix}gradle-home-v1|"
         if gh api "/repos/${GITHUB_REPOSITORY}/actions/caches?per_page=100" \
             --jq --arg p "$warm" 'any(.actions_caches[]; .key | startswith($p))' | grep -qx true; then
           echo "read only jobs restore warmed Gradle cache prefix $prefix"

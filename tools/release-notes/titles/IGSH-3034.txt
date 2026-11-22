@@ -1,0 +1,1 @@
+Merge check compares with the newest nightly run
