@@ -93,6 +93,7 @@ internal object Kit {
     val SideChange = 16.dp
     val RowHeight = 52.dp
     val ControlHeight = 48.dp
+    val ComposerShape = RoundedCornerShape(ControlHeight / 2)
     val ControlInnerSize = 36.dp
     val ControlIconSize = 20.dp
     val InnerInset = (ControlHeight - ControlInnerSize) / 2
@@ -179,7 +180,7 @@ internal fun KitComposerPill(
     content: @Composable RowScope.() -> Unit,
 ) {
     Row(
-        modifier.fillMaxWidth().heightIn(min = Kit.ControlHeight).kitSurface(fill = fill).padding(Kit.InnerInset),
+        modifier.fillMaxWidth().heightIn(min = Kit.ControlHeight).kitSurface(Kit.ComposerShape, fill).padding(Kit.InnerInset),
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(Kit.InnerInset),
         content = content,

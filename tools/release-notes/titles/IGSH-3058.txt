@@ -1,0 +1,1 @@
+IGSH-3058: Long draft turns the entry box into an oval
