@@ -2117,8 +2117,6 @@ fi
 if [[ "$feature" == chat-queued.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     wait_for_text VERIFY_READY_1008
-elif [[ "$feature" == chat-resync.md ]]; then
-    wait_for_text ACCEPTED_FOURTH
 else
     wait_for_text VERIFY_READY_528
 fi
@@ -2454,38 +2452,14 @@ if [[ "$feature" == chat-resync.md ]]; then
     resync_event() {
         sudo -u verifyssh env GITHUB_ACTIONS=true python3 /home/verifyssh/resync-console.py event "$1"
     }
-    resync_rows() {
-        local phase=$1 identity direction attempt found x1 y1 x2 y2
-        for identity in recovery-head pending-one pending-two accepted-fourth; do
-            found=false
-            for direction in older newer; do
-                for attempt in {1..10}; do
-                    shot "resync-$phase-$identity-$direction-$attempt"
-                    if python3 "$scripts/resync-console.py" ui-row "$EVIDENCE/current.xml" "$identity" "$phase" > "$EVIDENCE/resync-$phase-$identity.json" 2> "$EVIDENCE/resync-row-error.txt"; then
-                        found=true
-                        break
-                    fi
-                    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-                    if [[ "$direction" == older ]]; then
-                        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
-                    else
-                        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
-                    fi
-                    sleep 1
-                done
-                if [[ "$found" == true ]]; then break; fi
-            done
-            if [[ "$found" != true ]]; then
-                cat "$EVIDENCE/resync-row-error.txt" >&2
-                printf 'RESYNC_UI_ROW_NOT_PROVEN:%s:%s\n' "$phase" "$identity" >&2
-                return 1
-            fi
-        done
+    resync_reader() {
+        wait_for_text 'FIRST REPLY'
+        shot "resync-reader-$1"
     }
     unzip -p "$VERIFY_APK" assets/chat_history_reader.py | sha256sum > "$EVIDENCE/embedded-reader-sha256.txt"
     cp tools/vendor/chat-reader/SHA256SUMS "$EVIDENCE/canonical-corpus-sha256.txt"
     resync_event before > "$EVIDENCE/resync-server-before.json"
-    resync_rows before
+    resync_reader before
     fill 'Message verify-session' 'draft%sstays%shere'
     shot resync-draft-before
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-before.bin"
@@ -2514,7 +2488,7 @@ if [[ "$feature" == chat-resync.md ]]; then
         exit 1
     fi
     python3 "$scripts/toast.py" "$EVIDENCE/toast-settled.png" "${toast_shots[@]}" | tee "$EVIDENCE/toast-result.txt"
-    resync_rows after
+    resync_reader after
     shot resync-draft-after
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"
     cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-after.bin"
@@ -2522,7 +2496,7 @@ if [[ "$feature" == chat-resync.md ]]; then
     wait_for_text 'Reset this chat'
     tap_text 'Reset this chat'
     sleep 5
-    resync_rows repeat
+    resync_reader repeat
     shot resync-draft-repeat
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-repeat.bin"
     cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-repeat.bin"

@@ -5,6 +5,12 @@ For Claude and Codex, Reset this chat resets shared waiting copies.
 This recipe cannot prove shared-store Reset.
 Use [shared chat store](chat-shared.md) instead.
 
+The current app never asks the reader for legacy held rows.
+`ChatHistoryProtocol.messageProvider` gives every agent the chat screen supports a provider, and `ChatHistoryConnection` sends `held = provider == null`.
+`chat_history_reader.py` therefore returns no held rows, so this phone build renders none.
+Only a build from before IGSH-1271 can show them.
+This journey therefore proves the Reset round trip on a host that still carries a legacy queue: the reader keeps its transcript before, after and across a second Reset, the phone draft survives byte for byte, no prompt is sent, and the fixture runs the bundled reader's own recovery pass to settle the two receipt-backed IDs.
+
 ## Sub-features
 
 - Open "Reset this chat" through the chat menu.
@@ -17,8 +23,8 @@ Use [shared chat store](chat-shared.md) instead.
 
 ## How to get to it
 
-Open `verify-session` and require **Message verify-session** before checking queue rows. Then open its three-dot menu.
-Tap Resync chat.
+Open `verify-session` and require **Message verify-session** before opening the menu. Then open its three-dot menu.
+Tap Reset this chat.
 
 ## Hosted fixture
 
@@ -74,8 +80,9 @@ Origins stay unchanged; recovery cursors stay NULL.
 The appended snapshot enters evidence before commit.
 
 The driver then taps Resync chat.
-Normal foreground watching may also recover these receipts.
-This journey doesn't attribute recovery solely to Resync.
+The app does not request legacy held rows, so it never triggers legacy recovery itself.
+The fixture runs the reader's own `drain_held_queue` when the driver asks for the after state, inside the already-appended receipt window.
+This journey does not attribute recovery to Resync chat.
 
 ## Required evidence
 
@@ -87,14 +94,9 @@ Exactly two genuine pending IDs must remain queued.
 Both must remain in the held set.
 No global absence-of-Queued assertion is valid.
 
-Phone checks separately match each unique body.
-Before recovery, the head shows Sending.
-Each other fixture row shows Queued.
-Afterward, accepted bodies appear once per captured viewport.
-Their rows must have no pending label.
-A Delivered badge is optional, not required.
-Both pending bodies must still show Queued.
-Scrolling locates rows outside the lazy viewport.
+Phone checks require the reader transcript row **FIRST REPLY** before the first Reset, after it, and after a second Reset.
+Legacy held rows are not rendered by this app version, so this recipe never claims a phone-side queued, sending or delivered label.
+The draft editor must still hold the captured bytes at each of those three points.
 
 Draft files compare exact bytes using `cmp`.
 SID, inode, tmux target and origins stay fixed.
@@ -105,8 +107,6 @@ Receipt claims and all server facts stay identical.
 
 Artifacts retain screenshots, XML and toast captures.
 The pill check proves feedback, not its wording.
-Pending rows can produce unconfirmed-message feedback.
-It must not imply complete queue recovery.
 Server snapshots omit bodies, receipt digests and credentials.
 Phone captures contain only synthetic fixture bodies.
 Reader, fixture, corpus and APK hashes remain available.

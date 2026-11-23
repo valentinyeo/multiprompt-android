@@ -192,7 +192,10 @@ def console():
                 return accepted_event
             require(name in ("after", "repeat"), "RESYNC_UNKNOWN_EVENT")
             require(accepted_event is not None, "RESYNC_EVENT_ORDER_WRONG")
+            if name == "after":
+                reader.drain_held_queue(TMUX, SID, TRANSCRIPT)
             result = snapshot(db)
+            result["legacy_recovery"] = "fixture"
             verify(result, "after")
             if name == "after":
                 baseline = result

@@ -161,7 +161,7 @@
     },
     "chat-resync.md": {
       "name": "Legacy resync",
-      "description": "historical held-queue proof; not host Reset proof.",
+      "description": "legacy held-queue server proof; the phone shows its reader transcript across Reset and never claims legacy rows, which this app version does not request.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
