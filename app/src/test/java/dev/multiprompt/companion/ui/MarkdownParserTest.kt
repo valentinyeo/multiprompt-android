@@ -87,6 +87,17 @@ class MarkdownParserTest {
         assertEquals("abc\ndef", code.text)
     }
 
+    @Test fun unlabelledFenceKeepsOneLongLine() {
+        val line = "payload".repeat(120)
+        val source = "Intro.\n\n```\n$line\n```\n\nOutro."
+        val blocks = MarkdownParser.parse(source)
+        val code = blocks.filterIsInstance<MdBlock.Code>().single()
+        assertEquals("", code.language)
+        assertEquals(line, code.text)
+        assertEquals("Intro.", (blocks.first() as MdBlock.Paragraph).runs.joinToString("") { it.text })
+        assertEquals("Outro.", (blocks.last() as MdBlock.Paragraph).runs.joinToString("") { it.text })
+    }
+
     @Test fun blockQuote() {
         val q = MarkdownParser.parse("> hi\n> there").single() as MdBlock.Quote
         assertEquals("hi\nthere", q.runs.joinToString("") { it.text })
