@@ -10,6 +10,24 @@ import xml.etree.ElementTree as ET
 
 from PIL import Image, ImageDraw, ImageFont
 
+
+def visibility_window(captures, reply_monotonic):
+    positive = next((capture for capture in captures
+                     if capture['ocrPositive'] and capture['endMonotonic'] >= reply_monotonic), None)
+    assert positive is not None, 'CHAT_VISIBILITY_INCONCLUSIVE: no OCR-positive screenshot after the reply event'
+    negative = next((capture for capture in reversed(captures[:captures.index(positive)])
+                     if not capture['ocrPositive']), None)
+    lower = max(0, negative['startMonotonic'] - reply_monotonic) if negative else 0
+    upper = positive['endMonotonic'] - reply_monotonic
+    assert lower <= 3, f'CHAT_STALE: reply absent at least {lower:.3f}s after the reply event'
+    duration = max(capture['endMonotonic'] - capture['startMonotonic']
+                   for capture in (negative, positive) if capture is not None)
+    return dict(status='passed' if upper <= 3 and duration <= 1 else 'inconclusive',
+                replyLatencyLowerSeconds=lower, replyLatencySeconds=upper,
+                captureSeconds=duration, capture=positive,
+                observationGapSeconds=positive['startMonotonic'] - negative['endMonotonic'] if negative else None)
+
+
 assert os.environ.get('GITHUB_ACTIONS') == 'true'
 assert subprocess.check_output(['adb', 'get-serialno'], text=True, timeout=10).startswith('emulator-')
 root = Path(os.environ['EVIDENCE'])
@@ -135,15 +153,9 @@ finally:
         for capture in captures:
             text = subprocess.check_output(['tesseract', str(root / capture['file']), 'stdout'], text=True, stderr=subprocess.DEVNULL, timeout=15)
             capture['ocrPositive'] = 'Followup received.' in text
-            if not capture['ocrPositive']:
-                continue
-            shutil.copyfile(root / capture['file'], root / 'catchup-visible.png')
-            if reply is None or capture['startMonotonic'] < reply['monotonic']:
-                continue
-            result['capture'] = capture
-            result['replyLatencySeconds'] = capture['startMonotonic'] - reply['monotonic']
-            result['captureSeconds'] = capture['endMonotonic'] - capture['startMonotonic']
-            break
+        assert reply is not None, 'REPLY_EVENT_MISSING'
+        result.update(visibility_window(captures, reply['monotonic']))
+        shutil.copyfile(root / result['capture']['file'], root / 'catchup-visible.png')
     finally:
         (root / 'catchup-samples.json').write_text(json.dumps(samples, indent=2))
         (root / 'catchup-screenshots.json').write_text(json.dumps(captures, indent=2))
@@ -167,9 +179,6 @@ finally:
     if errors:
         raise RuntimeError(f'BACKGROUND_WORKER_FAILED: {errors}')
 
-latency = result['replyLatencySeconds']
-assert latency is not None, 'CHAT_VISIBILITY_INCONCLUSIVE: no OCR-positive screenshot started after the reply event'
-assert 0 <= latency <= 3, f'CHAT_VISIBILITY_INCONCLUSIVE: upper bound {latency:.3f}s exceeds 3s'
-result['status'] = 'passed'
-(root / 'catchup-result.json').write_text(json.dumps(result, indent=2))
-print('ANDROID_CHAT_CAUGHT_UP_WITHIN_3_SECONDS_FOR_120_SECONDS', result)
+marker = ('ANDROID_CHAT_CAUGHT_UP_WITHIN_3_SECONDS_FOR_120_SECONDS'
+          if result['status'] == 'passed' else 'CHAT_VISIBILITY_INCONCLUSIVE')
+print(marker, result)

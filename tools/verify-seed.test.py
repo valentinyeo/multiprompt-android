@@ -92,12 +92,19 @@ class VerifySeedTest(unittest.TestCase):
             return '\n'.join(names) + '\n'
 
         evidence = self.home / 'fresh-start-counts.json'
-        recorded = dict(sessions=1, bulk_sessions=0, session_names=names, shapes=[], transcript=None,
+        recorded = dict(sessions=1, bulk_sessions=0, session_names=list(names), shapes=[], transcript=None,
                         real_chat=None, fresh_start=manifest)
         evidence.write_text(json.dumps(recorded))
         with patch.object(seed.subprocess, 'check_output', side_effect=tmux_fresh):
-            counts = seed.check(self.home, evidence)
-        self.assertEqual(recorded, counts)
+            self.assertEqual(recorded, seed.check(self.home, evidence))
+            names.extend(['live-pi_verify-breakit-probe', 'verify-breakit-other'])
+            self.assertEqual(recorded, seed.check(self.home, evidence))
+            sids[manifest['session']] = 'wrong-sid'
+            with self.assertRaisesRegex(AssertionError, 'SEED_FRESH_START_IDENTITY'):
+                seed.check(self.home, evidence)
+            names.remove(manifest['session'])
+            with self.assertRaisesRegex(AssertionError, 'SEED_FRESH_START_SESSIONS'):
+                seed.check(self.home, evidence)
 
     def test_rejects_tiny_inbox_and_missing_named_seed(self):
         self.names[:] = ['verify-session']
