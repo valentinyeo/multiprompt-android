@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.reader
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -32,6 +33,14 @@ class ClearedChatTest {
         rows = listOf(row(0, "old question", "old"), row(20, "old answer", "oldanswer")))
 
     private fun cleared(at: Double = 2_000.0) = before().apply(page(listOf(row(0, "new question", "new")), inode = 2, at = at))
+
+    @Test
+    fun aDeadlineFailedMessageShowsNotSentInsteadOfAutoRetrying() {
+        val row = message(oldId, "CLEARED_BEFORE_2474", MessageProtocol.State.FAILED, 1_000.0).copy(receipt = "not_sent")
+        assertFalse(SendRecovery.due(row, recovered = 0, connected = true))
+        val drawn = before().projectMessages(replica(row), now = 3_000.0).single { it.text == "CLEARED_BEFORE_2474" }
+        assertEquals("Not sent", drawn.delivery)
+    }
 
     @Test
     fun aFailedMessageFromBeforeTheClearIsNotDrawnAfterIt() {

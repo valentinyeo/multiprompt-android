@@ -344,14 +344,14 @@ session['db'].close()
             exec(compile(ast.Module(body=functions, type_ignores=[]), '<queued-fixture-controller>', 'exec'), namespace)
             def state():
                 with closing(sqlite3.connect(reader.message_store_path())) as db:
-                    return db.execute('SELECT state FROM shared_messages WHERE id=?', ('message_fixture_9001',)).fetchone()[0]
+                    return db.execute('SELECT state,receipt FROM shared_messages WHERE id=?', ('message_fixture_9001',)).fetchone()
             with patch.object(reader, 'HOME', home), patch.object(reader, 'CONNECTOR_SOURCES', sources, create=True), patch.object(reader, 'resolve_tmux_agent', return_value=(queue.SID, transcript)):
                 request = dict(message_protocol=1, provider='claude', sid=queue.SID, tmux='verify-session')
                 reader.message_store_request(dict(request, op='message_submit', message_id='message_fixture_9001', text='CLEARED_BEFORE_2474'))
                 namespace['advance_queue']()
-                self.assertEqual('queued', state())
+                self.assertEqual(('queued', None), state())
                 namespace['fail_messages']()
-                self.assertEqual('failed', state())
+                self.assertEqual(('failed', 'not_sent'), state())
                 events = [event['event'] for event in reader.message_events_page('claude', queue.SID, 0)['events'] if event['event'].get('id') == 'message_fixture_9001']
                 self.assertEqual('failed', events[-1]['state'])
 
