@@ -97,6 +97,14 @@ test('the shipped titles directory holds one valid file per ticket and no shared
   assert.throws(() => readdirSync(fileURLToPath(new URL('./ticket-titles.json', import.meta.url))), /ENOENT/);
 });
 
+test('MUBO ticket prefixes are accepted', () => {
+  const directory = titleDirectory({ 'MUBO-240.txt': 'Android: check a chat reply never shows twice\n' });
+  const shipped = loadCatalog(directory);
+  assert.deepEqual(noteLines(['MUBO-240: dedupe display-history replies'], shipped), [
+    '- MUBO-240 Android: check a chat reply never shows twice',
+  ]);
+});
+
 test('the command line checks PR titles and builds notes from a git range', () => {
   const ok = spawnSync('node', [tool, '--pr-title', 'IGSH-1684: notes name their ticket'], { encoding: 'utf8' });
   assert.equal(ok.status, 0, ok.stderr);

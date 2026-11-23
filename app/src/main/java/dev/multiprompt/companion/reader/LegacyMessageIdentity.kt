@@ -33,13 +33,17 @@ internal object LegacyMessageIdentity {
         message.role == "assistant" && message.requestId.startsWith("history-") &&
             (message.text == "---\nFresh start\n---" || message.text.startsWith("---\nSwitched AI: ") && message.text.endsWith("\n---"))
 
-    fun reply(message: ChatHistoryMessage, block: HostBlock, owner: ChatHistoryMessage?): Boolean =
-        block.done && message.role == "assistant" && same(MessageText(message.text), MessageText(block.text)) &&
-            (block.messageId == null || message.requestId.startsWith("history-") && when (owner?.role) {
-                "user" -> block.messageId == owner.requestId
-                "assistant" -> block.messageId.startsWith("fresh-")
-                else -> false
-            })
+    fun reply(message: ChatHistoryMessage, block: HostBlock, owner: ChatHistoryMessage?): Boolean {
+        val savedDisplay = message.requestId.startsWith("history-") || message.requestId.contains(":text:")
+        if (message.role != "assistant" || (!block.done && !savedDisplay) ||
+            !same(MessageText(message.text), MessageText(block.text))
+        ) return false
+        return block.messageId == null || savedDisplay && when (owner?.role) {
+            "user" -> block.messageId == owner.requestId
+            "assistant" -> block.messageId.startsWith("fresh-")
+            else -> false
+        }
+    }
 
     private fun words(text: String): List<String> =
         text.replace(MENTION_NOTE, " ").replace(LIVE_MARKER, "").split(WORD_SPLIT).filter { it.isNotEmpty() }

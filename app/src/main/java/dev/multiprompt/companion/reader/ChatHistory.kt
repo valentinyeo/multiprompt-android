@@ -170,7 +170,7 @@ data class ChatHistory(
             val index = transcript.indices.firstOrNull { index ->
                 val message = transcript[index]
                 index !in matchedReplies && message.role == "assistant" &&
-                    (message.requestId.isNotEmpty() && rowKey(message.requestId) == rowKey(block.item) ||
+                    (message.requestId.isNotEmpty() && sharedItem(message.requestId, block.item) ||
                         MessageIdentity.reply(message, block, replyOwners[index]))
             }
             if (index != null) {
@@ -228,6 +228,12 @@ data class ChatHistory(
     )
 
     private fun rowKey(id: String): String = id.substringBefore(":text:")
+
+    private fun sharedItem(requestId: String, item: String): Boolean {
+        if (requestId == item) return true
+        if (requestId.contains(":text:")) return false
+        return rowKey(requestId) == rowKey(item)
+    }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
