@@ -195,7 +195,6 @@
     "session-actions.session-history",
     "session-actions.read-reply-stop-reading",
     "session-actions.mark-read",
-    "session-actions.fresh-start",
     "session-actions.remind-me",
     "session-actions.waiting-return-to-open",
     "session-actions.hide-from-sidebar",

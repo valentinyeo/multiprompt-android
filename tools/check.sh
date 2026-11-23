@@ -15,6 +15,7 @@ source_checks() {
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
   python3 -B tools/control-journeys/ui.test.py
   python3 -B tools/inbox-controls/ui.test.py
+  python3 -B tools/skill-pills/ui.test.py
   node --test tools/inbox-controls.test.js
   python3 -B tools/message-projection/check.py
   python3 -B tools/message-projection/check.test.py
@@ -55,6 +56,7 @@ source_checks() {
   python3 -B tools/long-chat/check.test.py
   python3 -B tools/chat-shapes/chat-shapes.test.py
   python3 -B tools/chat-shapes/live_probe.test.py
+  python3 -B tools/session-fresh-start/fresh-start.test.py
   python3 -B tools/real-chat/real-chat.test.py
   python3 -B tools/real-chat/phone-cache.test.py
   python3 -B tools/app-name/drive.test.py

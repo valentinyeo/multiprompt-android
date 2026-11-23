@@ -3756,8 +3756,12 @@
       "label": "Fresh start",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:4c94567b96eaee90:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4016",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "session-fresh-start.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/session-fresh-start.md",
+        "action": "Replay desktop Fresh start on the fixture while the phone keeps one live-fresh-start-3000 inbox row",
+        "result": "HANDOVER_3000 before FRESH_REPLY_3000 with no OLD_STALE_3000 in fresh-start-open-proof.txt; the phone menu item is not tapped in this journey."
+      }
     },
     {
       "id": "session-actions.rename",
