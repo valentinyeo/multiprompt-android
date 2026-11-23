@@ -53,6 +53,7 @@ import dev.multiprompt.companion.reader.ChatReactions
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.reader.PendingQuestion
+import dev.multiprompt.companion.reader.PiLoginPrompt
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -281,6 +282,9 @@ internal fun ChatHistoryList(
     val hitsByMessage = remember(findHits) { findHits.groupBy { it.message } }
     SideEffect { onFindCount(findHits.size) }
     val showDots = working || awaitingReply(presentation.messages, questions.size)
+    val piLogin = remember(presentation.messages, agent) {
+        if (agent == AgentKind.PI) PiLoginPrompt.current(presentation.messages.map { it.text }) else null
+    }
     val firstUnreadKey = remember(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds) {
         ChatOpenAnchor.unreadKey(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds)
     }
@@ -406,6 +410,7 @@ internal fun ChatHistoryList(
                 val messageIndex = presentation.messages.lastIndex - index
                 HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
                     mentionChats = mentionChats, onSessionLink = onSessionLink,
+                    piLogin = piLogin?.takeIf { it.index == messageIndex }?.prompt,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,
                     onJump = { pendingJump = ReplyJump(message, it) },
@@ -454,6 +459,7 @@ private fun HistoryBubble(
     skills: List<NativeSkill> = emptyList(),
     mentionChats: List<MentionChat> = emptyList(),
     onSessionLink: ((String) -> Unit)? = null,
+    piLogin: PiLoginPrompt.Prompt? = null,
     messageId: String = "",
     sessionName: String = "",
     onMarkUnread: () -> Unit = {},
@@ -550,6 +556,27 @@ private fun HistoryBubble(
                     onSessionLink = onSessionLink,
                 )
             }
+        }
+        if (piLogin != null) PiLoginPromptCard(piLogin)
+    }
+}
+
+@Composable
+private fun PiLoginPromptCard(prompt: PiLoginPrompt.Prompt) {
+    val context = LocalContext.current
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp).testTag("pi-login").kitSurface(Kit.CardShape).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Sign in to Pi", style = Kit.BodyStrong, color = Kit.Text)
+        Text(
+            if (prompt.link != null) "Open the link to finish signing in. Your next reply uses that login."
+            else "Pi needs an answer. Your next reply uses that login.",
+            style = Kit.Hint,
+            color = Kit.TextMuted,
+        )
+        prompt.link?.let { link ->
+            KitPrimaryButton("Open sign-in link", { openMarkdownUrl(context, link) }, Modifier.fillMaxWidth())
         }
     }
 }
