@@ -30,14 +30,17 @@ import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.skills.SkillSpan
 
-internal class SkillPillText(private val spans: List<SkillSpan>) : VisualTransformation {
+internal class SkillPillText(
+    private val spans: List<SkillSpan>,
+    private val spanColor: Color,
+) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         if (spans.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
         val styled = buildAnnotatedString {
             append(text)
             spans.forEach { span ->
                 if (span.start in 0 until span.end && span.end <= length) {
-                    addStyle(SpanStyle(color = Kit.Text), span.start, span.end)
+                    addStyle(SpanStyle(color = spanColor), span.start, span.end)
                 }
             }
         }

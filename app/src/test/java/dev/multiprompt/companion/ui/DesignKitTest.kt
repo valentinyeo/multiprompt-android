@@ -64,6 +64,7 @@ import org.robolectric.util.ReflectionHelpers
 @Config(sdk = [35], application = Application::class, qualifiers = "w390dp-h844dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class DesignKitTest {
+    private val night = kitPalette(false)
     private val scheduler = TestCoroutineScheduler()
 
     @get:Rule
@@ -116,9 +117,9 @@ class DesignKitTest {
             }
         }
         val approve = capture("device-approval-primary", compose.onNodeWithText("Approve"))
-        assertPixel(approve, approve.width / 2, approve.height - 4, Kit.Text, "screen primary fill")
+        assertPixel(approve, approve.width / 2, approve.height - 4, night.text, "screen primary fill")
         val deny = capture("device-approval-secondary", compose.onNodeWithText("No"))
-        assertPixel(deny, deny.width / 2, deny.height - 4, Kit.Surface, "screen secondary fill")
+        assertPixel(deny, deny.width / 2, deny.height - 4, night.surface, "screen secondary fill")
         compose.onNodeWithText("Approve").performClick()
         compose.runOnIdle { assertEquals(1, approvals); assertEquals(0, denials) }
         compose.onNodeWithText("No").performClick()
@@ -134,9 +135,9 @@ class DesignKitTest {
             }
         }
         val white = capture("primary")
-        assertPixel(white, 14, white.height / 2, Kit.Text, "primary fill")
+        assertPixel(white, 14, white.height / 2, night.text, "primary fill")
         val red = capture("primary-danger")
-        assertPixel(red, 14, red.height / 2, Kit.Danger, "destructive fill")
+        assertPixel(red, 14, red.height / 2, night.danger, "destructive fill")
         assertEquals(Kit.ControlHeight.value.toInt(), white.height)
     }
 
@@ -151,13 +152,13 @@ class DesignKitTest {
         }
         listOf("secondary", "pill").forEach { tag ->
             val bitmap = capture(tag)
-            assertPixel(bitmap, 14, bitmap.height / 2, Kit.Surface, "$tag fill")
-            assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "$tag outline")
+            assertPixel(bitmap, 14, bitmap.height / 2, night.surface, "$tag fill")
+            assertPixel(bitmap, bitmap.width / 2, 0, night.outline, "$tag outline")
         }
         val round = capture("round")
         assertEquals(Kit.ControlHeight.value.toInt(), round.width)
         assertEquals(Kit.ControlHeight.value.toInt(), round.height)
-        assertPixel(round, 6, round.height / 2, Kit.Surface, "round fill")
+        assertPixel(round, 6, round.height / 2, night.surface, "round fill")
     }
 
     @Test
@@ -197,15 +198,15 @@ class DesignKitTest {
         val inner = Kit.ControlInnerSize.value.toInt()
         val pill = capture("composer-pill")
         assertEquals("the message box pill uses the outer control height", outer, pill.height)
-        assertPixel(pill, 2, pill.height / 2, Kit.Surface, "composer pill fill")
+        assertPixel(pill, 2, pill.height / 2, night.surface, "composer pill fill")
         listOf("attach", "mic", "send").forEach { tag ->
             val circle = capture(tag)
             assertEquals("$tag uses the shared inner button size", inner, circle.width)
             assertEquals("$tag uses the shared inner button size", inner, circle.height)
         }
         assertEquals("the inner circles leave an even inset", Kit.ControlHeight - Kit.ControlInnerSize, Kit.InnerInset * 2)
-        assertPixel(capture("attach"), 3, inner / 2, Kit.SurfaceRaised, "attach soft fill")
-        assertPixel(capture("send"), 3, inner / 2, Kit.Text, "send strong fill")
+        assertPixel(capture("attach"), 3, inner / 2, night.surfaceRaised, "attach soft fill")
+        assertPixel(capture("send"), 3, inner / 2, night.text, "send strong fill")
     }
 
     @Test
@@ -230,13 +231,13 @@ class DesignKitTest {
         assertFalse("composer must not use percent pill corners", block.contains("Kit.PillShape"))
         val pill = capture("composer-pill")
         val corner = (Kit.ControlHeight / 2).value.toInt() + 4
-        assertPixel(pill, corner, corner, Kit.Surface, "upper-left keeps a fixed corner radius")
+        assertPixel(pill, corner, corner, night.surface, "upper-left keeps a fixed corner radius")
         val inner = Kit.ControlInnerSize.value.toInt()
         listOf("attach", "mic", "send").forEach { tag ->
             val circle = capture(tag)
             assertEquals("$tag stays full size when the composer grows", inner, circle.width)
             assertEquals("$tag stays full size when the composer grows", inner, circle.height)
-            val fill = if (tag == "send") Kit.Text else Kit.SurfaceRaised
+            val fill = if (tag == "send") night.text else night.surfaceRaised
             assertPixel(circle, inner / 2, inner - 3, fill, "$tag bottom edge stays painted")
         }
     }
@@ -250,7 +251,7 @@ class DesignKitTest {
         val bitmap = capture("expand")
         assertEquals(32, bitmap.width)
         assertEquals(32, bitmap.height)
-        assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "expand fill")
+        assertPixel(bitmap, 4, bitmap.height / 2, night.surface, "expand fill")
         compose.onNodeWithTag("expand").performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
         compose.onNodeWithContentDescription("Expand table").assertExists()
@@ -263,11 +264,11 @@ class DesignKitTest {
             Page { KitToggle(on, { on = it }, Modifier.testTag("toggle")) }
         }
         val off = capture("toggle")
-        assertPixel(off, off.width - 8, off.height / 2, Kit.Surface, "off track")
+        assertPixel(off, off.width - 8, off.height / 2, night.surface, "off track")
         compose.onNodeWithTag("toggle").performClick()
         compose.runOnIdle { assertTrue(on) }
         val onBitmap = capture("toggle")
-        assertPixel(onBitmap, 10, onBitmap.height / 2, Kit.SurfaceRaised, "on track")
+        assertPixel(onBitmap, 10, onBitmap.height / 2, night.surfaceRaised, "on track")
     }
 
     @Test
@@ -281,7 +282,7 @@ class DesignKitTest {
             }
         }
         val before = capture("segmented")
-        assertPixel(before, before.width / 2, before.height / 2 - 14, Kit.SurfaceRaised, "selected segment")
+        assertPixel(before, before.width / 2, before.height / 2 - 14, night.surfaceRaised, "selected segment")
         compose.onNodeWithText("Sunlight").performClick()
         compose.runOnIdle { assertEquals("Sunlight", picked) }
     }
@@ -302,7 +303,7 @@ class DesignKitTest {
             }
         }
         val group = capture("group")
-        assertPixel(group, group.width - 4, group.height / 2 - 10, Kit.Surface, "group fill")
+        assertPixel(group, group.width - 4, group.height / 2 - 10, night.surface, "group fill")
         compose.onNodeWithText("Archive").performClick()
         compose.runOnIdle { assertEquals(1, archived) }
         compose.onNodeWithText("SECTION").assertExists()
@@ -362,8 +363,8 @@ class DesignKitTest {
             }
         }
         val bitmap = capture("sheet")
-        assertPixel(bitmap, 4, bitmap.height - 4, Kit.Sheet, "sheet fill")
-        assertPixel(bitmap, bitmap.width / 4, 14, Kit.Sheet, "sheet beside handle")
+        assertPixel(bitmap, 4, bitmap.height - 4, night.sheet, "sheet fill")
+        assertPixel(bitmap, bitmap.width / 4, 14, night.sheet, "sheet beside handle")
     }
 
     @Test
@@ -376,13 +377,13 @@ class DesignKitTest {
             }
         }
         val bitmap = capture("skill")
-        assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "skill outline")
-        assertPixel(bitmap, 4, bitmap.height / 2, Kit.Surface, "skill fill")
+        assertPixel(bitmap, bitmap.width / 2, 0, night.outline, "skill outline")
+        assertPixel(bitmap, 4, bitmap.height / 2, night.surface, "skill fill")
         compose.onNodeWithText("/ship").assertExists()
         val other = capture("skill-other")
-        assertPixel(other, 4, other.height / 2, Kit.Outline, "other skill match")
+        assertPixel(other, 4, other.height / 2, night.outline, "other skill match")
         val current = capture("skill-current")
-        assertPixel(current, 4, current.height / 2, Kit.Text, "current skill match")
+        assertPixel(current, 4, current.height / 2, night.text, "current skill match")
     }
 
     @Test
@@ -391,7 +392,7 @@ class DesignKitTest {
             Page { KitUnreadBadge(11, Modifier.testTag("badge")) }
         }
         val bitmap = capture("badge")
-        assertPixel(bitmap, 3, bitmap.height / 2, Kit.AccentUnread, "badge fill")
+        assertPixel(bitmap, 3, bitmap.height / 2, night.accentUnread, "badge fill")
         compose.onNodeWithText("11").assertExists()
     }
 
@@ -404,7 +405,7 @@ class DesignKitTest {
             }
         }
         val assistant = capture("assistant")
-        assertPixel(assistant, assistant.width / 2, 0, Kit.Outline, "assistant outline")
+        assertPixel(assistant, assistant.width / 2, 0, night.outline, "assistant outline")
         val user = capture("user")
         assertPixel(user, user.width / 2, 0, ReaderBubbleUserOutline, "user outline")
     }
@@ -420,11 +421,11 @@ class DesignKitTest {
             }
         }
         val idle = capture("idle")
-        assertPixel(idle, idle.width - 6, idle.height / 2, Kit.Surface, "idle option")
+        assertPixel(idle, idle.width - 6, idle.height / 2, night.surface, "idle option")
         val picked = capture("picked")
-        assertPixel(picked, picked.width - 6, picked.height / 2, Kit.SurfaceRaised, "picked option")
+        assertPixel(picked, picked.width - 6, picked.height / 2, night.surfaceRaised, "picked option")
         val dimmed = capture("dimmed")
-        assertFalse(Integer.toHexString(dimmed.getPixel(dimmed.width - 6, dimmed.height / 2)) == Integer.toHexString(Kit.Surface.toArgb()))
+        assertFalse(Integer.toHexString(dimmed.getPixel(dimmed.width - 6, dimmed.height / 2)) == Integer.toHexString(night.surface.toArgb()))
         compose.onNodeWithTag("idle").performClick()
         compose.runOnIdle { assertEquals(1, clicks) }
     }
@@ -440,13 +441,13 @@ class DesignKitTest {
             }
         }
         val box = capture("search-box")
-        assertPixel(box, 8, box.height / 2, Kit.Surface, "search fill")
-        assertPixel(box, box.width / 2, 0, Kit.Outline, "search outline")
+        assertPixel(box, 8, box.height / 2, night.surface, "search fill")
+        assertPixel(box, box.width / 2, 0, night.outline, "search outline")
         compose.onNodeWithText("2 of 4").assertExists()
         val other = capture("mark-other")
-        assertPixel(other, 2, other.height / 2, Kit.Outline, "other match")
+        assertPixel(other, 2, other.height / 2, night.outline, "other match")
         val current = capture("mark-current")
-        assertPixel(current, 2, current.height / 2, Kit.Text, "current match")
+        assertPixel(current, 2, current.height / 2, night.text, "current match")
     }
 
     @Test
@@ -466,12 +467,12 @@ class DesignKitTest {
             }
         }
         val bar = capture("usage")
-        assertPixel(bar, bar.width / 4, bar.height / 2, Kit.Text, "usage fill")
-        assertPixel(bar, bar.width * 3 / 4, bar.height / 2, Kit.Outline, "usage track")
+        assertPixel(bar, bar.width / 4, bar.height / 2, night.text, "usage fill")
+        assertPixel(bar, bar.width * 3 / 4, bar.height / 2, night.outline, "usage track")
         val empty = capture("usage-empty")
-        assertPixel(empty, empty.width / 4, empty.height / 2, Kit.Outline, "empty usage track")
+        assertPixel(empty, empty.width / 4, empty.height / 2, night.outline, "empty usage track")
         val plan = capture("plan")
-        assertPixel(plan, 20, plan.height - 6, Kit.Surface, "plan fill")
+        assertPixel(plan, 20, plan.height - 6, night.surface, "plan fill")
         compose.onNodeWithText("Claude").assertExists()
         compose.onNodeWithText("BEHIND | RESETS THU 21:13, IN 1D 23H").assertExists()
         compose.onNodeWithText("AHEAD | RESETS THU 21:13, IN 1D 23H").assertDoesNotExist()
@@ -483,8 +484,8 @@ class DesignKitTest {
             Page { KitSavedNote(Modifier.testTag("saved"), fade = false) }
         }
         val bitmap = capture("saved")
-        assertPixel(bitmap, 14, bitmap.height / 2, Kit.Surface, "saved fill")
-        assertPixel(bitmap, bitmap.width / 2, 0, Kit.Outline, "saved outline")
+        assertPixel(bitmap, 14, bitmap.height / 2, night.surface, "saved fill")
+        assertPixel(bitmap, bitmap.width / 2, 0, night.outline, "saved outline")
         compose.onNodeWithText("Saved").assertExists()
     }
 
@@ -529,5 +530,29 @@ class DesignKitTest {
         listOf("MaterialTheme", "colorScheme", "DropdownMenu", "AlertDialog", "Color(0x").forEach {
             assertFalse("DesignKit.kt must not use $it", source.contains(it))
         }
+    }
+
+    @Test
+    fun kitObjectDoesNotPinDarkReaderColours() {
+        val block = File("src/main/java/dev/multiprompt/companion/ui/DesignKit.kt").readText()
+            .substringAfter("internal object Kit {")
+            .substringBefore("val OutlineWidth")
+        listOf("ReaderForeground", "ReaderHint", "ReaderBackground", "ReaderSheet", "ReaderControl", "ReaderSelected", "ReaderOutline", "ReaderDivider", "ReaderDanger").forEach {
+            assertFalse("Kit must not pin $it", block.contains(it))
+        }
+        assertTrue(block.contains("@Composable"))
+    }
+
+    @Test
+    fun listRowLabelFollowsKitColoursInDayMode() {
+        val palette = kitPalette(true)
+        compose.setContent {
+            MultipromptTheme(sunlight = true, material3 = false) {
+                KitListRow("Waiting", modifier = Modifier.testTag("day-list-row"))
+            }
+        }
+        compose.onNodeWithText("Waiting").assertIsDisplayed()
+        val bitmap = capture("day-list-row", compose.onNodeWithTag("day-list-row"))
+        assertPixel(bitmap, 24, bitmap.height / 2, palette.text, "day list row label")
     }
 }

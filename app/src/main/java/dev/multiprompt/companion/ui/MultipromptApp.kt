@@ -4603,8 +4603,9 @@ internal fun ReaderScreen(
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
-                        val skillText = remember(skillSpans, pillsDrawn) {
-                            if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans)
+                        val kitColors = kit()
+                        val skillText = remember(skillSpans, pillsDrawn, kitColors.text) {
+                            if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans, kitColors.text)
                         }
                         BasicTextField(
                             value = promptField,
