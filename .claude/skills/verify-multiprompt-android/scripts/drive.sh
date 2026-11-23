@@ -2392,14 +2392,14 @@ if [[ "$feature" == native-skills.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:/qa:verify-native draft stays'
     set_composer 'keep%sthis%sdraft'
     tap_desc Attach
-    tap_text Model Haiku
+    tap_text Model
     wait_for_text Haiku
     wait_for_absence 'Add image'
     shot native-model-menu
     tap_text Sonnet
     wait_receipt 'VERIFY_RECEIVED:/model sonnet'
     tap_desc Attach
-    tap_text Effort Medium
+    tap_text Effort
     wait_for_text Medium
     shot native-effort-menu
     tap_text High

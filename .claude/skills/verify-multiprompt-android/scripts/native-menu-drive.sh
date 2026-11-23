@@ -26,44 +26,17 @@ open_model_menu() {
     tap_text 'Change ›'
     wait_for_text 'Open model picker (/model)'
 }
-tap_menu_receipt() {
-    local label=$1 command=$2 section=${3:-} before after attempt retry
-    before=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
-    for retry in 1 2 3; do
-        tap_text "$label"
-        for attempt in {1..15}; do
-            after=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
-            if (( after > before )); then
-                (( after == before + 1 ))
-                return
-            fi
-            sleep 1
-        done
-        dump_ui
-        shot "native-menu-$label-missing-$retry"
-        python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" > "$EVIDENCE/native-menu-$label-missing-$retry-tree.json"
-        printf 'Native menu tap did not send %s on attempt %s; the retained tree names the toast or the remaining menu\n' "$command" "$retry" >&2
-        if sudo grep -F "$command" /home/verifyssh/receipts.txt | grep -Fvx "VERIFY_RECEIVED:$command"; then
-            printf 'NATIVE_MENU_RECEIPT_CORRUPTED: the host received %s with extra bytes\n' "$command" >&2
-        fi
-        if ! select_node text "$label" >/dev/null 2>&1; then
-            if [[ -z "$section" ]]; then break; fi
-            if ! select_node text 'Add image' >/dev/null 2>&1; then
-                tap_desc Attach
-                wait_for_text 'Add image'
-            fi
-            if select_node text "$section" >/dev/null 2>&1; then
-                tap_text "$section" "$label"
-            fi
-        fi
-    done
-    printf 'NATIVE_MENU_RECEIPT_MISSING: VERIFY_RECEIVED:%s\n' "$command" >&2
-    return 1
-}
 menu_command() {
-    local label=$1 command=$2 model=$3 effort=$4 phase=$5
+    local label=$1 command=$2 model=$3 effort=$4 phase=$5 before after attempt
     open_model_menu
-    tap_menu_receipt "$label" "$command"
+    before=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
+    tap_text "$label"
+    for attempt in {1..30}; do
+        after=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
+        if (( after > before )); then break; fi
+        sleep 1
+    done
+    (( after == before + 1 ))
     printf 'VERIFY_RECEIVED:%s\n' "$command" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received $command. Claude $model 5.5 $effort"
@@ -93,8 +66,9 @@ menu_scroll() {
 : > "$EVIDENCE/native-menu-commands.txt"
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
-    tap_text Model Opus
-    tap_menu_receipt "$model" "/model ${model,,}" Model
+    tap_text Model
+    tap_text "$model"
+    wait_receipt "VERIFY_RECEIVED:/model ${model,,}"
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received /model ${model,,}. Claude $model 5.5 high"
@@ -105,8 +79,9 @@ for model in Opus Haiku Fable; do
     menu_state "attach-${model,,}-selected" visible "$model ›"
 done
 for effort in Low Medium; do
-    tap_text Effort "$effort"
-    tap_menu_receipt "$effort" "/effort ${effort,,}" Effort
+    tap_text Effort
+    tap_text "$effort"
+    wait_receipt "VERIFY_RECEIVED:/effort ${effort,,}"
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"
