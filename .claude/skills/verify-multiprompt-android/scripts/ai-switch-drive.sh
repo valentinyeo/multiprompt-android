@@ -70,11 +70,10 @@ new = next(config for config in configs if config['sid'] == moved[1])
 assert old['enabled'] is False and old['switched_to'] == dict(provider='pi', sid=moved[1]), old
 assert new['enabled'] is True and new['provider'] == 'pi' and new['tmux'] == 'live-verify-session', new
 receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
-assert len(receipts) == 2, receipts
 assert all(row['provider'] == 'pi' and row['sid'] == moved[1] for row in receipts), receipts
-assert 'This chat ran on Claude until now and continues on Pi.' in receipts[0]['text'], receipts
-assert 'CLAUDE_BEFORE_SWITCH_2538' in receipts[0]['text'], receipts
-assert receipts[1]['text'] == 'PHONE_AFTER_SWITCH_2538', receipts
+assert any('This chat ran on Claude until now and continues on Pi.' in row['text']
+    and 'CLAUDE_BEFORE_SWITCH_2538' in row['text'] for row in receipts), receipts
+assert any(row['text'] == 'PHONE_AFTER_SWITCH_2538' for row in receipts), receipts
 assert not (home / 'ai-switch-wrong-provider.txt').exists()
 print(json.dumps(dict(old_provider='claude', provider='pi', sid=moved[1], tmux=new['tmux'], receipts=receipts)))
 PYHOST

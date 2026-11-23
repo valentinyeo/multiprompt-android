@@ -96,6 +96,49 @@ class FixtureJourneyTest(unittest.TestCase):
                 replies = [event['message']['content'][0]['text'] for event in events if event['type'] == 'assistant']
                 self.assertEqual(['REMOTE_CONTROL_CONNECTED_2541 desktop_counter=1', 'DESKTOP_REPLY_2541 desktop_counter=2'], replies)
 
+    def test_catchup_window_distinguishes_slow_sampling_from_a_stale_chat(self):
+        source = ast.parse((SCRIPTS / 'catchup.py').read_text())
+        function = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == 'visibility_window')
+        namespace = {}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), '<catchup-window>', 'exec'), namespace)
+        window = namespace['visibility_window']
+        def capture(start, end, visible):
+            return dict(startMonotonic=start, endMonotonic=end, ocrPositive=visible)
+        timely = [capture(99.5, 99.8, False), capture(100.5, 100.8, False), capture(101, 101.3, True)]
+        measured = window(timely, 100)
+        self.assertEqual('passed', measured['status'])
+        self.assertAlmostEqual(0.5, measured['replyLatencyLowerSeconds'])
+        self.assertAlmostEqual(1.3, measured['replyLatencySeconds'])
+        self.assertAlmostEqual(0.2, measured['observationGapSeconds'])
+        slow = [capture(100.1, 102.1, False), capture(102.2, 104.17, True)]
+        self.assertEqual('inconclusive', window(slow, 100)['status'])
+        straddled = [capture(102, 102.8, False), capture(102.9, 103.5, True)]
+        self.assertEqual('inconclusive', window(straddled, 100)['status'])
+        stale = [capture(103.1, 105.1, False), capture(105.2, 107.2, True)]
+        with self.assertRaisesRegex(AssertionError, 'CHAT_STALE'):
+            window(stale, 100)
+        with self.assertRaisesRegex(AssertionError, 'no OCR-positive'):
+            window([capture(103.1, 103.5, False)], 100)
+
+    def test_ai_switch_host_requires_both_texts_without_counting_unrelated_receipts(self):
+        program = (SCRIPTS / 'ai-switch-drive.sh').read_text().split("<<'PYHOST'\n", 1)[1].split('\nPYHOST', 1)[0]
+        sid = 'c001c001-2538-4000-8000-000000002538'
+        handover = dict(provider='pi', sid='switched', text='This chat ran on Claude until now and continues on Pi. CLAUDE_BEFORE_SWITCH_2538')
+        phone = dict(provider='pi', sid='switched', text='PHONE_AFTER_SWITCH_2538')
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            root = home / '.local/state/multiprompt/agent-host'
+            root.mkdir(parents=True)
+            (root / 'switched.json').write_text(json.dumps({sid: ['pi', 'switched']}))
+            (root / 'old.config.json').write_text(json.dumps(dict(sid=sid, enabled=False, switched_to=dict(provider='pi', sid='switched'))))
+            (root / 'new.config.json').write_text(json.dumps(dict(sid='switched', enabled=True, provider='pi', tmux='live-verify-session')))
+            for receipts, valid in (([handover, phone], True), ([phone, handover, dict(phone, text='OTHER')], True),
+                                    ([handover], False), ([phone], False), ([handover, dict(phone, provider='claude')], False)):
+                with self.subTest(receipts=receipts):
+                    (home / 'ai-switch-provider-receipts.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in receipts))
+                    result = subprocess.run([sys.executable, '-B', '-c', program.replace('/home/verifyssh', str(home))], capture_output=True, text=True)
+                    self.assertEqual(valid, result.returncode == 0, result.stdout + result.stderr)
+
     def test_ai_switch_fixture_user_can_enable_the_initial_chat(self):
         fixture = load('ai_switch_fixture', SCRIPTS / 'ai-switch-fixture.py')
         branch = (SCRIPTS / 'fixture.sh').read_text().split('== ai-switch.md ]]; then', 1)[1].split('elif', 1)[0]
