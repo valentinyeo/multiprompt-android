@@ -43,7 +43,8 @@ tap_menu_receipt() {
         shot "native-menu-$label-missing-$retry"
         python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" > "$EVIDENCE/native-menu-$label-missing-$retry-tree.json"
         printf 'Native menu tap did not send %s on attempt %s; the retained tree names the toast or the remaining menu\n' "$command" "$retry" >&2
-        if [[ -n "$section" ]] && ! select_node text "$label" >/dev/null 2>&1; then
+        if ! select_node text "$label" >/dev/null 2>&1; then
+            if [[ -z "$section" ]]; then break; fi
             tap_desc Attach
             wait_for_text 'Add image'
             tap_text "$section" "$label"
