@@ -18,26 +18,28 @@ class QuotedSkillEchoTest {
 
     private val sentFromPhone = quote + "\n\n/pstack:correct"
 
+    private fun same(left: String, right: String) = MessageIdentity.same(MessageIdentity.text(left), MessageIdentity.text(right))
+
     @Test fun aSkillQuestionSentFromDesktopMatchesItsSavedRow() {
-        assertTrue(LegacyMessageIdentity.same(sentFromDesktop, saved))
+        assertTrue(same(sentFromDesktop, saved))
     }
 
     @Test fun aSkillQuestionSentFromThePhoneMatchesItsSavedRow() {
-        assertTrue(LegacyMessageIdentity.same(sentFromPhone, saved))
+        assertTrue(same(sentFromPhone, saved))
     }
 
     @Test fun aDifferentSkillOrDifferentWordsDoNotMatch() {
-        assertFalse(LegacyMessageIdentity.same(saved.replace("/pstack:correct", "/pstack:wrong"), sentFromPhone))
-        assertFalse(LegacyMessageIdentity.same(sentFromPhone + " extra", saved))
-        assertFalse(LegacyMessageIdentity.same(saved.replace("Still running:", "Running still:"), sentFromPhone))
-        assertTrue(LegacyMessageIdentity.same("plain words", "plain words"))
-        assertFalse(LegacyMessageIdentity.same("plain words", "words plain"))
+        assertFalse(same(saved.replace("/pstack:correct", "/pstack:wrong"), sentFromPhone))
+        assertFalse(same(sentFromPhone + " extra", saved))
+        assertFalse(same(saved.replace("Still running:", "Running still:"), sentFromPhone))
+        assertTrue(same("plain words", "plain words"))
+        assertFalse(same("plain words", "words plain"))
     }
 
     @Test fun aSkillQuestionStaysAboveTheRepliesThatFollowedIt() {
         val row = ChatHistoryProtocol.Row("user", saved, "u-1", "2026-11-09T00:00:01Z", 0, 100)
         val reply = ChatHistoryProtocol.Row("assistant", "Replied afterwards", "msg_1", "2026-11-09T00:00:02Z", 200, 240)
-        val created = LegacyMessageIdentity.seconds("2026-11-09T00:00:01Z")!!
+        val created = MessageIdentity.seconds("2026-11-09T00:00:01Z")!!
         val card = MessageProtocol.Row("mp-quotedskill0001", "claude", sid, sentFromPhone, 1, "attempt0123456789",
             MessageProtocol.State.QUEUED, null, null, 1, created)
 

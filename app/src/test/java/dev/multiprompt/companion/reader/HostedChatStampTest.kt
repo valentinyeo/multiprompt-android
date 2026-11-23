@@ -41,10 +41,10 @@ class HostedChatStampTest {
 
     @Test
     fun aHostedRowStampWithoutAZoneStillReads() {
-        assertNotNull(LegacyMessageIdentity.seconds("2026-11-21T14:55:48.488890"))
+        assertNotNull(MessageIdentity.seconds("2026-11-21T14:55:48.488890"))
         assertTrue(
-            LegacyMessageIdentity.seconds("2026-11-18T21:53:11.760920")!! <
-                LegacyMessageIdentity.seconds("2026-11-21T14:55:48.488890")!!,
+            MessageIdentity.seconds("2026-11-18T21:53:11.760920")!! <
+                MessageIdentity.seconds("2026-11-21T14:55:48.488890")!!,
         )
     }
 
