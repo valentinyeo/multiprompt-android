@@ -56,4 +56,20 @@ class SignInMenuTest {
         compose.onNodeWithTag("app-version").assertDoesNotExist()
         compose.runOnIdle { assertEquals(1, calls) }
     }
+
+    @Test fun overflowRestartIdleChatsInvokesCallbackAndClosesMenu() {
+        var restarts = 0
+        compose.setContent {
+            MaterialTheme {
+                InboxOverflowMenu(
+                    onSettings = {}, onArrangeSplits = {}, onNewWorkspace = {}, onRefresh = {},
+                    onRestartIdleChats = { restarts++ },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Session list actions").performClick()
+        compose.onNodeWithText("Restart all idle chats").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Restart all idle chats").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, restarts) }
+    }
 }

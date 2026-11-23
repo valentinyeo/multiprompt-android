@@ -485,6 +485,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onBotAppearance = viewModel::setAccountBotAppearance,
             onReattach = { viewModel.reattachReader(readerSession) },
             onSwitchAi = { to -> viewModel.switchAi(readerSession, to) },
+            onRestartNewest = { viewModel.restartNewest(readerSession) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             onSessionInput = { viewModel.stampSessionInput(readerSession) },
             technicalMode = state.readerTechnicalMode,
@@ -597,6 +598,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetMuted = { tab, value -> viewModel.editAccountLayout { it.setMuted(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onRefreshRooms = { viewModel.refreshRooms() },
+                    onRestartIdleChats = viewModel::restartIdleChats,
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onOpenRoom = viewModel::openRoom,
@@ -1273,6 +1275,7 @@ internal fun SessionsScreen(
     onUngroup: (String, Boolean) -> String? = { _, _ -> null },
     onShowAiUsage: () -> Unit = {},
     onDismissAiUsage: () -> Unit = {},
+    onRestartIdleChats: () -> Unit = {},
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -2037,6 +2040,7 @@ internal fun SessionsScreen(
                                 onRefresh()
                                 onRefreshRooms()
                             },
+                            onRestartIdleChats = onRestartIdleChats,
                             onAiUsage = onShowAiUsage,
                             onReleaseNotes = onReleaseNotes,
                         )
@@ -3029,6 +3033,7 @@ internal fun ReaderScreen(
     onBotAppearance: (String, Int?, Int?) -> Unit = { _, _, _ -> },
     onReattach: () -> Unit = {},
     onSwitchAi: (String) -> Unit = {},
+    onRestartNewest: () -> Unit = {},
     onSessionInteraction: () -> Unit,
     onSessionInput: () -> Unit,
     technicalMode: Boolean,
@@ -4024,6 +4029,15 @@ internal fun ReaderScreen(
                                                 if (sent) dev.multiprompt.companion.reader.FreshStart.REQUESTED else "Fresh start is unavailable",
                                                 android.widget.Toast.LENGTH_SHORT,
                                             ).show()
+                                        },
+                                    )
+                                }
+                                if (dev.multiprompt.companion.reader.RestartNewest.supported(ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId), session.hostSessionId)) {
+                                    KitMenuRow(
+                                        label = dev.multiprompt.companion.reader.RestartNewest.CHAT_LABEL,
+                                        onClick = {
+                                            menuExpanded = false
+                                            onRestartNewest()
                                         },
                                     )
                                 }

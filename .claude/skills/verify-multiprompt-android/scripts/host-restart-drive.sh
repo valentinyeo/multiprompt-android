@@ -76,4 +76,52 @@ for phase, text in [('open', 'DESKTOP_CHAT_READY_2681'), ('draft', 'PHONE_BEFORE
 root.joinpath('host-restart-state.json').write_text(json.dumps(states, indent=2) + '\n')
 PYPROOF
 printf 'HOST_RESTART_REPLIES_VISIBLE_2681\n'
+host_restart_fixture phone-restart-before > "$EVIDENCE/phone-restart-before.json"
+tap_desc 'Session actions'
+wait_for_text 'Restart on newest version'
+shot phone-restart-chat-menu
+tap_text 'Restart on newest version'
+host_restart_fixture wait-phone-restart > "$EVIDENCE/phone-restart-chat-host.json"
+wait_for_text REPLY_PHONE_AFTER_2681
+shot phone-restart-chat-after
+host_restart_fixture setup-batch > "$EVIDENCE/phone-restart-batch-before.json"
+tap_desc Back
+wait_for_text Inbox
+tap_desc 'Session list actions'
+wait_for_text 'Restart all idle chats'
+shot phone-restart-inbox-menu
+tap_text 'Restart all idle chats'
+host_restart_fixture wait-batch-restart > "$EVIDENCE/phone-restart-batch-host.json"
+shot phone-restart-inbox-after
+python3 - "$EVIDENCE" <<'PYMUBO2'
+import json
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+root = Path(sys.argv[1])
+chat_host = json.loads(root.joinpath('phone-restart-chat-host.json').read_text())
+batch_host = json.loads(root.joinpath('phone-restart-batch-host.json').read_text())
+assert chat_host['rotated'] is True, chat_host
+assert batch_host['idle_rotated'] is True and batch_host['working_untouched'] is True, batch_host
+states = {}
+for phase, required, forbidden in [
+    ('chat-menu', ['Restart on newest version'], []),
+    ('chat-after', ['REPLY_PHONE_AFTER_2681', 'verify-session'], ['FOREIGN_OLD_SESSION_2681', 'Restart on newest version']),
+    ('inbox-menu', ['Restart all idle chats'], []),
+    ('inbox-after', ['Inbox'], ['Restart all idle chats']),
+]:
+    files = list(root.glob(f'[0-9][0-9]-phone-restart-{phase}.xml'))
+    assert len(files) == 1, (phase, files)
+    file = files[0]
+    texts = [node.get('text', '') for node in ET.parse(file).getroot().iter('node')]
+    for value in required:
+        assert any(value in text for text in texts), (phase, value)
+    for value in forbidden:
+        assert not any(value in text for text in texts), (phase, value)
+    assert file.with_suffix('.png').stat().st_size > 100
+    states[phase] = dict(xml=file.name, screenshot=file.with_suffix('.png').name, required=required)
+root.joinpath('phone-restart-state.json').write_text(json.dumps(states, indent=2) + '\n')
+root.joinpath('phone-restart-host.json').write_text(json.dumps(dict(chat=chat_host, batch=batch_host, working_untouched=True), indent=2) + '\n')
+PYMUBO2
+printf 'PHONE_RESTART_NEWEST_OK_MUBO2\n'
 exit 0

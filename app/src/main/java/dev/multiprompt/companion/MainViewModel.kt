@@ -40,6 +40,7 @@ import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
 import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.reader.RestartNewest
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.SwitchAi
 import dev.multiprompt.companion.auth.SyncAuthManager
@@ -74,6 +75,7 @@ import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.upload.ScreencastUploader
 import dev.multiprompt.companion.ui.AppTheme
+import dev.multiprompt.companion.ui.isWorking
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -1568,6 +1570,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private val restoringDissolved = mutableSetOf<String>()
+    private var restartingIdleChats = false
 
     fun restoreDissolvedSession(session: DissolvedSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
@@ -1634,6 +1637,103 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     Toast.makeText(getApplication(), SwitchAi.notice(outcome.provider), Toast.LENGTH_SHORT).show()
                     refresh()
                 }
+            }
+        }
+    }
+
+    fun restartNewest(session: TmuxSession) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val reader = warmReaders[key] ?: _state.value.reader?.takeIf {
+            _state.value.readerSession?.let { open -> open.hostId == session.hostId && open.name == session.name } == true
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            val outcome = if (reader != null) {
+                reader.restartNewest()
+            } else {
+                val target = RestartNewest.target(session)
+                if (target == null) {
+                    RestartNewest.Outcome.Failed(RestartNewest.NOT_HOSTED)
+                } else {
+                    runCatching {
+                        val batch = ssh.restartNewestBatch(host, app.chatHistoryScript, listOf(target))
+                        when {
+                            batch.restarted > 0 -> RestartNewest.Outcome.Restarted
+                            batch.restarting > 0 -> RestartNewest.Outcome.Restarting
+                            batch.waiting > 0 -> RestartNewest.Outcome.Waiting
+                            else -> RestartNewest.Outcome.Failed(RestartNewest.NO_ANSWER)
+                        }
+                    }.getOrElse { throwable ->
+                        RestartNewest.Outcome.Failed(throwable.message ?: RestartNewest.NO_ANSWER)
+                    }
+                }
+            }
+            when (outcome) {
+                is RestartNewest.Outcome.Failed -> _state.update { it.copy(sessionActionError = outcome.message) }
+                else -> {
+                    Toast.makeText(getApplication(), RestartNewest.notice(outcome), Toast.LENGTH_SHORT).show()
+                    refresh()
+                }
+            }
+        }
+    }
+
+    fun restartIdleChats() {
+        if (restartingIdleChats) return
+        restartingIdleChats = true
+        viewModelScope.launch {
+            try {
+                _state.update { it.copy(sessionActionError = null) }
+                val snapshot = _state.value
+                val workingKeys = buildSet {
+                    warmReaders.forEach { (key, reader) ->
+                        if (reader.state.value.isWorking(reader.agent)) add(key)
+                    }
+                    val openReader = snapshot.reader
+                    val openSession = snapshot.readerSession
+                    if (openReader != null && openSession != null && openReader.state.value.isWorking(openSession.agent)) {
+                        add(SessionReadStore.key(openSession.hostId, openSession.name))
+                    }
+                }
+                val freshSessions = snapshot.hosts.map { host ->
+                    async {
+                        runCatching { ssh.listSessions(host).sessions }
+                            .getOrElse { snapshot.sessions.filter { it.hostId == host.id } }
+                    }
+                }.awaitAll().flatten()
+                val targets = RestartNewest.selectIdle(freshSessions, workingKeys)
+                if (targets.isEmpty()) {
+                    Toast.makeText(getApplication(), RestartNewest.batchNotice(RestartNewest.BatchResult()), Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                var restarted = 0
+                var restarting = 0
+                var waiting = 0
+                var failed = 0
+                val hostResults = targets.groupBy { it.hostId }.mapNotNull { (hostId, hostTargets) ->
+                    val host = snapshot.hosts.firstOrNull { it.id == hostId } ?: return@mapNotNull null
+                    async {
+                        runCatching { ssh.restartNewestBatch(host, app.chatHistoryScript, hostTargets) }
+                            .getOrElse { RestartNewest.BatchResult(failed = hostTargets.size) }
+                    }
+                }.awaitAll()
+                hostResults.forEach { result ->
+                    restarted += result.restarted
+                    restarting += result.restarting
+                    waiting += result.waiting
+                    failed += result.failed
+                }
+                val combined = RestartNewest.BatchResult(restarted, restarting, waiting, failed)
+                val message = RestartNewest.batchNotice(combined)
+                if (combined.started == 0 && combined.waiting == 0 && combined.failed > 0) {
+                    _state.update { it.copy(sessionActionError = message) }
+                } else {
+                    Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+                }
+                refresh()
+            } finally {
+                restartingIdleChats = false
             }
         }
     }

@@ -17,9 +17,16 @@ SID = 'c001c001-2681-4000-8000-000000002681'
 NATIVE_BEFORE = 'c001c001-2681-4000-8000-000000000001'
 NATIVE_AFTER = 'c001c001-2681-4000-8000-000000000002'
 TMUX = 'live-verify-session'
+SID_WORKING = 'c001c001-2681-4000-8000-000000002682'
+NATIVE_WORKING = 'c001c001-2681-4000-8000-000000000003'
+TMUX_WORKING = 'live-working-mubo2'
 CWD = HOME / 'host-restart-work'
 READER = HOME / 'host-restart-reader.py'
 RECEIPTS = HOME / 'host-restart-receipts.jsonl'
+PHONE_BEFORE = HOME / 'phone-restart-before.json'
+BATCH_BEFORE = HOME / 'phone-restart-batch-before.json'
+RELEASE_WORKING = HOME / 'mubo2-release-working'
+HOLD_WORKING_TEXT = 'HOLD_WORKING_MUBO2'
 
 
 def boundary():
@@ -186,6 +193,141 @@ def evidence():
         host_stderr=paths['errors'].read_text() if paths['errors'].exists() else ''), indent=2))
 
 
+def host_snapshot(reader, sid):
+    paths = reader['host_paths']('claude', sid)
+    state = reader['host_read'](paths['state']) or {}
+    events = [json.loads(line) for line in paths['log'].read_text().splitlines()] if paths['log'].exists() else []
+    return dict(
+        sid=sid,
+        started=state.get('started'),
+        agent_pid=state.get('agent_pid'),
+        inflight=bool(state.get('inflight')),
+        alive=reader['host_alive']('claude', sid),
+        rotate_count=sum(e.get('event') == 'rotate' for e in events),
+        restart_now_count=sum(e.get('event') == 'restart_now' for e in events),
+        restart_waiting_count=sum(e.get('event') == 'restart_waiting' for e in events),
+        restart_file=paths['restart'].exists(),
+    )
+
+
+def console_working():
+    CWD.mkdir(exist_ok=True)
+    os.chdir(CWD)
+    assert cli('enable', 'claude', SID_WORKING, '--tmux', TMUX_WORKING, '--cwd', str(CWD))['status'] == 'enabled'
+    reader = runtime()
+    reader['host_write'](reader['host_paths']('claude', SID_WORKING)['state'], dict(
+        native_session=NATIVE_WORKING, nightly_day=time.strftime('%Y-%m-%d')))
+    native_row(NATIVE_WORKING, 'user', 'WORKING_CHAT_MUBO2', 'working-user-mubo2')
+    native_row(NATIVE_WORKING, 'assistant', 'WORKING_CHAT_READY_MUBO2', 'working-reply-mubo2')
+    subprocess.run(['tmux', 'set-option', '-t', TMUX_WORKING, '@mp_host_sid', SID_WORKING], check=True)
+    print('Claude Code\nMUBO2_WORKING_READY\nReady', flush=True)
+    os.execvp('sleep', ['sleep', 'infinity'])
+
+
+def phone_restart_before():
+    published = HOME / '.multiprompt-runtime/reader.py'
+    published.parent.mkdir(parents=True, exist_ok=True)
+    if not published.is_file():
+        shutil.copyfile(READER, published)
+    reader = runtime()
+    snap = host_snapshot(reader, SID)
+    assert snap['alive'] and snap['started'] is not None, snap
+    PHONE_BEFORE.write_text(json.dumps(snap, indent=2) + '\n')
+    print(json.dumps(snap, indent=2), flush=True)
+
+
+def wait_phone_restart():
+    before = json.loads(PHONE_BEFORE.read_text())
+    reader = runtime()
+    deadline = time.time() + 40
+    snap = None
+    while time.time() < deadline:
+        snap = host_snapshot(reader, SID)
+        if (snap['started'] != before['started'] and snap['rotate_count'] > before['rotate_count']
+                and snap['alive'] and not snap['restart_file']):
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError(f'Phone chat restart did not rotate host: before={before} after={snap}')
+    result = dict(before=before, after=snap, rotated=True)
+    print(json.dumps(result, indent=2), flush=True)
+
+
+def setup_batch():
+    RELEASE_WORKING.unlink(missing_ok=True)
+    subprocess.run(
+        ['tmux', 'new-session', '-d', '-s', TMUX_WORKING, '-x', '100', '-y', '32',
+         'exec env GITHUB_ACTIONS=true HOME=/home/verifyssh python3 -u /home/verifyssh/host-restart-fixture.py console-working 2>/home/verifyssh/host-restart-working-startup.txt'],
+        check=True,
+    )
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        pane = subprocess.run(['tmux', 'capture-pane', '-pt', TMUX_WORKING], capture_output=True, text=True)
+        cmd = subprocess.run(['tmux', 'display-message', '-p', '-t', TMUX_WORKING, '#{pane_current_command}'], capture_output=True, text=True)
+        if pane.returncode == 0 and 'MUBO2_WORKING_READY' in pane.stdout and cmd.stdout.strip() == 'sleep':
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError('Working fixture session did not start')
+    started = subprocess.check_output([sys.executable, str(READER), 'host', 'start', 'claude', SID_WORKING], text=True)
+    assert json.loads(started).get('status') in ('started', 'already'), started
+    sent = subprocess.check_output([sys.executable, str(READER), 'host', 'send', 'claude', SID_WORKING, HOLD_WORKING_TEXT], text=True)
+    assert json.loads(sent).get('status') in ('sent', 'queued'), sent
+    reader = runtime()
+    deadline = time.time() + 30
+    working_snap = None
+    idle_snap = None
+    while time.time() < deadline:
+        working_snap = host_snapshot(reader, SID_WORKING)
+        idle_snap = host_snapshot(reader, SID)
+        if working_snap['alive'] and working_snap['inflight'] and idle_snap['alive'] and not idle_snap['inflight']:
+            break
+        time.sleep(0.2)
+    else:
+        raise AssertionError(f'Batch setup did not reach idle+working state: idle={idle_snap} working={working_snap}')
+    payload = dict(idle=idle_snap, working=working_snap)
+    BATCH_BEFORE.write_text(json.dumps(payload, indent=2) + '\n')
+    print(json.dumps(payload, indent=2), flush=True)
+
+
+def wait_batch_restart():
+    before = json.loads(BATCH_BEFORE.read_text())
+    reader = runtime()
+    deadline = time.time() + 45
+    idle_after = None
+    while time.time() < deadline:
+        idle_after = host_snapshot(reader, SID)
+        if (idle_after['started'] != before['idle']['started']
+                and idle_after['rotate_count'] > before['idle']['rotate_count']
+                and idle_after['alive'] and not idle_after['restart_file']):
+            break
+        time.sleep(0.2)
+    else:
+        RELEASE_WORKING.touch()
+        raise AssertionError(f'Inbox batch restart did not rotate idle chat: before={before} after={idle_after}')
+    time.sleep(1.0)
+    working_after = host_snapshot(reader, SID_WORKING)
+    RELEASE_WORKING.touch()
+    subprocess.run([sys.executable, str(READER), 'host', 'stop', 'claude', SID_WORKING], capture_output=True, text=True)
+    subprocess.run(['tmux', 'kill-session', '-t', TMUX_WORKING], capture_output=True, text=True)
+    assert working_after['started'] == before['working']['started'], (before['working'], working_after)
+    assert working_after['agent_pid'] == before['working']['agent_pid'], (before['working'], working_after)
+    assert working_after['rotate_count'] == before['working']['rotate_count'] == 0, working_after
+    assert working_after['restart_now_count'] == 0, working_after
+    assert working_after['restart_waiting_count'] == 0, working_after
+    assert working_after['restart_file'] is False, working_after
+    assert working_after['inflight'] is True, working_after
+    result = dict(
+        idle_before=before['idle'],
+        idle_after=idle_after,
+        working_before=before['working'],
+        working_after=working_after,
+        idle_rotated=True,
+        working_untouched=True,
+    )
+    print(json.dumps(result, indent=2), flush=True)
+
+
 def emit(event):
     print(json.dumps(event), flush=True)
 
@@ -194,7 +336,7 @@ def claude():
     assert Path.cwd() == CWD
     option = '--resume' if '--resume' in sys.argv else '--session-id'
     native = sys.argv[sys.argv.index(option) + 1]
-    assert native in (NATIVE_BEFORE, NATIVE_AFTER) and native != SID
+    assert native in (NATIVE_BEFORE, NATIVE_AFTER, NATIVE_WORKING) and native not in (SID, SID_WORKING)
     emit(dict(type='system', subtype='init', session_id=native, model='sonnet'))
     for line in sys.stdin:
         request = json.loads(line)
@@ -204,10 +346,22 @@ def claude():
             content = request['message']['content']
             text = content if isinstance(content, str) else ''.join(block.get('text', '') for block in content)
             reply = 'REPLY_' + text
+            answer_id = 'msg_' + uuid.uuid4().hex
+            if text == HOLD_WORKING_TEXT:
+                emit(dict(type='stream_event', event=dict(type='message_start', message=dict(id=answer_id))))
+                for _ in range(1200):
+                    if RELEASE_WORKING.exists():
+                        break
+                    time.sleep(.1)
+                native_row(native, 'user', text, request['uuid'])
+                native_row(native, 'assistant', reply, answer_id)
+                emit(dict(type='assistant', uuid=str(uuid.uuid4()), session_id=native,
+                    message=dict(id=answer_id, role='assistant', content=[dict(type='text', text=reply)])))
+                emit(dict(type='result', subtype='success', stop_reason='end_turn', session_id=native, usage={}))
+                continue
             with RECEIPTS.open('a') as output:
                 output.write(json.dumps(dict(text=text, reply=reply, pid=os.getpid(), sid=SID, native_session=native, at=time.time())) + '\n')
             native_row(native, 'user', text, request['uuid'])
-            answer_id = 'msg_' + uuid.uuid4().hex
             if text == 'DESKTOP_AFTER_2681' and (HOME / 'host-restart-stream-enabled').exists():
                 for event in [dict(type='message_start', message=dict(id=answer_id)),
                         dict(type='content_block_start', index=0, content_block=dict(type='text')),
@@ -230,6 +384,8 @@ if __name__ == '__main__':
     boundary()
     if sys.argv[1:] == ['console']:
         console()
+    elif sys.argv[1:] == ['console-working']:
+        console_working()
     elif sys.argv[1:] == ['restart']:
         restart()
     elif sys.argv[1:] == ['finish-stream']:
@@ -240,5 +396,13 @@ if __name__ == '__main__':
         metadata(publish=True)
     elif sys.argv[1:] == ['evidence']:
         evidence()
+    elif sys.argv[1:] == ['phone-restart-before']:
+        phone_restart_before()
+    elif sys.argv[1:] == ['wait-phone-restart']:
+        wait_phone_restart()
+    elif sys.argv[1:] == ['setup-batch']:
+        setup_batch()
+    elif sys.argv[1:] == ['wait-batch-restart']:
+        wait_batch_restart()
     else:
         claude()
