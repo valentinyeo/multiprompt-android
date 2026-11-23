@@ -29,6 +29,14 @@ test('every line shows ticket number plus exact ticket title, once per ticket', 
   ], catalog), ['- IGSH-1694 Rooms on the phone', '- HYCI-12 Android checks finish in ten minutes']);
 });
 
+test('MUBO tickets are accepted like other board prefixes', () => {
+  const directory = titleDirectory({ 'MUBO-236.txt': 'Jump to newest sends a stray key that breaks the next command\n' });
+  const shipped = { ...catalog, ...loadCatalog(directory) };
+  assert.deepEqual(noteLines(['MUBO-236: stop sending End from jump to newest'], shipped), [
+    '- MUBO-236 Jump to newest sends a stray key that breaks the next command',
+  ]);
+});
+
 test('a commit without its ticket is refused', () => {
   assert.throws(() => noteLines(['Session previews no longer show terminal reply codes (#260)'], catalog), /must start with its ticket/);
   assert.throws(() => ticketFor('IGSH-0: nothing'), /must start with its ticket/);
@@ -81,11 +89,11 @@ test('the shipped titles directory holds one valid file per ticket and no shared
   const shipped = loadCatalog();
   assert.ok(Object.keys(shipped).length > 0);
   for (const id of Object.keys(shipped)) {
-    assert.match(id, /^(?:IGSH|HYCI)-[1-9]\d*$/);
+    assert.match(id, /^(?:IGSH|HYCI|MUBO)-[1-9]\d*$/);
     assert.deepEqual(noteLines([`${id}: x`], shipped), [`- ${id} ${shipped[id]}`]);
   }
   const directory = fileURLToPath(new URL('./titles/', import.meta.url));
-  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI)-[1-9]\d*\.txt$/);
+  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI|MUBO)-[1-9]\d*\.txt$/);
   assert.throws(() => readdirSync(fileURLToPath(new URL('./ticket-titles.json', import.meta.url))), /ENOENT/);
 });
 
