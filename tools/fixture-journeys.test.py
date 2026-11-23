@@ -153,7 +153,8 @@ class FixtureJourneyTest(unittest.TestCase):
             (root / 'shared-messages').mkdir()
             with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
                 db.execute('CREATE TABLE message_events (sid TEXT, seq INTEGER, body TEXT)')
-                events = [dict(kind='turn.started', turn='turn', payload=dict(message_id='message-2')),
+                events = [dict(id='message-3', created=1),
+                          dict(kind='turn.started', turn='turn', payload=dict(message_id='message-2')),
                           dict(kind='text.done', turn='turn', at=2000)]
                 db.executemany('INSERT INTO message_events VALUES (?, ?, ?)', [('pi-sid', index, json.dumps(event)) for index, event in enumerate(events)])
                 db.execute('CREATE TABLE shared_messages (id TEXT, created REAL)')
@@ -308,6 +309,56 @@ session['db'].close()
             replies = [event['assistantMessageEvent']['content'] for event in map(json.loads, output.getvalue().splitlines()) if event.get('assistantMessageEvent', {}).get('type') == 'text_end']
             self.assertEqual(['PI_REPLY_PHONE_STREAM_2569', 'PI_REPLY_PHONE_DURING_STREAM_2569'], replies)
             self.assertEqual(2, len((home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()))
+
+    def stress_host(self, home, first_admission, completed, stored_created):
+        program = (SCRIPTS / 'ai-switch-drive.sh').read_text().split("<<'PYSTRESSHOST'\n", 1)[1].split('\nPYSTRESSHOST', 1)[0]
+        receipts = [
+            dict(provider='pi', sid='pi-session', id='prompt-handover', text='This chat ran on Claude until now and continues on Pi.\nCLAUDE_BEFORE_SWITCH_2538'),
+            dict(provider='pi', sid='pi-session', id='prompt-after', text='PHONE_AFTER_SWITCH_2538'),
+            dict(provider='pi', sid='pi-session', id='prompt-stream', text='PHONE_STREAM_2569'),
+            dict(provider='pi', sid='pi-session', id='prompt-during', text='PHONE_DURING_STREAM_2569'),
+            dict(provider='claude', sid='claude-session', id='prompt-claude-handover', text='This chat ran on Pi until now and continues on Claude.'),
+            dict(provider='claude', sid='claude-session', id='prompt-second', text='PHONE_SECOND_SWITCH_2569'),
+        ]
+        (home / 'ai-switch-provider-receipts.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in receipts))
+        root = home / '.local/state/multiprompt'
+        (root / 'shared-messages').mkdir(parents=True, exist_ok=True)
+        (root / 'agent-host').mkdir(parents=True, exist_ok=True)
+        for name, config in (('claude', dict(provider='claude', enabled=True, tmux='live-verify-session')),
+                             ('pi', dict(provider='pi', enabled=False, tmux='live-verify-session'))):
+            (root / 'agent-host' / f'{name}.config.json').write_text(json.dumps(config))
+        with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
+            db.executescript('CREATE TABLE shared_messages(id TEXT PRIMARY KEY, text TEXT, created REAL);'
+                             'CREATE TABLE message_events(sid TEXT, seq INTEGER PRIMARY KEY, body TEXT);')
+            db.execute('INSERT INTO shared_messages VALUES (?,?,?)', ('prompt-during', 'PHONE_DURING_STREAM_2569', stored_created))
+            events = [dict(kind='turn.started', turn='turn-1', payload=dict(message_id='prompt-stream')),
+                      dict(kind='text.done', turn='turn-1', at=completed)]
+            if first_admission is not None:
+                events.insert(0, dict(id='prompt-during', created=first_admission))
+            for seq, event in enumerate(events, 1):
+                db.execute('INSERT INTO message_events VALUES (?,?,?)', ('pi-session', seq, json.dumps(event)))
+        return subprocess.run([sys.executable, '-B', '-c', program.replace('/home/verifyssh', str(home))],
+                              env=dict(os.environ, HOME=str(home)), capture_output=True, text=True)
+
+    def test_ai_switch_counts_the_first_admission_when_a_busy_refusal_retries_the_followup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = self.stress_host(Path(temporary), 1795441400.0, 1795441419158, 1795441434.483)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            report = json.loads(result.stdout)
+            self.assertEqual(1795441400000.0, report['submitted'])
+            self.assertEqual(1795441419158, report['completed'])
+
+    def test_ai_switch_rejects_a_followup_first_admitted_after_the_stream_completed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = self.stress_host(Path(temporary), 1795441434.483, 1795441419158, 1795441434.483)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('AssertionError', result.stderr)
+
+    def test_ai_switch_rejects_a_followup_that_never_reached_the_host(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = self.stress_host(Path(temporary), None, 1795441419158, 1795441434.483)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('was never stored on the host', result.stderr)
 
     def test_ai_switch_back_to_claude_uses_the_new_session(self):
         fixture = load('ai_switch_reverse', SCRIPTS / 'ai-switch-fixture.py')

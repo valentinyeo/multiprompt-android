@@ -7,7 +7,7 @@ Dispatch `verify.yml` with `feature=skill-pills.md`. The fresh GitHub emulator i
 ## Journey
 
 1. Open `verify-session`. Type `Please this`. Require that exact composer text and no pill outline. Capture `pills-draft`.
-2. Move the cursor after `Please ` and type `/ `, leaving `this` intact. Move back one character to open the picker. Require `Please / this` and `/pill-guide-01`. Capture `pills-picker`. Require that reaching `/review-native` needs a scroll.
+2. Move the cursor after `Please ` and type `/ `, leaving `this` intact. Move back one character to open the picker. Require `Please / this` and `/pill-guide-01`. The driver retypes the slash up to three times from the retained draft until the composer reads exactly `Please / this`, so a dropped keystroke fails on the composer text instead of waiting for a picker that never had its slash. Capture `pills-picker`. Require that reaching `/review-native` needs a scroll.
 3. Scroll Composer suggestions using the visible skill row's scroll-container bounds. Require `/review-native` and unchanged `Please / this`. Capture `pills-scrolled`, then tap `/review-native`. Require exact `Please /review-native this` and a painted pill outline inside the composer. Capture `pills-inserted`.
 4. Tap **Send prompt**. Require the exact sent message with one inline `/review-native` pill, its fill distinct from the surrounding bubble, an empty composer and the host reply. Capture `pills-sent`. Require the independent receipt `VERIFY_RECEIVED:Please /review-native this`.
 5. Type `Keep /rev this`, move the cursor after `/rev`, and tap `/review-native`. Require exact `Keep /review-native this` and its painted composer pill. Capture `pills-removable`.

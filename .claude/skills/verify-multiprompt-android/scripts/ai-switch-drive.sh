@@ -176,7 +176,9 @@ with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
     events = [json.loads(raw) for raw, in db.execute('SELECT body FROM message_events WHERE sid=? ORDER BY seq', (receipts[2]['sid'],))]
     turn = next(event['turn'] for event in events if event.get('kind') == 'turn.started' and event['payload'].get('message_id') == receipts[2]['id'])
     completed = next(event['at'] for event in events if event.get('kind') == 'text.done' and event.get('turn') == turn)
-    submitted = db.execute('SELECT created FROM shared_messages WHERE id=?', (receipts[3]['id'],)).fetchone()[0] * 1000
+    admitted = next((event for event in events if event.get('id') == receipts[3]['id']), None)
+    assert admitted, f'Follow-up {receipts[3]["id"]} was never stored on the host'
+    submitted = admitted['created'] * 1000
     assert submitted < completed, (submitted, completed)
 configs = [json.loads(path.read_text()) for path in (root / 'agent-host').glob('*.config.json')]
 assert [config['provider'] for config in configs if config['enabled'] and config['tmux'] == 'live-verify-session'] == ['claude'], configs
