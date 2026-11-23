@@ -147,6 +147,7 @@ tap_node() {
     for attempt in {1..24}; do
         dump_ui || return
         if [[ -n "$expected" ]] && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
+        if (( taps > 0 )) && [[ -z "$expected" && "$(sha256sum "$EVIDENCE/current.xml")" != "$before" ]]; then return 0; fi
         if [[ -n "$session" ]] &&
             python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
             set -- desc "Robot $session" "${3:-tap}"
