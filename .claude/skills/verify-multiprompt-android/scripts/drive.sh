@@ -2,6 +2,8 @@
 set -euo pipefail
 feature=${1:?Usage: drive.sh feature-file.md}
 scripts=$(cd "$(dirname "$0")" && pwd)
+source "$scripts/../../../../tools/recorder-guard.sh"
+RECORDER_STOP_SECONDS="${RECORDER_STOP_SECONDS:-60}"
 node "$scripts/../../../../.github/scripts/pstack-verifier/coverage.cjs" journey "$feature"
 : "${EVIDENCE:?Set evidence directory}"
 : "${FIXTURE:?Set fixture directory}"
@@ -20,7 +22,23 @@ adb logcat -c
 adb logcat -v threadtime > "$EVIDENCE/logcat-stream.txt" 2>&1 &
 logcat_stream_pid=$!
 recorder_pid=
+recorder_client=
+recording_client=
+recording_pid=
 link_blocked=false
+reap_recorder() {
+    local client=${1:-} device=${2:-}
+    if [[ "$device" =~ ^[0-9]+$ ]]; then
+        adb shell kill -2 "$device" >/dev/null 2>&1
+    fi
+    if ! recorder_wait_client "$client" "$RECORDER_STOP_SECONDS" recorder; then
+        if [[ "$device" =~ ^[0-9]+$ ]]; then
+            adb shell kill -9 "$device" >/dev/null 2>&1
+        fi
+        return 1
+    fi
+    return 0
+}
 restore_chat_link() {
     if [[ "$link_blocked" == true ]]; then
         sudo iptables -D INPUT -p tcp --dport 2222 -j DROP
@@ -92,11 +110,19 @@ finish() {
         sudo cat /home/verifyssh/other-receipts.txt > "$EVIDENCE/session-b-receipts-final.txt" 2>/dev/null
     fi
     sudo -u verifyssh tmux capture-pane -pt "${fixture_session:-verify-session}" > "$EVIDENCE/tmux-final.txt" 2>/dev/null
-    if [[ "$recorder_pid" =~ ^[0-9]+$ ]]; then
-        if [[ "$feature" == session-routing.md ]] && ! adb shell kill -0 "$recorder_pid"; then code=1; fi
-        adb shell kill -INT "$recorder_pid"
-        wait "$recorder_client" || true
+    if [[ "$recorder_client" =~ ^[0-9]+$ ]]; then
+        if [[ "$feature" == session-routing.md && "$recorder_pid" =~ ^[0-9]+$ ]] && ! adb shell kill -0 "$recorder_pid"; then code=1; fi
+        reap_recorder "$recorder_client" "${recorder_pid:-}" || code=1
         if ! adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4" || [[ ! -s "$EVIDENCE/chat-catchup.mp4" ]]; then code=1; fi
+        recorder_client=
+    fi
+    if [[ "$recording_client" =~ ^[0-9]+$ ]]; then
+        reap_recorder "$recording_client" || code=1
+        recording_client=
+    fi
+    if [[ "$recording_pid" =~ ^[0-9]+$ ]]; then
+        reap_recorder "$recording_pid" || code=1
+        recording_pid=
     fi
     shot "exit-$code"
     timeout 15s adb logcat -d > "$EVIDENCE/logcat.txt"
@@ -2020,8 +2046,8 @@ PROOF
     if [[ "$package" != dev.multiprompt.companion ]]; then
         remote_recording=$(adb shell cat /sdcard/cancel-record.pid | tr -d '\r')
         [[ "$remote_recording" =~ ^[0-9]+$ ]]
-        adb shell kill -2 "$remote_recording"
-        wait "$recording_client"
+        reap_recorder "$recording_client" "$remote_recording"
+        recording_client=
         adb pull /sdcard/cancel-proof.mp4 "$EVIDENCE/cancel-proof.mp4"
     fi
     printf 'FEATURE VERIFIED: %s\n' "$feature"
@@ -2258,10 +2284,10 @@ QUEUE_COUNTS
     wait_for_text FOLLOWUP
     queue_ui 0 FOLLOWUP_DELIVERED
     fixture_counts WAITING_ONE,WAITING_TWO,FOLLOWUP WAITING_ONE,WAITING_TWO,FOLLOWUP
-    adb shell kill -INT "$recorder_pid"
-    wait "$recorder_client" || true
-    adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
+    reap_recorder "$recorder_client" "$recorder_pid" || true
     recorder_pid=
+    recorder_client=
+    adb pull /sdcard/chat-catchup.mp4 "$EVIDENCE/chat-catchup.mp4"
     python3 "$scripts/catchup.py" &
     catchup_pid=$!
     for attempt in {1..30}; do
@@ -2773,8 +2799,10 @@ if [[ "$feature" == terminal.md ]]; then
         dump_ui
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" desc 'Jump to live' >/dev/null 2>&1; then exit 1; fi
         shot "shell-live-$keyboard_state"
-        adb shell kill -2 "$(adb shell cat "/sdcard/shell-scroll-$keyboard_state.pid" | tr -d '\r')"
-        wait "$recording_pid"
+        scroll_device=$(adb shell cat "/sdcard/shell-scroll-$keyboard_state.pid" | tr -d '\r')
+        [[ "$scroll_device" =~ ^[0-9]+$ ]]
+        reap_recorder "$recording_pid" "$scroll_device"
+        recording_pid=
         adb pull "/sdcard/shell-scroll-$keyboard_state.mp4" "$EVIDENCE/shell-scroll-$keyboard_state.mp4"
     done
     printf 'SHELL_SCROLL_500_KEYBOARD_ANCHOR_LIVE_OK\n' | tee "$EVIDENCE/shell-scroll-result.txt"
