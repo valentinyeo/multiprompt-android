@@ -45,6 +45,17 @@ class SearchUiTest(unittest.TestCase):
         self.assertEqual(result['target'], 'orchard south')
         self.assertGreater(result['highlight_fraction'], 0.22)
 
+    def test_light_mode_highlighted_destination_passes_and_plain_text_fails(self):
+        self.image = Image.new('RGB', (240, 400), (247, 247, 247))
+        ImageDraw.Draw(self.image).text((20, 100), 'orchard south', fill=(28, 28, 28))
+        with self.assertRaisesRegex(AssertionError, 'highlight is missing'):
+            self.check()
+        ImageDraw.Draw(self.image).rectangle((20, 100, 109, 125), fill=(28, 28, 28))
+        ImageDraw.Draw(self.image).text((20, 100), 'orchard', fill=(255, 255, 255))
+        result = self.check()
+        self.assertEqual(result['target'], 'orchard south')
+        self.assertGreater(result['highlight_fraction'], 0.22)
+
     def test_plain_text_is_not_a_highlight(self):
         with self.assertRaisesRegex(AssertionError, 'highlight is missing'):
             self.check()

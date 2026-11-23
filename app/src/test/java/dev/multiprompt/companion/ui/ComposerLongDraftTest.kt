@@ -135,25 +135,29 @@ class ComposerLongDraftTest {
     }
 
     private fun skillPillBandPixels(bitmap: Bitmap, textRight: Int): Pair<Int, Int> {
-        val surface = Kit.Surface.toArgb()
+        val outline = kitPalette(true).outline.toArgb()
         val xMax = textRight.coerceIn(1, bitmap.width)
         var pillRows = 0
         var pillPixels = 0
         for (y in 0 until bitmap.height) {
-            var pill = 0
-            var pillMin = bitmap.width
-            var pillMax = 0
+            var run = 0
+            var best = 0
+            var bestStart = 0
             for (x in 0 until xMax) {
-                if (near(bitmap.getPixel(x, y), surface, 8)) {
-                    pill++
-                    pillMin = minOf(pillMin, x)
-                    pillMax = maxOf(pillMax, x)
+                if (near(bitmap.getPixel(x, y), outline, 20)) {
+                    run++
+                    if (run > best) {
+                        best = run
+                        bestStart = x - run + 1
+                    }
+                } else {
+                    run = 0
                 }
             }
-            if (pill > 20) {
+            if (best >= 24) {
                 pillRows++
-                pillPixels += pill
-                println("COMPOSER_ROW y=$y pill=$pill pillX=$pillMin..$pillMax")
+                pillPixels += best
+                println("COMPOSER_ROW y=$y pill=$best pillX=$bestStart..${bestStart + best - 1}")
             }
         }
         return pillRows to pillPixels
@@ -277,12 +281,9 @@ class ComposerLongDraftTest {
 
         val mic = node(compose.onNodeWithContentDescription("Start dictation"))
         val bitmap = save(compose.onNode(hasSetTextAction()), "composer-pill")
-        val surface = Kit.Surface.toArgb()
         val textRight = (mic.boundsInRoot.left - field.boundsInRoot.left).toInt() - 4
-        val pillPixels = (0 until bitmap.height).sumOf { y ->
-            (0 until textRight.coerceIn(1, bitmap.width)).count { x -> near(bitmap.getPixel(x, y), surface, 8) }
-        }
-        println("COMPOSER_FITTING_PILL pixels=$pillPixels")
-        assertTrue("a draft that fits keeps its skill pill: pixels=$pillPixels", pillPixels > 200)
+        val (pillRows, pillPixels) = skillPillBandPixels(bitmap, textRight)
+        println("COMPOSER_FITTING_PILL rows=$pillRows pixels=$pillPixels")
+        assertTrue("a draft that fits keeps its skill pill: rows=$pillRows pixels=$pillPixels", pillRows >= 2 && pillPixels >= 100)
     }
 }

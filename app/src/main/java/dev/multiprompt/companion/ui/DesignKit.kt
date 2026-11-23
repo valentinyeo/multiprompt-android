@@ -70,16 +70,26 @@ import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetValue
 
 internal object Kit {
-    val Page = ReaderBackground
-    val Sheet = ReaderSheet
-    val Surface = ReaderControl
-    val SurfaceRaised = ReaderSelected
-    val Outline = ReaderOutline
-    val Divider = ReaderDivider
-    val Text = ReaderForeground
-    val TextMuted = ReaderHint
-    val AccentUnread = ReaderChoiceBlue
-    val Danger = ReaderDanger
+    val Page: Color
+        @Composable get() = kit().page
+    val Sheet: Color
+        @Composable get() = kit().sheet
+    val Surface: Color
+        @Composable get() = kit().surface
+    val SurfaceRaised: Color
+        @Composable get() = kit().surfaceRaised
+    val Outline: Color
+        @Composable get() = kit().outline
+    val Divider: Color
+        @Composable get() = kit().divider
+    val Text: Color
+        @Composable get() = kit().text
+    val TextMuted: Color
+        @Composable get() = kit().textMuted
+    val AccentUnread: Color
+        @Composable get() = kit().accentUnread
+    val Danger: Color
+        @Composable get() = kit().danger
 
     val OutlineWidth = ReaderOutlineWidth
     val CardShape = RoundedCornerShape(20.dp)
@@ -122,9 +132,10 @@ internal fun KitRoundButton(
     icon: ImageVector,
     description: String,
     modifier: Modifier = Modifier,
-    tint: Color = Kit.Text,
+    tint: Color? = null,
     enabled: Boolean = true,
 ) {
+    val colors = kit()
     Box(
         modifier
             .size(Kit.ControlHeight)
@@ -133,24 +144,25 @@ internal fun KitRoundButton(
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, description, Modifier.size(Kit.ControlIconSize), tint = tint)
+        Icon(icon, description, Modifier.size(Kit.ControlIconSize), tint = tint ?: colors.text)
     }
 }
 
 @Composable
 internal fun KitInnerControl(
     modifier: Modifier = Modifier,
-    fill: Color = Kit.SurfaceRaised,
+    fill: Color? = null,
     outlined: Boolean = true,
     enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val paint = fill ?: kit().surfaceRaised
     Box(
         modifier
             .size(Kit.ControlInnerSize)
             .alpha(if (enabled) 1f else 0.45f)
-            .then(if (outlined) Modifier.kitSurface(CircleShape, fill) else Modifier.clip(CircleShape).background(fill, CircleShape))
+            .then(if (outlined) Modifier.kitSurface(CircleShape, paint) else Modifier.clip(CircleShape).background(paint, CircleShape))
             .let { if (onClick != null) it.clickable(enabled = enabled, role = Role.Button, onClick = onClick) else it },
         contentAlignment = Alignment.Center,
         content = content,
@@ -163,24 +175,26 @@ internal fun KitInnerButton(
     icon: ImageVector,
     description: String,
     modifier: Modifier = Modifier,
-    fill: Color = Kit.SurfaceRaised,
-    tint: Color = Kit.Text,
+    fill: Color? = null,
+    tint: Color? = null,
     outlined: Boolean = true,
     enabled: Boolean = true,
 ) {
+    val colors = kit()
     KitInnerControl(modifier = modifier, fill = fill, outlined = outlined, enabled = enabled, onClick = onClick) {
-        Icon(icon, description, Modifier.size(Kit.ControlIconSize), tint = tint)
+        Icon(icon, description, Modifier.size(Kit.ControlIconSize), tint = tint ?: colors.text)
     }
 }
 
 @Composable
 internal fun KitComposerPill(
     modifier: Modifier = Modifier,
-    fill: Color = Kit.Surface,
+    fill: Color? = null,
     content: @Composable RowScope.() -> Unit,
 ) {
+    val paint = fill ?: kit().surface
     Row(
-        modifier.fillMaxWidth().heightIn(min = Kit.ControlHeight).kitSurface(Kit.ComposerShape, fill).padding(Kit.InnerInset),
+        modifier.fillMaxWidth().heightIn(min = Kit.ControlHeight).kitSurface(Kit.ComposerShape, paint).padding(Kit.InnerInset),
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(Kit.InnerInset),
         content = content,
@@ -541,25 +555,38 @@ internal fun KitUnreadBadge(count: Int, modifier: Modifier = Modifier) {
 
 @Composable
 internal fun KitAssistantBubble(text: String, modifier: Modifier = Modifier) {
+    val colors = kit()
+    val fill = if (LocalSunlight.current) {
+        listOf(colors.surface, colors.surface)
+    } else {
+        listOf(ReaderBubbleAssistantTop, ReaderCard)
+    }
     Box(
         modifier.clip(Kit.CardShape)
-            .background(Brush.verticalGradient(listOf(ReaderBubbleAssistantTop, ReaderCard)), Kit.CardShape)
-            .border(Kit.OutlineWidth, Kit.Outline, Kit.CardShape)
+            .background(Brush.verticalGradient(fill), Kit.CardShape)
+            .border(Kit.OutlineWidth, colors.outline, Kit.CardShape)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(text, style = Kit.Body, color = Kit.Text)
+        Text(text, style = Kit.Body, color = colors.text)
     }
 }
 
 @Composable
 internal fun KitUserBubble(text: String, modifier: Modifier = Modifier) {
+    val colors = kit()
+    val fill = if (LocalSunlight.current) {
+        listOf(colors.surfaceRaised, colors.surfaceRaised)
+    } else {
+        listOf(ReaderBubbleUserTop, ReaderUserCard)
+    }
+    val outline = if (LocalSunlight.current) colors.outline else ReaderBubbleUserOutline
     Box(
         modifier.clip(Kit.CardShape)
-            .background(Brush.verticalGradient(listOf(ReaderBubbleUserTop, ReaderUserCard)), Kit.CardShape)
-            .border(Kit.OutlineWidth, ReaderBubbleUserOutline, Kit.CardShape)
+            .background(Brush.verticalGradient(fill), Kit.CardShape)
+            .border(Kit.OutlineWidth, outline, Kit.CardShape)
             .padding(horizontal = 16.dp, vertical = 10.dp),
     ) {
-        Text(text, style = Kit.Body, color = Kit.Text, textAlign = TextAlign.Start)
+        Text(text, style = Kit.Body, color = colors.text, textAlign = TextAlign.Start)
     }
 }
 

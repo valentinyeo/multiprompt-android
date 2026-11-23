@@ -2136,6 +2136,7 @@ internal fun SessionsScreen(
         bottomBar = {
             if (!LocalMaterial3.current) {
                 FloatingBottomBar {
+                    val fadeColor = kit().text
                     Box(
                         Modifier.fillMaxWidth()
                             .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -2144,10 +2145,10 @@ internal fun SessionsScreen(
                                 val edge = Kit.ScreenEdge.toPx()
                                 drawRect(
                                     Brush.horizontalGradient(
-                                        0f to Kit.Text.copy(alpha = 0f),
-                                        (edge / size.width) to Kit.Text,
-                                        (1f - edge / size.width) to Kit.Text,
-                                        1f to Kit.Text.copy(alpha = 0f),
+                                        0f to fadeColor.copy(alpha = 0f),
+                                        (edge / size.width) to fadeColor,
+                                        (1f - edge / size.width) to fadeColor,
+                                        1f to fadeColor.copy(alpha = 0f),
                                     ),
                                     blendMode = BlendMode.DstIn,
                                 )
@@ -2998,8 +2999,8 @@ private data class ComposerFills(val soft: Color, val softInk: Color, val strong
 @Composable
 private fun composerFills(): ComposerFills {
     val onLightPage = MaterialTheme.colorScheme.background.luminance() > 0.5f
-    return if (onLightPage) ComposerFills(MaterialTheme.colorScheme.surfaceContainerHigh, Kit.Page, Kit.Surface, Kit.Text)
-    else ComposerFills(Kit.SurfaceRaised, Kit.Text, Kit.Text, Kit.Page)
+    val soft = if (onLightPage) MaterialTheme.colorScheme.surfaceContainerHigh else Kit.SurfaceRaised
+    return ComposerFills(soft, Kit.Text, Kit.Text, Kit.Page)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -4604,8 +4605,9 @@ internal fun ReaderScreen(
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
-                        val skillText = remember(skillSpans, pillsDrawn) {
-                            if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans)
+                        val kitColors = kit()
+                        val skillText = remember(skillSpans, pillsDrawn, kitColors.text) {
+                            if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans, kitColors.text)
                         }
                         BasicTextField(
                             value = promptField,
@@ -4637,7 +4639,7 @@ internal fun ReaderScreen(
                                             modifier = Modifier.padding(top = Kit.InnerInset),
                                         )
                                     }
-                                    Box(Modifier.fillMaxWidth().heightIn(min = Kit.ControlInnerSize).padding(vertical = Kit.ControlTextInset).skillPills(skillSpans, laidOut)) {
+                                    Box(Modifier.fillMaxWidth().heightIn(min = Kit.ControlInnerSize).padding(vertical = Kit.ControlTextInset).skillPills(skillSpans, laidOut, kitColors)) {
                                         if (prompt.isEmpty()) {
                                             Text(
                                                 "Message ${session.displayName}",
@@ -5044,7 +5046,7 @@ internal fun ReaderScreen(
                                         marked.forEach { (part, hits, active) ->
                                             ChatLinkText(part.text) { line, start ->
                                                 Text(
-                                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))).marking(start, hits, active),
+                                                    terminalLinks(line, sunlightMode, linkColor = chatLinkColor(terminalBlue(sunlightMode))).marking(start, hits, active, kit()),
                                                     fontFamily = chatFontFamily(),
                                                     fontSize = transcriptFontSize,
                                                     lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
@@ -5157,7 +5159,7 @@ private fun ReaderCollapsibleBlock(
                 SelectionContainer {
                     if (isCode) {
                         Text(
-                            syntaxHighlightCode(block).marking(0, findHits, activeHit),
+                            syntaxHighlightCode(block).marking(0, findHits, activeHit, kit()),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = ReaderFontFamily,
                             fontSize = (10f * fontScale).sp,
@@ -5166,7 +5168,7 @@ private fun ReaderCollapsibleBlock(
                         )
                     } else {
                         Text(
-                            terminalLinks(block.text, sunlightMode).marking(0, findHits, activeHit),
+                            terminalLinks(block.text, sunlightMode).marking(0, findHits, activeHit, kit()),
                             modifier = Modifier.fillMaxWidth().padding(12.dp),
                             fontFamily = FontFamily.Default,
                             fontSize = chatFontSize((12f * fontScale).sp, fontScale),
@@ -5379,13 +5381,14 @@ private fun ticketUrl(number: String) = "https://app.hypertask.ai/detail/project
 
 @Composable
 private fun NoteLine(line: String, style: TextStyle, color: Color = Color.Unspecified) {
-    val annotated = remember(line) {
+    val linkColor = Kit.AccentUnread
+    val annotated = remember(line, linkColor) {
         buildAnnotatedString {
             var last = 0
             noteLink.findAll(line).forEach { match ->
                 append(line.substring(last, match.range.first))
                 val url = match.groupValues[1].ifBlank { ticketUrl(match.groupValues[2].removePrefix("IGSH-")) }
-                withLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = Kit.AccentUnread, textDecoration = TextDecoration.Underline)))) {
+                withLink(LinkAnnotation.Url(url, TextLinkStyles(SpanStyle(color = linkColor, textDecoration = TextDecoration.Underline)))) {
                     append(match.value)
                 }
                 last = match.range.last + 1

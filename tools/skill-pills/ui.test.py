@@ -41,6 +41,14 @@ class SkillPillsUiTest(unittest.TestCase):
         self.pill()
         self.assertTrue(self.check()['composer_pill'])
 
+    def test_composer_detects_light_outline_in_day_mode(self):
+        self.image = Image.new('RGB', (400, 400), (244, 244, 244))
+        ImageDraw.Draw(self.image).rounded_rectangle((10, 200, 389, 279), radius=25, outline=(212, 212, 212))
+        with self.assertRaisesRegex(AssertionError, 'outline'):
+            self.check()
+        ImageDraw.Draw(self.image).rounded_rectangle((120, 220, 280, 259), radius=16, outline=(212, 212, 212), fill=(244, 244, 244))
+        self.assertTrue(self.check()['composer_pill'])
+
     def test_removal_requires_exact_remaining_text_and_no_outline(self):
         self.editor.set('text', 'Keep this')
         self.assertFalse(self.check('removed', 'Keep this')['composer_pill'])
