@@ -56,26 +56,23 @@ pins_capture() {
     python3 "$scripts/pins-oracle.py" guard "$EVIDENCE/$label.xml" "$package"
 }
 pins_top() {
-    local attempt x y bottom
+    local attempt
     for attempt in {1..15}; do
         dump_ui
         if python3 "$scripts/pins-oracle.py" top "$EVIDENCE/current.xml" "$package" >/dev/null 2>&1; then return; fi
-        read -r x y bottom < <(python3 "$scripts/pins-oracle.py" swipe-area "$EVIDENCE/current.xml" "$package")
-        adb shell input swipe "$x" "$y" "$x" "$bottom" 500
-        sleep 1
+        pins_swipe start
     done
     python3 "$scripts/pins-oracle.py" top "$EVIDENCE/current.xml" "$package"
 }
-pins_first_horizontal() {
-    local attempt x1 y1 x2 y2
-    for attempt in {1..15}; do
-        dump_ui
-        if python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-00 >/dev/null 2>&1; then return; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" any)
-        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
-        sleep 1
-    done
-    return 1
+pins_swipe() {
+    local x y bottom
+    read -r x y bottom < <(python3 "$scripts/pins-oracle.py" swipe-area "$EVIDENCE/current.xml" "$package")
+    if [[ ( "$1" == start && "$reverse" == false ) || ( "$1" == end && "$reverse" == true ) ]]; then
+        adb shell input swipe "$x" "$y" "$x" "$bottom" 500
+    else
+        adb shell input swipe "$x" "$bottom" "$x" "$y" 500
+    fi
+    sleep 1
 }
 
 pins_instrument pins-seed
@@ -83,16 +80,13 @@ for reverse in false true; do
     pins_instrument pins-order "$reverse"
     relaunch_app
     pins_top
-    pins_first_horizontal
     pins_capture "pins-$reverse-top"
     python3 "$scripts/pins-oracle.py" top "$EVIDENCE/pins-$reverse-top.xml" "$package"
     python3 "$scripts/pins-oracle.py" header "$EVIDENCE/pins-$reverse-top.xml" "$package" > "$EVIDENCE/pins-$reverse-header.json"
     for attempt in {1..15}; do
         dump_ui
         if python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-11 >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 < <(python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" any)
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
-        sleep 1
+        pins_swipe end
     done
     pins_capture "pins-$reverse-horizontal"
     python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-11
@@ -103,10 +97,8 @@ for reverse in false true; do
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
     pins_top
-    pins_first_horizontal
     dump_ui
-    read -r x y bottom < <(python3 "$scripts/pins-oracle.py" swipe-area "$EVIDENCE/current.xml" "$package")
-    for swipe in 1 2; do adb shell input swipe "$x" "$bottom" "$x" "$y" 500; sleep 1; done
+    for swipe in 1 2 3 4; do pins_swipe end; done
     pins_capture "pins-$reverse-scrolled"
     if ! python3 "$scripts/pins-oracle.py" scrolled "$EVIDENCE/current.xml" "$package" "$EVIDENCE/pins-$reverse-header.json" \
         > "$EVIDENCE/pins-$reverse-scrolled-oracle.txt" 2>&1; then
