@@ -31,6 +31,7 @@ data class ChatHistory(
     val deliveries: Map<String, QueuedMessages.Delivery> = emptyMap(),
     val held: List<QueuedMessages.SentPrompt> = emptyList(),
     val pendingQuestions: List<PendingQuestion> = emptyList(),
+    val clearedAt: Double = 0.0,
 ) {
     val messages: List<ChatHistoryMessage> by lazy { transcript(rows) }
 
@@ -83,7 +84,7 @@ data class ChatHistory(
         val transcript = transcript(source)
         val latest = transcript.filter { it.role == "user" }.mapNotNull { LegacyMessageIdentity.seconds(it.timestamp) }.maxOrNull()
         val host = replica?.host ?: HostStream()
-        val cards = if (sent == null) scoped.filter { it.state != MessageProtocol.State.CANCELLED }.sortedBy { it.position }.map { row ->
+        val cards = if (sent == null) scoped.filter { it.state != MessageProtocol.State.CANCELLED && !clearedMessage(it) }.sortedBy { it.position }.map { row ->
             val notSent = notSent(row, now, seen[row.id])
             Card(ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
                 pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
@@ -245,7 +246,10 @@ data class ChatHistory(
     internal fun resetSeed(): ChatHistory = ChatHistory(
         sid = sid,
         deliveries = deliveries.filterValues { it == QueuedMessages.Delivery.DELIVERED || it == QueuedMessages.Delivery.CANCELLED },
+        clearedAt = clearedAt,
     )
+
+    internal fun clearedMessage(row: MessageProtocol.Row): Boolean = clearedAt > 0 && row.created < clearedAt - CLOCK_SLACK
 
     fun apply(page: ChatHistoryProtocol.Page): ChatHistory {
         val fresh = page.inode == 0L && page.end == 0L && page.rows.isEmpty()
@@ -254,6 +258,13 @@ data class ChatHistory(
         when (mode) {
             "delta" -> require(sameSource && page.base == offset && page.oldest == start)
             "older" -> require(sameSource && page.end == start && page.oldest == page.base)
+        }
+        val replaced = mode == "tail" && page.sid == sid && inode != 0L && page.inode != 0L && page.inode != inode
+        val sourceAdvanced = replaced && (page.mtime > mtime || page.probe != probe)
+        val cleared = when {
+            page.sid != sid -> 0.0
+            replaced -> maxOf(clearedAt, seconds(mtime), seconds(page.mtime))
+            else -> clearedAt
         }
         val retained = if (mode == "tail") emptyList() else rows
         val merged = (retained + page.rows).associateBy { listOf(it.offset, it.end, it.role, it.id, it.normalized) }.values.sortedBy { it.offset }
@@ -265,14 +276,17 @@ data class ChatHistory(
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
         val mergedDeliveries = previousDeliveries + page.deliveries + previousDeliveries.filterValues { it in terminal }
         if (mode == "older") {
-            return copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
+            return copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions, clearedAt = cleared)
         }
-        val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
-        return if (mode == "tail" && olderThan(this, next)) this else next
+        val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions, cleared)
+        val staleTail = mode == "tail" && !sourceAdvanced && olderThan(this, next)
+        val regressedInode = mode == "tail" && page.sid == sid && inode != 0L && page.inode != 0L &&
+            page.inode < inode && clearedAt > 0
+        return if (staleTail || regressedInode) this else next
     }
 
     companion object {
-        private const val CLOCK_SLACK = 2.0
+        internal const val CLOCK_SLACK = 2.0
         const val NOT_SENT = "Not sent"
         private const val NOT_SENT_WAIT = 600.0
 
@@ -284,6 +298,8 @@ data class ChatHistory(
 
         fun cancellable(row: MessageProtocol.Row, now: Double?, seen: Double? = null): Boolean =
             row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT) && !notSent(row, now, seen)
+
+        private fun seconds(nanos: Long): Double = if (nanos > 0) nanos / 1_000_000_000.0 else 0.0
 
         fun olderThan(shown: ChatHistory, incoming: ChatHistory): Boolean {
             val shownNewest = newestSeconds(shown) ?: return false

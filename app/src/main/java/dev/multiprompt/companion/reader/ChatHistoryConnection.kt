@@ -103,6 +103,7 @@ class ChatHistoryConnection(
     @Volatile private var awaitingMessages = false
     @Volatile private var deliveryIds: List<String> = emptyList()
     private val hostDrafts = mutableMapOf<String, Map<String, String>>()
+    private val sweptRows = mutableSetOf<String>()
     private val _hostClosed = MutableStateFlow<Set<String>>(emptySet())
     val hostClosed: StateFlow<Set<String>> = _hostClosed.asStateFlow()
     private val _hostError = MutableStateFlow<String?>(null)
@@ -381,6 +382,7 @@ class ChatHistoryConnection(
                                     ?: error("History unavailable")
                                 if (generation != historyGeneration) { replica = null; continue@poll }
                                 val next = current.apply(page)
+                                val clearedBy = if (next.clearedAt > current.clearedAt) next.clearedAt else 0.0
                                 if (replicaSid != page.sid) {
                                     replica = null
                                     replicaSid = page.sid
@@ -470,6 +472,15 @@ class ChatHistoryConnection(
                                         replica = built
                                         hostCarry = page.sid to built
                                     }
+                                    if (next.clearedAt > 0) {
+                                        val swept = sweepCleared(page.sid, cycleGeneration, next.clearedAt, requireNotNull(replica),
+                                            clearedBy > 0, messageScope, exchange) { ++requestId }
+                                        if (swept == null) {
+                                            replica = null
+                                            continue@poll
+                                        }
+                                        replica = swept
+                                    }
                                     for (entry in pending(page.sid).filter { it.operation == "submit" && it.id !in checked }) {
                                         requestId++
                                         val status = MessageProtocol.mutation(exchange(MessageProtocol.request(requestId, messageScope, "message_status", JSONObject().put("message_id", entry.messageId))), requestId, messageScope, entry.messageId)
@@ -543,8 +554,10 @@ class ChatHistoryConnection(
                                     }
                                 }
                                 if (!published) { replica = null; continue@poll }
-                                _state.value.replica?.messages?.values.orEmpty()
-                                    .filter { it.id !in recovering && SendRecovery.due(it, recovered[it.id] ?: 0, _state.value.connected) }
+                                val shown = _state.value
+                                shown.replica?.messages?.values.orEmpty()
+                                    .filter { it.id !in recovering && !shown.history.clearedMessage(it) &&
+                                        SendRecovery.due(it, recovered[it.id] ?: 0, shown.connected) }
                                     .forEach { row ->
                                         recovering.add(row.id)
                                         recovered.merge(row.id, 1, Int::plus)
@@ -721,6 +734,35 @@ class ChatHistoryConnection(
                 }
             }
         }
+    }
+
+    private suspend fun sweepCleared(sid: String, observed: Long, clearedAt: Double, replica: MessageReplica, forgetSubmits: Boolean,
+        wire: MessageProtocol.Scope, exchange: suspend (String) -> String, nextId: () -> Long): MessageReplica? {
+        val clearable = replica.messages.values.filter { row ->
+            row.created < clearedAt - ChatHistory.CLOCK_SLACK && row.id !in sweptRows &&
+                row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT, MessageProtocol.State.FAILED)
+        }
+        val journaled = synchronized(this@ChatHistoryConnection) {
+            if (generation != observed || !selected || ownedKey != key(sid)) false
+            else gate?.ifOwned(key(sid), token) {
+                if (forgetSubmits) pending(sid).filter { it.operation == "submit" }.forEach { journalAccess { journal?.remove(it.id) } }
+                true
+            } ?: false
+        }
+        if (!journaled) return null
+        var swept = replica
+        for (row in clearable) {
+            if (generation != observed || !owns(sid)) return null
+            val id = nextId()
+            val response = exchange(MessageProtocol.request(id, wire, "message_dismiss",
+                JSONObject().put("message_id", row.id).put("text", row.text)))
+            sweptRows.add(row.id)
+            if (MessageProtocol.rejectedMutation(response, id)) continue
+            val updated = MessageProtocol.mutation(response, id, wire, row.id, row.text).row ?: continue
+            if (updated.epoch != swept.epoch) return null
+            swept = swept.copy(messages = swept.messages + (updated.id to updated))
+        }
+        return swept
     }
 
     private suspend fun performAction(command: Command.Action, replica: MessageReplica, wire: MessageProtocol.Scope,

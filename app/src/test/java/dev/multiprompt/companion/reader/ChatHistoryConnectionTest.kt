@@ -186,17 +186,27 @@ class ChatHistoryConnectionTest {
         @Volatile var dropFirstSubmit = false
         val retries = java.util.concurrent.CopyOnWriteArrayList<String>()
         val submissions = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val dismissals = java.util.concurrent.CopyOnWriteArrayList<String>()
         private val submitted = java.util.concurrent.CopyOnWriteArrayList<JSONObject>()
         private val digest = "b".repeat(64)
+        @Volatile var cleared = false
+
+        fun seed(id: String, text: String, state: String, created: Double) {
+            submitted.add(JSONObject().put("id", id).put("provider", "claude").put("sid", "sid1").put("text", text)
+                .put("position", submitted.size + 1).put("attempt", "attempt1").put("state", state)
+                .put("deadline", JSONObject.NULL).put("receipt", JSONObject.NULL).put("epoch", 1).put("created", created))
+        }
 
         private fun row(role: String, text: String, offset: Long, end: Long) =
             JSONObject().put("role", role).put("text", text).put("id", "row$offset").put("timestamp", "")
                 .put("offset", offset).put("end", end).toString()
 
         private fun history(id: Long): String {
-            val rows = listOf(row("user", "question", 0, 10)) + if (answered) listOf(row("assistant", "answer", 10, 20)) else emptyList()
-            val end = if (answered) 20 else 10
-            val header = listOf("@mp", id, "history", "ok", "sid1", 0, end, 1, 0, wireAgent, "tmux", 1, "a".repeat(64), "tail", 0).joinToString("\t")
+            val rows = if (cleared) listOf(row("user", "after the clear", 0, 10))
+                else listOf(row("user", "question", 0, 10)) + if (answered) listOf(row("assistant", "answer", 10, 20)) else emptyList()
+            val end = if (cleared) 10 else if (answered) 20 else 10
+            val source = if (cleared) 2L else 1L
+            val header = listOf("@mp", id, "history", "ok", "sid1", 0, end, source, 0, wireAgent, "tmux", source * 1_000_000_000_000L, "a".repeat(64), "tail", 0).joinToString("\t")
             return JSONObject().put("id", id).put("wire", (listOf(header) + rows + TranscriptProtocol.END).joinToString("\n") + "\n").toString()
         }
 
@@ -231,6 +241,14 @@ class ChatHistoryConnectionTest {
                             .put("state", if (dropFirstSubmit) "failed" else "queued").put("deadline", JSONObject.NULL)
                             .put("receipt", JSONObject.NULL).put("epoch", 1).put("created", 1.0)
                         submitted.add(row)
+                        result(id, JSONObject().put("epoch", 1).put("seq", head).put("message", row))
+                    }
+                    "message_dismiss" -> {
+                        val token = request.getString("message_id")
+                        dismissals.add(token)
+                        val stored = submitted.firstOrNull { it.getString("id") == token } ?: error("Unknown message")
+                        val row = JSONObject(stored.toString()).put("state", "cancelled")
+                        submitted[submitted.indexOf(stored)] = row
                         result(id, JSONObject().put("epoch", 1).put("seq", head).put("message", row))
                     }
                     "message_retry" -> {
@@ -388,6 +406,26 @@ class ChatHistoryConnectionTest {
             chat.start()
             withTimeout(10_000L) { chat.state.first { it.replica?.host?.running == true } }
             assertEquals(5_001L - ChatHistoryConnection.HOST_REPLAY_TAIL, fake.afters.first())
+        }
+    }
+
+    @Test
+    fun clearingTheTranscriptCancelsMessagesFromBeforeTheClear() = runBlocking {
+        val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd")
+        val token = "clearedmessage000001"
+        val fake = FakeHost().apply { seed(token, "OLD unsent", "failed", 900.0) }
+        val chat = ChatHistoryConnection(repository(), host, identity, byteArrayOf(), ChatHistoryCache(temporary.newFolder()),
+            gate = MessageGate(), connectedExchange = { block -> fake.connect(block) }, pollGate = ChatPollGate())
+        chat.use {
+            chat.pollGate.acquire()
+            chat.start()
+            withTimeout(10_000L) { chat.state.first { it.ready && it.replica != null } }
+            assertEquals(listOf("question", "OLD unsent"), chat.state.value.history.projectMessages(chat.state.value.replica, now = 950.0).map { it.text })
+            fake.cleared = true
+            assertNotNull(withTimeoutOrNull(15_000L) { while (fake.dismissals.isEmpty()) delay(50L) })
+            assertEquals(listOf(token), fake.dismissals.toList())
+            withTimeout(10_000L) { chat.state.first { it.replica?.messages?.get(token)?.state == MessageProtocol.State.CANCELLED } }
+            assertEquals(listOf("after the clear"), chat.state.value.history.projectMessages(chat.state.value.replica, now = 2_500.0).map { it.text })
         }
     }
 
