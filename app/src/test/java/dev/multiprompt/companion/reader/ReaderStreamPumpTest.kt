@@ -289,17 +289,42 @@ class ReaderStreamPumpTest {
 
     @Test
     fun hidingDuringConnectDoesNotMarkFailure() = runTest {
-        val host = FakeHost()
+        var attempts = 0
+        var snapshots = 0
         val failures = mutableListOf<Throwable>()
         val selected = MutableStateFlow(true)
-        pump(selected, host, failures)
+        val pump = ReaderStreamPump<Int>(
+            wanted = selected,
+            connect = {
+                attempts++
+                if (attempts == 1) delay(500L)
+                attempts
+            },
+            stream = { _, heard ->
+                heard()
+                snapshots++
+                delay(Long.MAX_VALUE / 4)
+            },
+            release = {},
+            onClient = {},
+            onConnecting = {},
+            onFailure = { failures += it },
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        advanceTimeBy(100L)
         runCurrent()
+        assertEquals(1, attempts)
+        assertEquals(0, snapshots)
         selected.value = false
         runCurrent()
+        assertTrue(failures.isEmpty())
         selected.value = true
         runCurrent()
         assertTrue(failures.isEmpty())
-        assertTrue(host.snapshots >= 1)
+        assertEquals(2, attempts)
+        assertEquals(1, snapshots)
     }
 
     @Test

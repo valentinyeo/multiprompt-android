@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.multiprompt.companion.MultipromptApplication
+import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.model.TmuxSession
@@ -99,6 +101,11 @@ class ReaderSessionRoutingTest {
             first.close()
             second.close()
             app.deepgramDictation.discard()
+            app.getSharedPreferences("session_read_state", Context.MODE_PRIVATE)
+                .edit()
+                .remove("composer_draft::${SessionReadStore.key(a.hostId, a.name)}")
+                .remove("composer_draft::${SessionReadStore.key(b.hostId, b.name)}")
+                .commit()
         }
     }
 }

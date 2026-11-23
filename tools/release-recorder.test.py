@@ -99,14 +99,21 @@ class ReleaseRecorderTest(unittest.TestCase):
             except subprocess.TimeoutExpired:
                 return None, time.monotonic() - started
 
-    @staticmethod
-    def stop_group(process):
-        if process.poll() is None:
+    def survivors(self):
+        result = subprocess.run(['pgrep', '-af', str(self.bin / 'adb')], capture_output=True, text=True)
+        return [line for line in result.stdout.splitlines() if str(self.bin / 'adb') in line]
+
+    def stop_group(self, process):
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        for line in self.survivors():
             try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-            except ProcessLookupError:
+                os.kill(int(line.split(None, 1)[0]), signal.SIGKILL)
+            except (ProcessLookupError, ValueError):
                 pass
-            process.wait()
+        process.wait()
 
     def test_parent_stop_hangs_when_the_device_never_returns(self):
         self.install_adb(WEDGED_ADB)
@@ -120,6 +127,12 @@ class ReleaseRecorderTest(unittest.TestCase):
         self.assertLess(elapsed, 25)
         self.assertNotEqual(code, 0, 'a wedged recorder must fail loudly')
         self.assertIn('killing it', (self.home / 'stderr.txt').read_text())
+
+    def test_stop_leaves_no_wedged_client_behind(self):
+        self.install_adb(WEDGED_ADB)
+        code, elapsed = self.run_script(BOUNDED_STOP, 25)
+        self.assertIsNotNone(code, f'recorder stop hung past its own limit after {elapsed:.1f}s')
+        self.assertEqual(self.survivors(), [], 'a wedged adb client outlived recorder stop')
 
     def test_stop_leaves_a_healthy_recorder_alone(self):
         self.install_adb(RELEASING_ADB)

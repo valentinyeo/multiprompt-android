@@ -44,6 +44,27 @@ adb() { printf '%s\\n' "$*" >> "$EVIDENCE/swipes"; }
                 self.assertEqual(swipes, [f'shell input swipe 540 {start_y} 540 {end_y} 500'] * 4
                                  + [f'shell input swipe 540 {end_y} 540 {start_y} 500'])
 
+    def test_settings_reveals_workspace_colors_before_waiting_for_offscreen_text(self):
+        source = (SCRIPTS / 'drive.sh').read_text()
+        start = source.index('    tap_text Settings', source.index('mode workspace-colors-seed'))
+        phase = source[start:source.index('    shot settings-workspace-colors', start)]
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            prefix = '<hierarchy><node package="dev.multiprompt.companion.debug" bounds="[0,0][1080,1920]"><node text="Session list settings" bounds="[0,0][1080,100]"/><node package="dev.multiprompt.companion.debug" scrollable="true" bounds="[0,200][1080,1800]">'
+            (folder / 'before.xml').write_text(prefix + '<node text="All split on right"/></node></node></hierarchy>')
+            (folder / 'after.xml').write_text(prefix + '<node text="Workspace colors"/><node text="Auto"/><node text="Auto"/></node></node></hierarchy>')
+            shell = '''set -euo pipefail
+EVIDENCE="$1"
+scripts="$2"
+page=before
+dump_ui() { cp "$EVIDENCE/$page.xml" "$EVIDENCE/current.xml"; }
+tap_text() { [[ "$1" == Settings ]]; dump_ui; }
+wait_for_text() { python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$1" >/dev/null; }
+adb() { [[ "$*" == 'shell input swipe 540 1480 540 520 400' ]]; page=after; }
+''' + phase + '\n[[ "$page" == after ]]\n'
+            result = subprocess.run(['bash', '-c', shell, 'settings-scroll', directory, str(SCRIPTS)], capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_changed_key_waits_for_the_sheet_before_using_underlying_controls(self):
         source = (SCRIPTS / "drive.sh").read_text()
         rotated = source.split('> "$EVIDENCE/rotated-sshd-pid.txt"', 1)[1]

@@ -112,3 +112,21 @@ test('retries stop at the retry window even when attempts remain', () => {
   assert.equal(calls, 1);
   assert.match(result.stderr, /past the 0s retry window/);
 });
+
+test('HTTP 429 can outlast the normal six-attempt window', () => {
+  const { result, calls } = run([
+    ...Array(8).fill('Received status code 429 from server: Too Many Requests'),
+    'ok'
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(calls, 9);
+});
+
+test('HTTP 429 still respects an explicit retry-window limit', () => {
+  const { result, calls } = run(['Received status code 429', 'ok'], {
+    GRADLE_RETRY_WINDOW_SECONDS: '0'
+  });
+  assert.equal(result.status, 1);
+  assert.equal(calls, 1);
+  assert.match(result.stderr, /past the 0s retry window/);
+});

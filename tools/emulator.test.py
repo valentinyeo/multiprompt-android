@@ -24,6 +24,17 @@ def source(name):
 
 
 class EmulatorProofTest(unittest.TestCase):
+    def write_emulator(self, home, version):
+        emulator = Path(home) / 'emulator'
+        emulator.mkdir(parents=True, exist_ok=True)
+        (emulator / 'package.xml').write_text('<repository><localPackage path="emulator"/></repository>')
+        binary = emulator / 'emulator'
+        if version.startswith('Android emulator version'):
+            binary.write_text(f'#!/usr/bin/env bash\necho "{version}"\n')
+        else:
+            binary.write_text(f'#!/usr/bin/env bash\necho "{version}" >&2\nexit 1\n')
+        binary.chmod(0o700)
+
     def test_every_emulator_job_uses_one_shared_lifecycle(self):
         for name in ('test' if args.ref else 'android-full', 'verify', 'top-fade', 'account-journey', 'working-dots'):
             workflow = source(f'.github/workflows/{name}.yml')
@@ -128,7 +139,7 @@ else: sys.exit(2)
                     self.assertEqual(calls.count('run watch'), 1)
                     self.assertNotIn('EMULATOR_SERIES_OK', result.stdout)
 
-    def test_complete_sdk_image_skips_the_installer(self):
+    def test_complete_sdk_image_and_emulator_skip_the_installer(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)
             script = path / 'sdk.sh'
@@ -143,11 +154,41 @@ echo "$*" >> "$ANDROID_HOME/calls"
             image.mkdir(parents=True)
             (image / 'system.img').write_text('image')
             (image / 'package.xml').write_text('package')
+            self.write_emulator(tmp, version='Android emulator version 35.6.11.0')
             env = dict(os.environ, ANDROID_HOME=tmp, PROOF_TARGET='default', PATH=f'{tmp}:{os.environ["PATH"]}')
             result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('ANDROID_IMAGE_READY', result.stdout)
             self.assertFalse((path / 'calls').exists())
+
+    def test_missing_or_broken_emulator_package_reinstalls_before_the_boot(self):
+        for breakage in ('missing', 'broken'):
+            with self.subTest(breakage=breakage), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp)
+                script = path / 'sdk.sh'
+                script.write_text(source('.github/actions/android-proof/sdk.sh'))
+                installer = path / 'sdkmanager'
+                installer.write_text('''#!/usr/bin/env bash
+set -eu
+if [ "$*" = --licenses ]; then exit 0; fi
+echo "$*" > "$ANDROID_HOME/calls"
+mkdir -p "$ANDROID_HOME/emulator"
+printf '#!/usr/bin/env bash\\necho "Android emulator version 35.6.11.0"\\n' > "$ANDROID_HOME/emulator/emulator"
+chmod +x "$ANDROID_HOME/emulator/emulator"
+echo package > "$ANDROID_HOME/emulator/package.xml"
+''')
+                installer.chmod(0o700)
+                image = path / 'system-images/android-35/default/x86_64'
+                image.mkdir(parents=True)
+                (image / 'system.img').write_text('image')
+                (image / 'package.xml').write_text('package')
+                if breakage == 'broken':
+                    self.write_emulator(tmp, version='corrupt archive')
+                env = dict(os.environ, ANDROID_HOME=tmp, PROOF_TARGET='default', PATH=f'{tmp}:{os.environ["PATH"]}')
+                result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('ANDROID_IMAGE_READY', result.stdout)
+                self.assertIn('emulator', (path / 'calls').read_text())
 
     def run_packages(self, cached, already=None):
         with tempfile.TemporaryDirectory() as tmp:
@@ -426,6 +467,10 @@ if [ "$count" -eq "$READY_ON" ]; then
   mkdir -p "$image"
   echo image > "$image/system.img"
   echo package > "$image/package.xml"
+  mkdir -p "$ANDROID_HOME/emulator"
+  printf '#!/usr/bin/env bash\necho "Android emulator version 35.6.11.0"\n' > "$ANDROID_HOME/emulator/emulator"
+  chmod +x "$ANDROID_HOME/emulator/emulator"
+  echo package > "$ANDROID_HOME/emulator/package.xml"
 fi
 ''')
                 installer.chmod(0o700)

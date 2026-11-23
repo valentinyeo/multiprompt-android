@@ -37,6 +37,11 @@ while true; do
     exit "$status"
   fi
 
+  if grep -Eqi 'status code 429|too many requests' "$log"; then
+    window="${GRADLE_RETRY_WINDOW_SECONDS:-900}"
+    attempts_allowed="${GRADLE_RETRY_ATTEMPTS:-20}"
+  fi
+
   if [[ "$attempt" -ge "$attempts_allowed" ]]; then
     echo "gradle-retry: gave up after $attempt attempts in ${SECONDS}s" >&2
     exit "$status"
