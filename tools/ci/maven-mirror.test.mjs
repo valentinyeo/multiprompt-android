@@ -41,7 +41,7 @@ test('settings.gradle.kts resolves Maven Central through the Google mirror befor
 
 test('unit tests point Robolectric runtime fetches at the same Maven Central mirror', () => {
   const buildGradle = readFileSync(
-    new URL('../../app/build.gradle.kts', import.meta.url),
+    new URL('../../build.gradle.kts', import.meta.url),
     'utf8',
   );
   assert.match(

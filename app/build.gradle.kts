@@ -136,14 +136,10 @@ val syncRobolectricAndroidAll = tasks.register<Sync>("syncRobolectricAndroidAll"
     into(robolectricDepsDir)
 }
 
-val mavenCentralMirror = "https://maven-central.storage-download.googleapis.com/maven2/"
-
 tasks.withType<Test>().configureEach {
     dependsOn(syncRobolectricAndroidAll)
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", robolectricDepsDir.get().asFile.absolutePath)
-    systemProperty("robolectric.dependency.repo.url", mavenCentralMirror)
-    systemProperty("robolectric.dependency.repo.id", "google-maven-central-mirror")
 }
 
 androidComponents {
