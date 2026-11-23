@@ -21,6 +21,12 @@ function titleDirectory(entries) {
   return directory;
 }
 
+test('MUBO ticket prefixes are accepted', () => {
+  const titles = { 'MUBO-217': 'Light theme labels are nearly invisible' };
+  assert.doesNotThrow(() => noteLines(['MUBO-217: readable labels'], titles));
+  assert.doesNotThrow(() => ticketFor('MUBO-217: readable labels'));
+});
+
 test('every line shows ticket number plus exact ticket title, once per ticket', () => {
   assert.deepEqual(noteLines([
     'IGSH-1694: Tapping a room opens it (#267)',

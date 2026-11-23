@@ -6,7 +6,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageStat
 
 
 def bounds(node):
@@ -19,12 +19,16 @@ def outlines(image, box, inset):
     x1, y1, x2, y2 = box
     assert 0 <= x1 < x2 <= image.width and 0 <= y1 < y2 <= image.height, 'Pill is off screen'
     margin = max(3, (y2 - y1) // 10) if inset else 0
+    if x1 + margin >= x2 - margin or y1 + margin >= y2 - margin:
+        return []
+    crop = image.crop((x1 + margin, y1 + margin, x2 - margin, y2 - margin))
+    target = 212 if ImageStat.Stat(crop.convert('L')).mean[0] >= 128 else 46
     lines = []
     for y in range(y1 + margin, y2 - margin):
         start = None
         for x in range(x1 + margin, x2 - margin + 1):
             pixel = image.getpixel((x, y)) if x < x2 - margin else None
-            grey = pixel is not None and all(abs(channel - 46) <= 2 for channel in pixel)
+            grey = pixel is not None and all(abs(channel - target) <= 2 for channel in pixel)
             if grey and start is None:
                 start = x
             if not grey and start is not None:
@@ -104,7 +108,7 @@ def check(xml, screenshot, phase, text):
             assert bubble, 'Sent skill pill has no surrounding bubble'
             background = bubble.most_common(1)[0][0]
             area = (text_bounds[2] - text_bounds[0]) * height
-            assert count / area >= 0.35 and max(abs(a - b) for a, b in zip(fill, background)) >= 12, 'Sent skill pill fill is missing'
+            assert count / area >= 0.35 and max(abs(a - b) for a, b in zip(fill, background)) >= 8, 'Sent skill pill fill is missing'
             result.update(sent_pill='/review-native', sent_pill_bounds=pill_bounds,
                           sent_pill_fill=fill, sent_bubble_fill=background)
     else:

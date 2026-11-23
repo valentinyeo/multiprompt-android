@@ -4,7 +4,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 
-internal fun AnnotatedString.marking(base: Int, hits: List<ChatFind.Hit>, active: ChatFind.Hit?): AnnotatedString {
+internal fun AnnotatedString.marking(
+    base: Int,
+    hits: List<ChatFind.Hit>,
+    active: ChatFind.Hit?,
+    colors: KitPalette,
+): AnnotatedString {
     if (hits.isEmpty() || isEmpty()) return this
     val end = base + length
     val ordered = hits.sortedBy { hit ->
@@ -20,8 +25,8 @@ internal fun AnnotatedString.marking(base: Int, hits: List<ChatFind.Hit>, active
         val current = active != null && hit.message == active.message && hit.start == active.start && hit.end == active.end
         builder.addStyle(
             SpanStyle(
-                background = if (current) Kit.Text else Kit.Outline,
-                color = if (current) Kit.Page else Color.Unspecified,
+                background = if (current) colors.text else colors.outline,
+                color = if (current) colors.page else Color.Unspecified,
             ),
             from,
             to,

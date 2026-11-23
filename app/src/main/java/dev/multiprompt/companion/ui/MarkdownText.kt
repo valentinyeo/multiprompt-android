@@ -80,6 +80,7 @@ fun MarkdownText(
     onSessionLink: ((String) -> Unit)? = null,
 ) {
     val blocks = remember(text) { MarkdownParser.parse(LiveMention.visible(text)) }
+    val kitColors = kit()
     val clipboard = LocalClipboardManager.current
     val context = LocalContext.current
     var heading: String? = null
@@ -94,7 +95,7 @@ fun MarkdownText(
             runCatching { bringMatch.bringIntoView() }
         }
     }
-    fun mark(value: AnnotatedString, at: Int) = value.marking(at, matchHits, activeHit)
+    fun mark(value: AnnotatedString, at: Int) = value.marking(at, matchHits, activeHit, kitColors)
     val defaultFontSize = fontSize
     val defaultLineHeight = lineHeight
     fun runsAnnotated(runs: List<InlineRun>) = markdownAnnotated(
@@ -434,6 +435,7 @@ private fun MarkdownTable(
 ) {
     val material3 = LocalMaterial3.current
     val context = LocalContext.current
+    val kitColors = kit()
     val columns = maxOf(table.header.size, table.rows.maxOfOrNull { it.size } ?: 0)
     val rows = listOf(table.header) + table.rows
     val cellCount = rows.size * columns
@@ -461,7 +463,7 @@ private fun MarkdownTable(
                             if (LocalReaderStyle.current) FontFamily.SansSerif else FontFamily.Monospace,
                             mentionChats,
                             onSessionLink,
-                        ) { openMarkdownUrl(context, it) }.marking(at, matchHits, activeHit),
+                        ) { openMarkdownUrl(context, it) }.marking(at, matchHits, activeHit, kitColors),
                         fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * (fontSize.value / ReaderTextSize.value) else if (LocalMaterial3.current) MaterialTheme.typography.bodyMedium.fontSize * (fontSize.value / 15f) else (fontSize.value * 0.92f).sp,
                         lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * (fontSize.value / ReaderTextSize.value) else TextUnit.Unspecified,
                         color = color,

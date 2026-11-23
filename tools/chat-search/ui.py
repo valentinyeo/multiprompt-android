@@ -5,7 +5,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageStat
 
 
 def check(xml, screenshot, query, count, target=''):
@@ -35,13 +35,14 @@ def check(xml, screenshot, query, count, target=''):
         x1, y1, x2, y2 = bounds
         assert 0 <= x1 < x2 <= image.width and 0 <= y1 < y2 <= image.height, 'Search destination is off screen'
         crop = image.crop(tuple(bounds))
+        highlight = 28 if ImageStat.Stat(image.convert('L')).mean[0] >= 128 else 242
         longest = 0
         bright = 0
         for y in range(crop.height):
             run = 0
             for x in range(crop.width):
                 pixel = crop.getpixel((x, y))
-                lit = all(abs(channel - 242) <= 3 for channel in pixel)
+                lit = all(abs(channel - highlight) <= 3 for channel in pixel)
                 bright += int(lit)
                 run = run + 1 if lit else 0
                 longest = max(longest, run)
