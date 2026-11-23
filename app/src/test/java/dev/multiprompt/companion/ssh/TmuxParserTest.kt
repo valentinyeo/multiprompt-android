@@ -253,21 +253,6 @@ class TmuxParserTest {
     }
 
     @Test
-    fun backfillsHostSessionIdFromRegistryWhenTmuxOmitsOption() {
-        val sid = "05825187-f4b7-4fec-84c9-16726b3b5258"
-        val hex = ("@provider\tlive-c2a89c7\tclaude\n@hostsid\tlive-c2a89c7\t$sid").toByteArray()
-            .joinToString("") { byte -> "%02x".format(byte) }
-        val output = row("live-c2a89c7", "1", "0", "200", "98", "51", "/home/me/work", "box", "sleep", "sleep", "", "300", "HT Product Lead") +
-            "${TmuxCommands.ETA_PREFIX}$hex\n"
-
-        val session = TmuxParser.parse("de", output).single()
-
-        assertEquals(sid, session.hostSessionId)
-        assertEquals("claude", session.hostProvider)
-        assertEquals(AgentKind.CLAUDE, session.agent)
-    }
-
-    @Test
     fun registryRowsWithoutATerminalParseAsLiveChatsWithTheirSessionId() {
         val sid = "721fb507-2781-4e48-8b6d-debd6e2da3f3"
         val output = row("live-desk", "1", "0", "1700", "0", "0", "/srv/work", "", "sleep", "", sid, "1700", "")

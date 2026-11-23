@@ -111,7 +111,7 @@ for reverse in false true; do
     pins_first_horizontal
     dump_ui
     read -r x y bottom < <(python3 "$scripts/pins-oracle.py" swipe-area "$EVIDENCE/current.xml" "$package")
-    for swipe in 1 2 3 4; do adb shell input swipe "$x" "$bottom" "$x" "$y" 500; sleep 1; done
+    for swipe in 1 2; do adb shell input swipe "$x" "$bottom" "$x" "$y" 500; sleep 1; done
     pins_capture "pins-$reverse-scrolled"
     if ! python3 "$scripts/pins-oracle.py" scrolled "$EVIDENCE/current.xml" "$package" "$EVIDENCE/pins-$reverse-header.json" \
         > "$EVIDENCE/pins-$reverse-scrolled-oracle.txt" 2>&1; then

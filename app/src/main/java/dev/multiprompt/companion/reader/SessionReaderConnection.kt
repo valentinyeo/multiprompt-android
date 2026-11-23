@@ -135,8 +135,7 @@ class SessionReaderConnection(
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
     private val pollGate = ChatPollGate()
 
-    fun matches(host: HostProfile, agent: AgentKind, hostSessionId: String): Boolean =
-        this.host == host && this.agent == agent && this.hostSessionId == hostSessionId
+    fun matches(host: HostProfile, agent: AgentKind): Boolean = this.host == host && this.agent == agent
 
     val sharedMessages: Boolean get() = ChatHistoryProtocol.messageProvider(agent, hostSessionId) != null
 
@@ -700,7 +699,7 @@ class SessionReaderConnection(
     }
 
     private suspend fun <T> withFreshClient(block: suspend (SshClient) -> T): T {
-        val client = withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) }
+        val client = repository.connect(host)
         return try {
             block(client)
         } finally {

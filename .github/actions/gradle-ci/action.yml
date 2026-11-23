@@ -1,8 +1,8 @@
 name: Shared Gradle cache setup
-description: Pins Gradle 9.5.1. Read-only jobs fall back to the newest cache for their key job so the Compose plugin and the Robolectric test jars are already on disk
+description: Pins Gradle 9.5.1 with strict home cache; read-only restores the Android tests build job cache
 inputs:
   read-only:
-    description: When true, restore cache from GRADLE_BUILD_ACTION_CACHE_KEY_JOB without writing, falling back to the newest matching entry
+    description: When true, restore cache from GRADLE_BUILD_ACTION_CACHE_KEY_JOB without writing
     required: false
     default: 'false'
 runs:
@@ -11,17 +11,5 @@ runs:
     - uses: gradle/actions/setup-gradle@v4
       with:
         gradle-version: "9.5.1"
-        gradle-home-cache-strict-match: ${{ inputs.read-only != 'true' }}
+        gradle-home-cache-strict-match: true
         cache-read-only: ${{ inputs.read-only == 'true' }}
-    - name: Robolectric test jars on disk
-      shell: bash
-      run: |
-        cache="${GRADLE_USER_HOME:-$HOME/.gradle}/caches/modules-2/files-2.1/org.robolectric"
-        android_all=$({ find "$cache" -name 'android-all-instrumented-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
-        native_runtime=$({ find "$cache" -name 'nativeruntime-dist-compat-*.jar' 2>/dev/null || true; } | wc -l | tr -d ' ')
-        echo "robolectric cache: android-all-instrumented=$android_all nativeruntime-dist-compat=$native_runtime"
-        if [ "$android_all" -gt 0 ] && [ "$native_runtime" -gt 0 ]; then
-          echo "robolectric cache hit: this job resolves the Robolectric jars from the restored Gradle cache"
-        else
-          echo "robolectric cache miss: this job downloads the Robolectric jars from Maven Central"
-        fi

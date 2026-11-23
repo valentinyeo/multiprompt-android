@@ -155,21 +155,13 @@ class ReaderActionsMenuTest {
         compose.runOnIdle { assertEquals(2, waits); assertTrue(!archived.value); assertEquals(0, archives) }
     }
 
-    @Test fun composerHoldsPlusFieldMicrophoneAndSendInOneRow() {
+    @Test fun composerHasInsideMicrophoneOutsidePlusAndNoWaveform() {
         render()
         val input = compose.onNode(hasSetTextAction()).fetchSemanticsNode().boundsInRoot
         val mic = compose.onNodeWithContentDescription("Start dictation").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val plus = compose.onNodeWithContentDescription("Attach").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        val send = compose.onNodeWithContentDescription("Send prompt").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertEquals(Kit.ControlInnerSize.value, plus.width, 0.01f)
-        assertEquals(Kit.ControlInnerSize.value, mic.width, 0.01f)
-        assertEquals(Kit.ControlInnerSize.value, send.width, 0.01f)
-        assertTrue("plus=$plus input=$input", plus.right < input.left)
-        assertTrue("mic=$mic input=$input", input.right < mic.left)
-        assertTrue("mic=$mic send=$send", mic.right < send.left)
-        listOf(plus, mic, send).forEach { circle ->
-            assertEquals("circle=$circle input=$input", input.center.y, circle.center.y, 0.01f)
-        }
+        assertTrue(mic.left >= input.left && mic.right <= input.right && mic.top >= input.top && mic.bottom <= input.bottom)
+        assertTrue(plus.right < input.left)
         compose.onNodeWithTag("reader-waveform").assertDoesNotExist()
         compose.onNodeWithContentDescription("Back").assertIsDisplayed()
         compose.onNodeWithText(f.session.displayName).assertIsDisplayed()

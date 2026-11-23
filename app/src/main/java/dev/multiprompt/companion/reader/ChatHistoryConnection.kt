@@ -90,8 +90,6 @@ class ChatHistoryConnection(
     @Volatile private var freshSid: String? = null
     @Volatile private var generation = 0L
     private var hostCarry: Pair<String, MessageReplica>? = null
-    private val recovered = java.util.concurrent.ConcurrentHashMap<String, Int>()
-    private val recovering = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
     @Volatile private var resetFence = false
     @Volatile private var ownedKey: String? = null
     private data class ResetAck(val sid: String, val id: String, val epoch: Long, val generation: Long)
@@ -341,11 +339,11 @@ class ChatHistoryConnection(
         val deferredCommands = java.util.ArrayDeque<Command>()
         job = pollGate.launchIn(scope) {
             val restoreGeneration = generation
-            runCatching { cache.restore(cacheKey) }.getOrNull()?.let { restored ->
+            runCatching { cache.restore(cacheKey) }.getOrNull()?.let {
                 synchronized(this@ChatHistoryConnection) {
-                    if (generation == restoreGeneration && freshSid == null && !ChatHistory.olderThan(_state.value.history, restored)) {
-                        val unresolved = runCatching { pending(restored.sid) }
-                        _state.value = ChatHistoryState(restored, loaded = true, unresolved = unresolved.getOrNull() ?: _state.value.unresolved,
+                    if (generation == restoreGeneration && freshSid == null) {
+                        val unresolved = runCatching { pending(it.sid) }
+                        _state.value = ChatHistoryState(it, loaded = true, unresolved = unresolved.getOrNull() ?: _state.value.unresolved,
                             messageError = if (unresolved.isFailure) "Local storage failure; messages cannot be safely sent" else null)
                     }
                 }
@@ -543,19 +541,6 @@ class ChatHistoryConnection(
                                     }
                                 }
                                 if (!published) { replica = null; continue@poll }
-                                _state.value.replica?.messages?.values.orEmpty()
-                                    .filter { it.id !in recovering && SendRecovery.due(it, recovered[it.id] ?: 0, _state.value.connected) }
-                                    .forEach { row ->
-                                        recovering.add(row.id)
-                                        recovered.merge(row.id, 1, Int::plus)
-                                        scope.launch {
-                                            try {
-                                                retryFailed(row, confirmed = true)
-                                            } finally {
-                                                recovering.remove(row.id)
-                                            }
-                                        }
-                                    }
                                 resyncing?.complete(Unit)
                                 resyncing = null
                                 retryDelay = ReconnectBackoff.INITIAL_MS

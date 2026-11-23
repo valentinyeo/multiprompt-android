@@ -58,7 +58,7 @@ class ReaderSessionRoutingTest {
                     onSetAppTheme = {}, onResetFontScale = { 1f }, sessionActionError = null,
                     onClearSessionActionError = {}, onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {})
             }
-            compose.waitUntil(180_000) { first.state.value.status == ReaderStatus.Live && second.state.value.status == ReaderStatus.Live }
+            compose.waitUntil(90_000) { first.state.value.status == ReaderStatus.Live && second.state.value.status == ReaderStatus.Live }
             listOf(false, true).forEach { target ->
                 repeat(4) { compose.runOnIdle { switched = !switched } }
                 compose.runOnIdle { switched = target }

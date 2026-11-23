@@ -420,7 +420,6 @@ class TmuxCommandsTest {
             assertEquals(0, process.waitFor())
             val providers = TmuxText.parseHostProviders(output)
             assertEquals(mapOf("live-one" to "codex", "live-two" to "pi"), providers)
-            assertEquals(mapOf("live-one" to "s1", "live-two" to "s2"), TmuxText.parseHostSessionIds(output))
         } finally {
             home.deleteRecursively()
         }

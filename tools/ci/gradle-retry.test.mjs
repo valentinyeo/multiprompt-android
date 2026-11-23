@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -11,11 +11,7 @@ const script = fileURLToPath(new URL('gradle-retry.sh', import.meta.url));
 function run(answers, extraEnv = {}) {
   const directory = mkdtempSync(path.join(tmpdir(), 'gradle-retry-'));
   const counter = path.join(directory, 'calls');
-  const gradleHome = path.join(directory, 'gradle-home');
-  const modules = path.join(gradleHome, 'caches', 'modules-2');
-  mkdirSync(modules, { recursive: true });
-  writeFileSync(path.join(modules, 'cached.jar'), 'jar');
-  writeFileSync(path.join(directory, 'answers'), `${answers.map(answer => answer.replace(/\n/g, '\\n')).join('\n')}\n`);
+  writeFileSync(path.join(directory, 'answers'), `${answers.join('\n')}\n`);
   writeFileSync(counter, '');
   const gradle = path.join(directory, 'gradle');
   writeFileSync(
@@ -23,25 +19,17 @@ function run(answers, extraEnv = {}) {
     [
       '#!/usr/bin/env bash',
       `echo x >> "${counter}"`,
-      `echo "$*" >> "${directory}/args"`,
       `line="$(sed -n "$(wc -l < "${counter}")p" "${directory}/answers")"`,
-      'printf \'%b\\n\' "$line"',
+      'echo "$line"',
       'case "$line" in ok) exit 0 ;; broken) exit 3 ;; *) exit 1 ;; esac'
     ].join('\n')
   );
   chmodSync(gradle, 0o755);
   const result = spawnSync('bash', [script, '--no-daemon', 'assembleDebug'], {
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      GRADLE_BIN: gradle,
-      GRADLE_USER_HOME: gradleHome,
-      GRADLE_RETRY_BACKOFF_SECONDS: '0',
-      ...extraEnv
-    }
+    env: { ...process.env, GRADLE_BIN: gradle, GRADLE_RETRY_BACKOFF_SECONDS: '0', ...extraEnv }
   });
-  const args = readFileSync(path.join(directory, 'args'), 'utf8').trim().split('\n');
-  return { result, calls: (readFileSync(counter, 'utf8').match(/x/g) ?? []).length, args, modules };
+  return { result, calls: (readFileSync(counter, 'utf8').match(/x/g) ?? []).length };
 }
 
 test('a busy repository is retried and the build then passes', () => {
@@ -76,31 +64,6 @@ test('a server error is treated as a transient download failure', () => {
   ]);
   assert.equal(result.status, 0, result.stderr);
   assert.equal(calls, 2);
-});
-
-test('a restored cache missing jars is cleared and retried once with refreshed dependencies', () => {
-  const { result, calls, args, modules } = run([
-    [
-      '> Could not resolve all files for configuration \':app:debugUnitTestCompileClasspath\'.',
-      '   > Failed to transform robolectric-4.16.1.jar (org.robolectric:robolectric:4.16.1).',
-      '      > Could not find robolectric-4.16.1.jar (org.robolectric:robolectric:4.16.1).'
-    ].join('\n'),
-    'ok'
-  ]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(calls, 2);
-  assert.equal(existsSync(modules), false, 'the incomplete modules cache must be cleared');
-  assert.doesNotMatch(args[0], /--refresh-dependencies/);
-  assert.match(args[1], /--refresh-dependencies/);
-  assert.match(result.stderr, /restored download cache is incomplete/);
-});
-
-test('a cache that stays broken fails after the single repair instead of burning the retry window', () => {
-  const answer = "Could not read '/home/runner/.gradle/caches/modules-2/files-2.1/x.jar'\n> Could not resolve all artifacts for configuration classpath";
-  const { result, calls } = run([answer, answer, 'ok']);
-  assert.equal(result.status, 1);
-  assert.equal(calls, 2);
-  assert.doesNotMatch(result.stderr, /network failure/);
 });
 
 test('retries stop at the retry window even when attempts remain', () => {

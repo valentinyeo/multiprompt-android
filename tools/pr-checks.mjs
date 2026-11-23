@@ -35,15 +35,7 @@ export const emptyJourneyMatrix = /^(?:parent )?journey \$\{\{ matrix\.feature \
 export const journeyVerifyCheck = /^journey (.+) \/ verify$/;
 export const intervalMs = 300_000;
 export const timeoutMs = 1_800_000;
-export const repo = 'valentinyeo/multiprompt-android';
-export const prFields = ['state', 'headRefOid', 'mergeable', 'statusCheckRollup'];
-
-export function inspectPr(pr, run = execFileSync) {
-  const options = { encoding: 'utf8', timeout: 30_000, maxBuffer: 2 * 1024 * 1024 };
-  const view = JSON.parse(run('gh', ['pr', 'view', pr, '--repo', repo, '--json', prFields.join(',')], options));
-  const base = run('gh', ['api', `repos/${repo}/pulls/${pr}`, '--jq', '.base.sha'], options).trim();
-  return { ...view, baseRefOid: base };
-}
+const repo = 'valentinyeo/multiprompt-android';
 
 function checkFailed(check) {
   if (check.__typename === 'CheckRun') {
@@ -163,7 +155,10 @@ async function main() {
   if (!/^[1-9][0-9]*$/.test(pr ?? '') || (option !== undefined && option !== '--wait') || extra.length) {
     throw new Error('Usage: node tools/pr-checks.mjs <PR> [--wait]');
   }
-  const inspect = () => inspectPr(pr);
+  const inspect = () => JSON.parse(execFileSync('gh', [
+    'pr', 'view', pr, '--repo', 'valentinyeo/multiprompt-android',
+    '--json', 'state,headRefOid,baseRefOid,mergeable,statusCheckRollup',
+  ], { encoding: 'utf8', timeout: 30_000, maxBuffer: 2 * 1024 * 1024 }));
   const work = () => waitForChecks(inspect, { wait: option === '--wait', loadRedOnMain: loadRedOnMainJourneys });
   console.log(await (option === '--wait' ? withWaitLock(pr, work) : work()));
 }

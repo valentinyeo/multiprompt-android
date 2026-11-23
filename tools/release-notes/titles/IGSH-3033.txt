@@ -1,1 +1,0 @@
-IGSH-3033: Phone test builds always find the Compose plugin

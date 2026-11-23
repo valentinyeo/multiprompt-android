@@ -1,1 +1,0 @@
-Android reply quote shows raw text and cuts the message off

@@ -138,16 +138,6 @@ object TmuxText {
         }
     }
 
-    fun parseHostSessionIds(value: String): Map<String, String> = buildMap {
-        value.lineSequence().forEach { line ->
-            val parts = line.split('\t')
-            if (parts.size < 3 || parts[0] != HOST_SESSION_ID_PREFIX) return@forEach
-            val name = parts[1].trim()
-            val sid = parts[2].trim()
-            if (name.isNotBlank() && sid.matches(Regex("[A-Za-z0-9_-]{1,80}"))) put(name, sid)
-        }
-    }
-
     fun parseSessionEtaStates(value: String): Map<String, SessionEtaState> = buildMap {
         value.lineSequence().forEach { line ->
             val parts = line.split('\t')
@@ -769,7 +759,6 @@ object TmuxText {
     private const val HOOK_STATE_PREFIX = "@state"
     private const val LIVE_REPLY_PREFIX = "@reply"
     private const val HOST_PROVIDER_PREFIX = "@provider"
-    private const val HOST_SESSION_ID_PREFIX = "@hostsid"
     private val HOOK_STATES = setOf("active", "done")
     private const val MIN_ACCURACY_ACTUAL_SECONDS = 120.0
     private const val MIN_ACCURACY_SAMPLES = 3

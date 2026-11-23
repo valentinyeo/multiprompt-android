@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import dev.multiprompt.companion.NewSessionMode
 import dev.multiprompt.companion.NewSessionPicker
 import dev.multiprompt.companion.model.HostProfile
@@ -63,11 +64,11 @@ class NewSessionScreenTest {
     }
 
     @Test
-    fun searchAndModeShareTheKitControlHeight() {
+    fun searchAndModeArePills44dpTall() {
         show()
-        compose.onNodeWithTag("picker-back").assertHeightIsEqualTo(Kit.ControlHeight)
-        compose.onNodeWithTag("picker-search").assertHeightIsEqualTo(Kit.ControlHeight)
-        compose.onNodeWithTag("picker-mode").assertHeightIsEqualTo(Kit.ControlHeight)
+        compose.onNodeWithTag("picker-back").assertHeightIsEqualTo(44.dp)
+        compose.onNodeWithTag("picker-search").assertHeightIsEqualTo(44.dp)
+        compose.onNodeWithTag("picker-mode").assertHeightIsEqualTo(44.dp)
         compose.onNodeWithText("Find a repo", useUnmergedTree = true).assertExists()
     }
 
