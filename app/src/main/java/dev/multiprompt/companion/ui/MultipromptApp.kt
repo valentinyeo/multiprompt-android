@@ -3105,7 +3105,7 @@ internal fun ReaderScreen(
         ChatMention.query(prompt, promptField.selection.start)
     } else null
     val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
-    var dictationPrefix by remember(connection) { mutableStateOf("") }
+    var dictationBefore by remember(connection) { mutableStateOf(DictationDraft.captured("")) }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var recordingPrompt by remember(connection) { mutableStateOf(false) }
@@ -3417,7 +3417,7 @@ internal fun ReaderScreen(
         }
     }
     val startDictation = {
-        dictationPrefix = prompt.trimEnd()
+        dictationBefore = DictationDraft.captured(prompt)
         dictationSubmissionStarted.set(false)
         microphoneError = null
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -3427,6 +3427,13 @@ internal fun ReaderScreen(
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    val cancelDictation = {
+        dictationSubmissionStarted.set(false)
+        sendAfterDictation = false
+        dictation.discard()
+        setPrompt(dictationBefore.restored())
     }
 
     LaunchedEffect(acceptedQueuedPrompts, queuedDraft) {
@@ -3461,7 +3468,7 @@ internal fun ReaderScreen(
     LaunchedEffect(dictationState.transcript) {
         val spoken = dictationState.transcript.trim()
         if (spoken.isNotBlank()) {
-            setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
+            setPrompt(dictationBefore.withSpoken(spoken))
         }
     }
     DisposableEffect(connection) {
@@ -3600,10 +3607,7 @@ internal fun ReaderScreen(
         when (dictationState.status) {
             DictationStatus.IDLE -> {
                 if (!dictationSubmissionStarted.compareAndSet(true, false)) return@LaunchedEffect
-                val finalPrompt = PromptComposer.appendDictation(
-                    dictationPrefix,
-                    dictationState.transcript,
-                )
+                val finalPrompt = dictationBefore.withSpoken(dictationState.transcript)
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
                 sendDraft(finalPrompt)
@@ -4353,6 +4357,7 @@ internal fun ReaderScreen(
                     DictationBar(
                         level = dictation.level,
                         sending = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
+                        onCancel = cancelDictation,
                         onStop = { dictation.stop() },
                         onSend = submitPrompt,
                     )
