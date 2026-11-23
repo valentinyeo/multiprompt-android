@@ -102,6 +102,20 @@ test('the job that writes the cache warms the Robolectric jars the read only job
   assert.match(action, /nativeruntime-dist-compat-\*\.jar/);
 });
 
+test('the signed candidate build rides out Maven Central rate limits like every other CI build', () => {
+  const prepare = readFileSync(new URL('../../tools/release-choices/prepare.sh', import.meta.url), 'utf8');
+  assert.match(
+    prepare,
+    /^\s+tools\/ci\/gradle-retry\.sh -p "\$app_source" --no-daemon [^\n]*"\$task"$/m,
+    'prepare.sh must run the candidate build through tools/ci/gradle-retry.sh so a Maven Central 429 does not fail a phone journey'
+  );
+  assert.doesNotMatch(
+    prepare,
+    /^\s+gradle -p /m,
+    'prepare.sh must not call gradle directly, because a bare call gives up on the first 429'
+  );
+});
+
 test('a cold build can still fetch the Compose plugin from the plugin repositories', () => {
   const pluginRepositories = settings.match(/pluginManagement\s*\{[\s\S]*?repositories\s*\{([\s\S]*?)\n    \}/);
   assert.ok(pluginRepositories, 'missing pluginManagement.repositories in settings.gradle.kts');

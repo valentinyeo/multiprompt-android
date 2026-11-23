@@ -6,11 +6,11 @@ Dispatch `verify.yml` with `feature=session-drafts.md`. The driver uses the same
 
 ## Journey
 
-1. On Inbox, require `verify-session` and `Inbox preview stays.`, and require no **Draft** label. Capture `inbox-before-draft`.
+1. On Inbox, scroll to reveal **Robot verify-session** before checking its preview. Require `verify-session` and `Inbox preview stays.`, and require no **Draft** label. Capture `inbox-before-draft`.
 2. Open `verify-session`. Type `unsent draft text` and do not send it. Capture `composer-unsent`. The host receipt file must not contain that line.
-3. Go back to Inbox. Require the **Draft** label on the `verify-session` row, with its bounds ending before `Inbox preview stays.` starts on the same line. Capture `inbox-draft`.
+3. Go back to Inbox. Reveal the same row before checking its preview. Require the **Draft** label on the `verify-session` row, with its bounds ending before `Inbox preview stays.` starts on the same line. Capture `inbox-draft`.
 4. Open the chat again. The composer still shows `unsent draft text`. Tap **Send prompt**. Require `VERIFY_RECEIVED:unsent draft text` in the fixture receipt file.
-5. Go back to Inbox. Require `Inbox preview stays.` and no **Draft** label. Capture `inbox-draft-cleared`.
+5. Go back to Inbox. Reveal the same row before checking its preview. Require `Inbox preview stays.` and no **Draft** label. Capture `inbox-draft-cleared`.
 
 ## Gotchas
 

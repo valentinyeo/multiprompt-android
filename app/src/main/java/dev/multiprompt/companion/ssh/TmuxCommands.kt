@@ -95,6 +95,9 @@ object TmuxCommands {
             "then tmux capture-pane -p -J -t $target; " +
             "else tmux capture-pane -p -J -S -5000 -t $target; fi"
 
+    fun remoteScrollLive(sessionName: String, alternateOn: Boolean): String? =
+        if (alternateOn) action(sessionName, TmuxAction.SCROLL_BOTTOM) else null
+
     fun action(sessionName: String, action: TmuxAction): String {
         val key = when (action) {
             TmuxAction.ENTER -> "Enter"

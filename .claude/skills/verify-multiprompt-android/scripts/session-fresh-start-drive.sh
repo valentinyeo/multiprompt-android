@@ -27,7 +27,11 @@ seed_stale_cache() {
 assert_one_inbox_row() {
   local phase=$1
   dump_ui
-  python3 tools/session-fresh-start/inbox.py "$EVIDENCE/current.xml" "$fixture_session" > "$EVIDENCE/fresh-start-inbox-$phase.json"
+  local extra_sessions=()
+  if [[ "${BREAK_IT_MODE:-}" == true ]]; then
+    extra_sessions=(--allow-session live-pi_verify-breakit-probe --allow-session verify-breakit-other)
+  fi
+  python3 tools/session-fresh-start/inbox.py "$EVIDENCE/current.xml" "$fixture_session" "${extra_sessions[@]}" > "$EVIDENCE/fresh-start-inbox-$phase.json"
 }
 assert_chat() {
   local phase=$1

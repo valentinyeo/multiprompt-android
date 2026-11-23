@@ -288,7 +288,7 @@ class SessionReaderConnection(
             val history = historyConnection ?: return PromptAdmission.Rejected("Chat is not ready")
             if (!pollGate.active.value) return PromptAdmission.Rejected("Chat is no longer selected")
             if (text.isBlank() || '\u0000' in text) return PromptAdmission.Rejected("Message is empty or invalid")
-            pendingPrompts.state.value.firstOrNull { it.text == text && it.error == null }?.let {
+            pendingPrompts.state.value.firstOrNull { MessageIdentity.same(it.identityText, MessageIdentity.text(text)) && it.error == null }?.let {
                 return PromptAdmission.WaitingForConnection(it.id)
             }
             history.state.value.messageError?.let { return PromptAdmission.Rejected(it) }
@@ -419,7 +419,9 @@ class SessionReaderConnection(
     }
 
     fun scrollLive() {
-        requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
+        if (_state.value.alternateOn) {
+            requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
+        }
     }
 
     private val _historyPage = MutableStateFlow<String?>(null)
@@ -473,7 +475,7 @@ class SessionReaderConnection(
         historyMode = false
         _historyPages.value = emptyList()
         _historyPage.value = null
-        scrollLive()
+        scrollLiveDirect()
     }
 
     suspend fun loadOlderIntoTranscript(): Boolean = historyMutex.withLock {

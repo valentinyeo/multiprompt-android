@@ -60,6 +60,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import dev.multiprompt.companion.reader.ChatHistory
+import dev.multiprompt.companion.reader.MessageIdentity
+import dev.multiprompt.companion.reader.identityText
 import dev.multiprompt.companion.reader.MessageActionResult
 import dev.multiprompt.companion.reader.MessageProtocol
 import dev.multiprompt.companion.reader.PromptAdmission
@@ -307,7 +309,7 @@ internal fun ChatHistoryList(
         val keys = visible.map { it.key }
         val texts = visible.map { it.text }
         val before = visible.indexOfFirst { it.key == request.message.key }.takeIf { it >= 0 }
-            ?: visible.indexOfLast { it.role == request.message.role && it.text == request.message.text }
+            ?: visible.indexOfLast { it.role == request.message.role && MessageIdentity.same(it.identityText, request.message.identityText) }
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
@@ -468,7 +470,7 @@ private fun HistoryBubble(
 ) {
     val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
     val isUser = role == "user"
-    val note = remember(text, isUser, pending, key) { if (isUser && !pending && listOf("@local:", "@shared:", "@unknown:").none(key::startsWith)) SessionNote.parse(text) else null }
+    val note = remember(text, isUser, pending, key) { if (isUser && !pending && !MessageIdentity.unsaved(key)) SessionNote.parse(text) else null }
     val reply = remember(text, isUser, note) { if (isUser && note == null) ReplyQuote.parse(text) else null }
     val start = remember { BringIntoViewRequester() }
     val currentFind = activeHit

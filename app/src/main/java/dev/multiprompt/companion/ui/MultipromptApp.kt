@@ -15,6 +15,7 @@ import android.text.format.DateUtils
 import androidx.compose.foundation.lazy.rememberLazyListState
 import dev.multiprompt.companion.reader.AiStopped
 import dev.multiprompt.companion.reader.ChatHistoryProtocol
+import dev.multiprompt.companion.reader.MessageIdentity
 import dev.multiprompt.companion.reader.TranscriptMessage
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
@@ -4968,7 +4969,7 @@ internal fun ReaderScreen(
                     val bodyColor = chatTextColor(sunlightMode, isUser)
                     val (hits, active) = findFrame.next()
                     key(connection, message.role, message.timestamp, message.text) {
-                        if (unreadMessageKey == "transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
+                        if (unreadMessageKey == MessageIdentity.unread(message.role, message.timestamp, message.text)) Text("New", color = MaterialTheme.colorScheme.primary)
                         if (index == batchStart && batchLabel != null) BatchTimeLine(batchLabel, sunlightMode)
                         ReplyableBubble(
                             isUser = isUser,
@@ -4977,7 +4978,7 @@ internal fun ReaderScreen(
                             onReply = { chooseReply(it, isUser) },
                             gate = replyGate,
                             sessionName = session.displayName,
-                            onMarkUnread = { onMarkUnreadFrom("transcript:${message.role}:${message.timestamp}:${message.text.hashCode()}") },
+                            onMarkUnread = { onMarkUnreadFrom(MessageIdentity.unread(message.role, message.timestamp, message.text)) },
                             modifier = Modifier.findPin(active != null),
                         ) {
                             if (isUser) {
@@ -5033,7 +5034,7 @@ internal fun ReaderScreen(
                                 Triple(part, hits, active)
                             }
                             key(connection, blockKey) {
-                                if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
+                                if (unreadMessageKey == MessageIdentity.unread(blockKey)) Text("New", color = MaterialTheme.colorScheme.primary)
                                 ReplyableBubble(
                                     isUser = false,
                                     sunlight = sunlightMode,
@@ -5041,7 +5042,7 @@ internal fun ReaderScreen(
                                     onReply = { chooseReply(it, false) },
                                     gate = replyGate,
                                     sessionName = session.displayName,
-                                    onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
+                                    onMarkUnread = { onMarkUnreadFrom(MessageIdentity.unread(blockKey)) },
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                         marked.forEach { (part, hits, active) ->
@@ -5063,7 +5064,7 @@ internal fun ReaderScreen(
                         TmuxText.ReaderBlockKind.USER_PROMPT -> {
                             val (hits, active) = findFrame.next()
                             key(connection, blockKey) {
-                            if (unreadMessageKey == "block:${blockKey.hashCode()}") Text("New", color = MaterialTheme.colorScheme.primary)
+                            if (unreadMessageKey == MessageIdentity.unread(blockKey)) Text("New", color = MaterialTheme.colorScheme.primary)
                             ReplyableBubble(
                                 isUser = true,
                                 sunlight = sunlightMode,
@@ -5071,7 +5072,7 @@ internal fun ReaderScreen(
                                 onReply = { chooseReply(it, true) },
                                 gate = replyGate,
                                 sessionName = session.displayName,
-                                onMarkUnread = { onMarkUnreadFrom("block:${blockKey.hashCode()}") },
+                                onMarkUnread = { onMarkUnreadFrom(MessageIdentity.unread(blockKey)) },
                                 modifier = Modifier.findPin(active != null),
                             ) {
                                 ChatLinkText(block.text) { line, start ->

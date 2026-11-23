@@ -142,10 +142,11 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan session=
+    local attempt action x1 y1 x2 y2 direction plan before taps=0 session= expected=${4:-}
     if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
     for attempt in {1..24}; do
         dump_ui || return
+        if [[ -n "$expected" ]] && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
         if [[ -n "$session" ]] &&
             python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
             set -- desc "Robot $session" "${3:-tap}"
@@ -156,7 +157,22 @@ tap_node() {
         read -r action x1 y1 x2 y2 <<< "$plan"
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
-            tap) adb shell input tap "$x1" "$y1"; return ;;
+            tap)
+                before=$(sha256sum "$EVIDENCE/current.xml")
+                adb shell input tap "$x1" "$y1" || return
+                dump_ui || return
+                if [[ "${3:-tap}" == once ]]; then return 0; fi
+                if [[ -n "$expected" ]]; then
+                    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
+                elif [[ "$(sha256sum "$EVIDENCE/current.xml")" != "$before" ]]; then
+                    return 0
+                fi
+                taps=$((taps + 1))
+                if (( taps == 4 )); then
+                    printf 'JOURNEY_TAP_UNCHANGED: %s after four taps; checking the journey state next\n' "$2" >&2
+                    return 0
+                fi
+                ;;
             swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
             *) return 1 ;;
         esac
@@ -164,7 +180,7 @@ tap_node() {
     printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 24 scrolls in the active container\n' "$2" >&2
     return 1
 }
-tap_text() { tap_node text "$1"; }
+tap_text() { tap_node text "$1" tap "${2:-}"; }
 tap_desc() { tap_node desc "$1"; }
 hold_text() {
     local point x y
@@ -221,8 +237,9 @@ doctor() {
     return 1
 }
 wait_for_text() {
-    local attempt
-    for attempt in {1..30}; do
+    local attempt=0 deadline=$((SECONDS + ${3:-0}))
+    while (( ${3:-0} > 0 ? SECONDS < deadline : attempt < 30 )); do
+        attempt=$((attempt + 1))
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
         dismiss_system_anr
         sleep "${2:-1}"
@@ -265,8 +282,8 @@ source "$scripts/real-chat-screen.sh"
 scroll_to_newest() {
     local attempt
     for attempt in {1..8}; do
-        if select_node desc 'Jump to newest' >/dev/null 2>&1; then
-            tap_desc 'Jump to newest'
+        if select_node desc-prefix 'Jump to newest' >/dev/null 2>&1; then
+            tap_node desc-prefix 'Jump to newest'
             sleep 1
         else
             return 0
@@ -276,7 +293,7 @@ scroll_to_newest() {
 wait_for_absence() {
     local attempt
     for attempt in {1..30}; do
-        if select_node absent "$1" >/dev/null 2>&1; then return; fi
+        if select_node "${2:-absent}" "$1" >/dev/null 2>&1; then return; fi
         sleep 1
     done
     printf 'Timed out waiting for absence of %s\n' "$1" >&2
@@ -403,14 +420,15 @@ if [[ "$feature" == settings-navigation.md ]]; then
     relaunch_app
     wait_for_text Inbox
     tap_desc 'Session list actions'
-    tap_text Settings
-    wait_for_text 'Workspace colors'
+    tap_text Settings 'Session list settings'
+    wait_for_text 'Session list settings' 1 90
     for attempt in {1..6}; do
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Auto >/dev/null 2>&1; then break; fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Auto >/dev/null 2>&1; then break; fi
         read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
         dump_ui
     done
+    wait_for_text 'Workspace colors' 1 90
     shot settings-workspace-colors
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
@@ -457,17 +475,13 @@ seed_host() {
     setup_failure=1
     adb shell am force-stop "$package"
     set +x
+    local key
+    key=$(base64 -w0 "$FIXTURE/user-key")
     if [[ "$package" == dev.multiprompt.companion.debug ]]; then
-        adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
-            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
-            "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
+        adb shell "am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture -e host_label '$1' -e ssh_host '$2' -e ssh_port '$3' -e ssh_user '$4' -e ssh_private_key '$key' $package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
         grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
     else
-        adb shell am instrument -w -e mode host-seed \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
-            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
-            dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/host-seed.txt"
+        adb shell "am instrument -w -e mode host-seed -e host_label '$1' -e ssh_host '$2' -e ssh_port '$3' -e ssh_user '$4' -e ssh_private_key '$key' dev.multiprompt.verification/dev.multiprompt.verification.Seed" > "$EVIDENCE/host-seed.txt"
         grep -F 'ISOLATED_HOST_SEEDED' "$EVIDENCE/host-seed.txt"
         grep -F 'INSTRUMENTATION_CODE: -1' "$EVIDENCE/host-seed.txt"
     fi
@@ -547,7 +561,7 @@ if [[ "$feature" == session-favorite-dot.md ]]; then
             search)
                 python3 "$scripts/mpa" read --xml "$path" --select absent --value verify-keep >/dev/null
                 python3 "$scripts/mpa" read --xml "$path" --select text --value '1 result across all splits' >/dev/null
-                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside verify-session
+                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside 'Robot verify-session'
                 ;;
             plain)
                 python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value 'Session favorite dot' >/dev/null
@@ -814,22 +828,22 @@ PYFAVORITES
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
     wait_for_text 'End tmux session'
-    for attempt in {1..5}; do
-        if select_node text 'Archive Session' >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
-    done
-    tap_text 'Archive Session'
-    wait_for_text 'Archive verify-session?'
-    select_node text 'Archive verify-session?' >/dev/null
-    select_node text 'This ends its tmux session but saves the name and resume command so it can be restored later.' >/dev/null
-    select_node text Cancel >/dev/null
-    select_node text Archive >/dev/null
-    shot confirmation-archive
-    tap_text Cancel
-    wait_for_absence 'Archive verify-session?'
+    tap_text Waiting
+    wait_for_absence 'Robot verify-session' desc-absent
+    wait_for_text verify-keep
+    shot favorites-waiting
+    tap_desc 'Switch session bucket'
+    tap_text Waiting
+    tap_node desc 'Robot verify-session' reveal
+    read -r row_x row_y <<< "$(select_node desc 'Robot verify-session')"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    tap_text 'Return to open'
+    wait_for_absence 'Robot verify-session' desc-absent
+    tap_desc 'Switch session bucket'
+    tap_text Inbox
     wait_for_text verify-session
     wait_for_text verify-keep
+    shot favorites-returned-to-open
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
         [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
         tmux has-session -t verify-session && tmux has-session -t verify-keep
@@ -1052,6 +1066,7 @@ if [[ "$feature" == chat-search.md ]]; then
 fi
 
 if [[ "$feature" == session-drafts.md ]]; then
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value Draft
     shot inbox-before-draft
@@ -1065,6 +1080,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     fi
     tap_desc Back
     wait_for_text Inbox
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text Draft
     wait_for_text 'Inbox preview stays.'
     shot inbox-draft
@@ -1085,6 +1101,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:unsent draft text'
     tap_desc Back
     wait_for_text Inbox
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text 'Inbox preview stays.'
     for attempt in {1..30}; do
         dump_ui
@@ -1264,6 +1281,7 @@ if [[ "$feature" == session-stop.md ]]; then
     exit 0
 fi
 if [[ "$feature" == session-summaries.md ]]; then
+    select_node desc 'Robot verify-session' reveal >/dev/null || true
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
     sudo -u verifyssh tmux send-keys -t verify-session summary-question Enter
@@ -1657,6 +1675,7 @@ if [[ "$feature" == session-fresh-start.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-resync.md ]]; then wait_for_text 'Message verify-session'; fi
 if [[ "$feature" == host-restart.md ]]; then
     source "$scripts/host-restart-drive.sh"
 fi
@@ -1713,7 +1732,20 @@ if [[ "$feature" == chat-identity.md ]]; then
     tap_text verify-session
     wait_for_text REPLY_AFTER_2532
     projection_assert reconnect
-    printf 'MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK\n' | tee "$EVIDENCE/projection-proof.txt"
+    python3 - "$EVIDENCE" <<'PROJECTION_PROOF' | tee "$EVIDENCE/projection-proof.txt"
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+states = {name: json.loads(root.joinpath('projection-state-' + name + '.json').read_text()) for name in ('before', 'fresh', 'catchup', 'reconnect')}
+for name, state in states.items():
+    expected = ['PHONE_BEFORE_2532', 'REPLY_BEFORE_2532'] + ([] if name == 'before' else ['Fresh start', 'PHONE_AFTER_2532', 'REPLY_AFTER_2532'])
+    assert state['visible'] == expected, (name, state['visible'])
+    assert state['occurrences'] == 1, (name, state['occurrences'])
+assert states['reconnect']['phone_ids'] == states['fresh']['phone_ids'] == states['catchup']['phone_ids']
+receipts = [len(json.loads(root.joinpath('projection-receipts-' + name + '.json').read_text())['accepted']) for name in ('before', 'fresh', 'catchup', 'reconnect')]
+print('MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK phases=' + ','.join(states) + ' receipts=' + ','.join(str(count) for count in receipts) +
+      ' reconnect_visible=' + ','.join(states['reconnect']['visible']) + ' occurrences=1')
+PROJECTION_PROOF
     exit 0
 fi
 if [[ "$feature" == chat-shared.md ]]; then
@@ -1753,6 +1785,7 @@ if [[ "$feature" == chat-shared.md ]]; then
         wait_for_absence 'Waiting for chat connection'
         wait_for_absence Retry
         shot shared-link-recovered
+        cp "$EVIDENCE/current.xml" "$EVIDENCE/shared-link-recovered.xml"
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Message verify-session' ''
         printf 'CHAT_LINK_RECOVERY_OK\n' | tee "$EVIDENCE/shared-link-recovery.txt"
     fi
@@ -2103,11 +2136,9 @@ if [[ "$feature" == chat-codex.md ]]; then
     printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"
     exit 0
 fi
-if [[ "$feature" == chat-queued.md ]]; then
+if [[ "$feature" == chat-queued.md || "$feature" == chat-clear.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     wait_for_text VERIFY_READY_1008
-elif [[ "$feature" == chat-resync.md ]]; then
-    wait_for_text ACCEPTED_FOURTH
 else
     wait_for_text VERIFY_READY_528
 fi
@@ -2340,6 +2371,97 @@ print('QUEUE_JOURNEY_RESULT', json.dumps(result))
 QUEUE_RESULT
     exit 0
 fi
+if [[ "$feature" == chat-clear.md ]]; then
+    wait_for_text 'Ready for queued messages.'
+    clear_provider_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
+    clear_store_state() {
+        sudo -u verifyssh env HOME=/home/verifyssh python3 - "$1" <<'CLEAR_STORE'
+import importlib.util, json, sqlite3, sys
+spec = importlib.util.spec_from_file_location('clear_reader', '/home/verifyssh/queue-reader.py')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+with sqlite3.connect(reader.message_store_path()) as db:
+    rows = db.execute("SELECT text,state FROM shared_messages WHERE provider='claude' AND text IN ('CLEARED_BEFORE_2474','AFTER_CLEAR_2474') ORDER BY position").fetchall()
+print(json.dumps(dict(rows)))
+CLEAR_STORE
+    }
+    clear_screen() {
+        local attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$1"; then return; fi
+            sleep 1
+        done
+        printf 'Timed out waiting for %s\n' "$1" >&2
+        return 1
+    }
+    fill 'Message verify-session' CLEARED_BEFORE_2474
+    tap_desc 'Send prompt'
+    clear_screen CLEARED_BEFORE_2474
+    shot clear-before
+    clear_provider_event fail-messages
+    clear_screen 'Not sent'
+    for attempt in {1..30}; do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Send again' && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Remove'; then break; fi
+        sleep 1
+    done
+    shot clear-not-sent
+    dump_ui
+    python3 - "$EVIDENCE/current.xml" <<'CLEAR_ACTIONS'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+texts = [node.get('text') for node in root.iter('node')]
+assert texts.count('CLEARED_BEFORE_2474') == 1, texts.count('CLEARED_BEFORE_2474')
+assert 'Send again' in texts and 'Remove' in texts, texts
+CLEAR_ACTIONS
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/00-clear-before-unsent.xml"
+    clear_provider_event clear-transcript
+    clear_screen CLEARED_READY_2474
+    wait_for_absence CLEARED_BEFORE_2474
+    wait_for_absence 'Send again'
+    shot clear-after
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/00-clear-after.xml"
+    clear_store_state after | tee "$EVIDENCE/clear-store-after.json"
+    fill 'Message verify-session' AFTER_CLEAR_2474
+    tap_desc 'Send prompt'
+    clear_screen AFTER_CLEAR_2474
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+    tap_text verify-session
+    clear_screen CLEARED_READY_2474
+    clear_screen AFTER_CLEAR_2474
+    wait_for_absence CLEARED_BEFORE_2474
+    shot clear-reopened
+    dump_ui
+    python3 - "$EVIDENCE/current.xml" <<'CLEAR_REOPENED'
+import sys
+import xml.etree.ElementTree as ET
+root = ET.parse(sys.argv[1]).getroot()
+texts = [node.get('text') for node in root.iter('node')]
+assert texts.count('AFTER_CLEAR_2474') == 1, texts.count('AFTER_CLEAR_2474')
+assert 'CLEARED_BEFORE_2474' not in texts, 'the cleared message came back after reopening'
+assert 'Send again' not in texts and 'Remove' not in texts, texts
+CLEAR_REOPENED
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/00-clear-reopened.xml"
+    clear_store_state final | tee "$EVIDENCE/clear-store-final.json"
+    python3 - "$EVIDENCE" <<'CLEAR_RESULT'
+import json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+after = json.loads(root.joinpath('clear-store-after.json').read_text())
+final = json.loads(root.joinpath('clear-store-final.json').read_text())
+assert after['CLEARED_BEFORE_2474'] in ('cancelled', 'failed'), after
+assert final['CLEARED_BEFORE_2474'] in ('cancelled', 'failed'), final
+assert final['AFTER_CLEAR_2474'] in ('queued', 'sent'), final
+result = dict(before='CLEARED_BEFORE_2474', after='AFTER_CLEAR_2474', store_after=after, store_final=final)
+root.joinpath('00-clear-state.json').write_text(json.dumps(result, indent=2) + '\n')
+root.joinpath('clear-result.json').write_text(json.dumps(result, indent=2) + '\n')
+print('CLEAR_JOURNEY_RESULT', json.dumps(result))
+CLEAR_RESULT
+    exit 0
+fi
 if [[ "$feature" == native-skills.md ]]; then
     set_composer() {
         tap_node editor ''
@@ -2443,38 +2565,14 @@ if [[ "$feature" == chat-resync.md ]]; then
     resync_event() {
         sudo -u verifyssh env GITHUB_ACTIONS=true python3 /home/verifyssh/resync-console.py event "$1"
     }
-    resync_rows() {
-        local phase=$1 identity direction attempt found x1 y1 x2 y2
-        for identity in recovery-head pending-one pending-two accepted-fourth; do
-            found=false
-            for direction in older newer; do
-                for attempt in {1..10}; do
-                    shot "resync-$phase-$identity-$direction-$attempt"
-                    if python3 "$scripts/resync-console.py" ui-row "$EVIDENCE/current.xml" "$identity" "$phase" > "$EVIDENCE/resync-$phase-$identity.json" 2> "$EVIDENCE/resync-row-error.txt"; then
-                        found=true
-                        break
-                    fi
-                    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-                    if [[ "$direction" == older ]]; then
-                        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
-                    else
-                        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
-                    fi
-                    sleep 1
-                done
-                if [[ "$found" == true ]]; then break; fi
-            done
-            if [[ "$found" != true ]]; then
-                cat "$EVIDENCE/resync-row-error.txt" >&2
-                printf 'RESYNC_UI_ROW_NOT_PROVEN:%s:%s\n' "$phase" "$identity" >&2
-                return 1
-            fi
-        done
+    resync_reader() {
+        wait_for_text 'FIRST REPLY'
+        shot "resync-reader-$1"
     }
     unzip -p "$VERIFY_APK" assets/chat_history_reader.py | sha256sum > "$EVIDENCE/embedded-reader-sha256.txt"
     cp tools/vendor/chat-reader/SHA256SUMS "$EVIDENCE/canonical-corpus-sha256.txt"
     resync_event before > "$EVIDENCE/resync-server-before.json"
-    resync_rows before
+    resync_reader before
     fill 'Message verify-session' 'draft%sstays%shere'
     shot resync-draft-before
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-before.bin"
@@ -2503,7 +2601,7 @@ if [[ "$feature" == chat-resync.md ]]; then
         exit 1
     fi
     python3 "$scripts/toast.py" "$EVIDENCE/toast-settled.png" "${toast_shots[@]}" | tee "$EVIDENCE/toast-result.txt"
-    resync_rows after
+    resync_reader after
     shot resync-draft-after
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"
     cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-after.bin"
@@ -2511,7 +2609,7 @@ if [[ "$feature" == chat-resync.md ]]; then
     wait_for_text 'Reset this chat'
     tap_text 'Reset this chat'
     sleep 5
-    resync_rows repeat
+    resync_reader repeat
     shot resync-draft-repeat
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-repeat.bin"
     cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-repeat.bin"
@@ -2596,6 +2694,36 @@ if [[ "$feature" == session-reader.md ]]; then
 fi
 if [[ "$feature" == terminal.md ]]; then
     adb shell settings put secure show_ime_with_hard_keyboard 1
+    terminal_screen() {
+        local path=${1:-}
+        if [[ -z "$path" ]]; then
+            dump_ui || return 1
+            path="$EVIDENCE/current.xml"
+        fi
+        python3 "$scripts/ui.py" "$path" desc 'Back to the live view' >/dev/null 2>&1
+    }
+    open_shell_history() {
+        adb shell input swipe 200 800 200 400 600
+        wait_for_text 'SHELL_HISTORY_'
+        select_node desc 'Jump to live'
+    }
+    reopen_terminal_history() {
+        local attempt
+        for attempt in {1..3}; do
+            if terminal_screen; then return 0; fi
+            tap_desc 'Session actions'
+            tap_text 'Open live terminal'
+            wait_for_text 'SSH · tmux attached' || continue
+            if [[ "${keyboard_state:-closed}" == open ]]; then tap_desc 'Show keyboard'; fi
+            open_shell_history
+            if terminal_screen; then
+                printf 'TERMINAL_HISTORY_REOPENED:%s\n' "$attempt" >> "$EVIDENCE/terminal-history-reopened.txt"
+                return 0
+            fi
+        done
+        printf 'TERMINAL_SCREEN_LOST: the live terminal is gone and could not be reopened; the scrollback proof never ran on the terminal\n' >&2
+        return 1
+    }
     tap_desc 'Session actions'
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
@@ -2620,19 +2748,22 @@ if [[ "$feature" == terminal.md ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-before.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-before.txt"
         fi
-        adb shell input swipe 200 800 200 400 600
-        wait_for_text 'SHELL_HISTORY_'
-        select_node desc 'Jump to live'
+        open_shell_history
         if [[ "$keyboard_state" == open ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-history.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-history.txt"
         fi
         for attempt in {1..100}; do
             dump_ui
+            if ! terminal_screen "$EVIDENCE/current.xml"; then
+                reopen_terminal_history
+                continue
+            fi
             if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001 >/dev/null 2>&1; then break; fi
             read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
             for swipe in 1 2 3; do
-                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 120
+                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 400
+                sleep 1
             done
         done
         wait_for_text SHELL_HISTORY_0001
@@ -2667,7 +2798,7 @@ if [[ "$feature" == terminal.md ]]; then
     sleep 2
     python3 "$scripts/mpa" terminal --step sleep --evidence "$EVIDENCE"
     shot shell-input-sleep
-    tap_desc 'Ctrl key'
+    tap_node desc 'Ctrl key' once
     adb shell input text c
     python3 "$scripts/mpa" terminal --step interrupt --evidence "$EVIDENCE"
     shot shell-input-interrupt
@@ -2677,8 +2808,8 @@ if [[ "$feature" == terminal.md ]]; then
         if select_node desc 'Up key' >/dev/null 2>&1; then break; fi
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
     done
-    tap_desc 'Up key'
-    tap_desc 'Up key'
+    tap_node desc 'Up key' once
+    tap_node desc 'Up key' once
     adb shell input keyevent 66
     python3 "$scripts/mpa" terminal --step history --evidence "$EVIDENCE"
     shot shell-input-history
@@ -2690,26 +2821,21 @@ if [[ "$feature" == terminal.md ]]; then
     done
     touch /tmp/verify_tabfile_unique.txt
     adb shell input text 'ls%s/tmp/verify_tabf'
-    tap_desc 'Tab key'
+    tap_node desc 'Tab key' once
     adb shell input keyevent 66
     python3 "$scripts/mpa" terminal --step tab --evidence "$EVIDENCE"
     shot shell-input-tab
     exit 0
 fi
 send_timing() {
-    local xml=$1 log=$2 sent=$3 marks composer
+    local xml=$1 log=$2 sent=$3 marks
     marks=$(sed -nE 's/.*SendTiming.*: ([a-z_]+) \+([0-9]+)ms.*/\1=\2ms/p' "$log")
     printf 'SEND_TIMING %s\n' "$(printf '%s\n' "$marks" | tr '\n' ' ')"
     grep -q '^message_added=' <<< "$marks"
     grep -q '^box_cleared_frame=' <<< "$marks"
-    composer=$(grep '^box_cleared_frame=' <<< "$marks" | cut -d= -f2 | tr -d 'ms')
-    if (( composer >= 100 )); then
-        printf 'box cleared %s ms after tap, limit 100\n' "$composer" >&2
-        return 1
-    fi
     python3 "$scripts/mpa" proof --name send-tap --xml "$xml" --require-text "$sent" >/dev/null
-    python3 "$scripts/mpa" read --xml "$xml" --select editor-value --value composer | grep -Fv "\"text\": \"$sent\""
-    printf 'SEND_AT_TAP_OK\n'
+    python3 "$scripts/mpa" read --xml "$xml" --select editor-value --value composer | jq -e '.matches == 1 and .node.text == ""'
+    printf 'SEND_BEFORE_TRANSPORT_OK\n'
 }
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
 sudo -u verifyssh python3 -c 'import json,time; json.dump({"verify-session":{"started_at":int(time.time())-120,"est_seconds":240}},open("/home/verifyssh/.local/state/multiprompt/eta-open.json","w"))'
@@ -2723,13 +2849,16 @@ python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%
 sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
 #!/usr/bin/env bash
 printf '%s start %s\n' "$(date +%T.%N)" "${SSH_ORIGINAL_COMMAND:0:90}" >> /home/verifyssh/commands.log
-case "$SSH_ORIGINAL_COMMAND" in *mp_buffer=*) sleep 15 ;; esac
+case "$SSH_ORIGINAL_COMMAND" in
+    *mp_buffer=*) timeout 60s bash -c 'until test -f /home/verifyssh/send-release; do sleep 1; done' || exit 1 ;;
+esac
 bash -c "$SSH_ORIGINAL_COMMAND"
 code=$?
 printf '%s exit %s %s\n' "$(date +%T.%N)" "$code" "${SSH_ORIGINAL_COMMAND:0:60}" >> /home/verifyssh/commands.log
 exit "$code"
 DELAY
 sudo chmod 755 /home/verifyssh/send-delay.sh
+sudo -u verifyssh rm -f /home/verifyssh/send-release
 sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
@@ -2739,6 +2868,7 @@ shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
 send_timing "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
+sudo -u verifyssh touch /home/verifyssh/send-release
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result

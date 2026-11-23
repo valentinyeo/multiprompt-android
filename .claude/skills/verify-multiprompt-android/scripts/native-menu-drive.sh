@@ -38,6 +38,7 @@ menu_command() {
     done
     (( after == before + 1 ))
     printf 'VERIFY_RECEIVED:%s\n' "$command" >> "$EVIDENCE/native-menu-commands.txt"
+    scroll_to_newest
     wait_for_text "Received $command. Claude $model 5.5 $effort"
     menu_state "$phase" reply "Received $command. Claude $model 5.5 $effort"
     menu_state "$phase-draft" draft 'keep this draft'
@@ -69,6 +70,7 @@ for model in Opus Haiku Fable; do
     tap_text "$model"
     wait_receipt "VERIFY_RECEIVED:/model ${model,,}"
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
+    scroll_to_newest
     wait_for_text "Received /model ${model,,}. Claude $model 5.5 high"
     menu_state "attach-${model,,}" reply "Received /model ${model,,}. Claude $model 5.5 high"
     menu_state "attach-${model,,}-draft" draft 'keep this draft'
@@ -81,6 +83,7 @@ for effort in Low Medium; do
     tap_text "$effort"
     wait_receipt "VERIFY_RECEIVED:/effort ${effort,,}"
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"
+    scroll_to_newest
     wait_for_text "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"
     menu_state "attach-${effort,,}" reply "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"
     tap_desc Attach
