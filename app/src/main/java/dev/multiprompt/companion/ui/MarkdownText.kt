@@ -203,17 +203,18 @@ fun MarkdownText(
                         val codeFontSize = if (readerStyle) ReaderCodeTextSize * scale else (fontSize.value * 0.88f).sp
                         val codeLineHeight = if (readerStyle) ReaderCodeLineHeight * scale else (fontSize.value * 1.35f).sp
                         if (scrollWide) {
-                            Row(Modifier.fillMaxWidth().horizontalScroll(horizontal)) {
-                                Text(
-                                    marked,
-                                    fontFamily = codeFontFamily,
-                                    fontSize = codeFontSize,
-                                    lineHeight = codeLineHeight,
-                                    color = color,
-                                    softWrap = false,
-                                    modifier = Modifier.testTag("md-code"),
-                                )
-                            }
+                            Text(
+                                marked,
+                                fontFamily = codeFontFamily,
+                                fontSize = codeFontSize,
+                                lineHeight = codeLineHeight,
+                                color = color,
+                                softWrap = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(horizontal)
+                                    .testTag("md-code"),
+                            )
                         } else {
                             Text(
                                 marked,
@@ -221,7 +222,7 @@ fun MarkdownText(
                                 fontSize = codeFontSize,
                                 lineHeight = codeLineHeight,
                                 color = color,
-                                modifier = Modifier.testTag("md-code"),
+                                modifier = Modifier.fillMaxWidth().testTag("md-code"),
                             )
                         }
                         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
@@ -586,6 +587,7 @@ internal fun MarkdownLinkedText(
 }
 
 private fun MdBlock.Code.scrollsHorizontally(): Boolean {
+    if (!text.contains('\n')) return false
     val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     return words.size >= 20 && words.all { it.length <= 16 }
 }
