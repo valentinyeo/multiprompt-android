@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { hostname } = require('node:os');
 
 const gate = import('./merge-lock.mjs');
 
@@ -23,9 +24,14 @@ function treeSha(blobShaValue) {
 
 function readField(args, key) {
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '-f' && args[i + 1]?.startsWith(`${key}=`)) return args[i + 1].slice(key.length + 1);
+    if ((args[i] === '-f' || args[i] === '-F') && args[i + 1]?.startsWith(`${key}=`)) return args[i + 1].slice(key.length + 1);
   }
   return '';
+}
+
+function fieldFlag(args, key) {
+  const at = args.findIndex(arg => arg === `${key}=${readField(args, key)}`);
+  return at > 0 ? args[at - 1] : '';
 }
 
 function makeStore() {
@@ -38,7 +44,7 @@ function makeStore() {
     assert.equal(command, 'gh');
     const method = args[2];
     const path = args[3];
-    if (method === 'GET' && path.endsWith('/git/ref/merge-lock/main')) {
+    if (method === 'GET' && path.includes('/git/ref/merge-lock/main')) {
       if (!refSha) throw new Error('gh: HTTP 404: Not Found\n');
       return JSON.stringify({ object: { sha: refSha } });
     }
@@ -168,7 +174,7 @@ test('acquire writes utf-8 blob payloads through the GitHub git API', async () =
     assert.equal(command, 'gh');
     const method = args[2];
     const path = args[3];
-    if (method === 'GET' && path.endsWith('/git/ref/merge-lock/main')) throw new Error('gh: HTTP 404: Not Found\n');
+    if (method === 'GET' && path.includes('/git/ref/merge-lock/main')) throw new Error('gh: HTTP 404: Not Found\n');
     if (method === 'POST' && path.endsWith('/git/blobs')) {
       blobs.push(readField(args, 'content'));
       return JSON.stringify({ sha: 'b'.repeat(40) });
@@ -181,4 +187,97 @@ test('acquire writes utf-8 blob payloads through the GitHub git API', async () =
   await acquireLock('agent-a', { now: () => 1_700_000_000_000, run });
   assert.match(blobs[0], /"holder":"agent-a"/);
   assert.match(blobs[0], /"expiresAt":/);
+});
+
+test('one holder name per chat, not per run', async () => {
+  const { defaultHolder } = await gate;
+  assert.equal(defaultHolder({ MULTIBOT_SESSION: 'live-27bf76b3' }), 'live-27bf76b3');
+  assert.equal(defaultHolder({ ZSB_SESSION: 'live-aa', MULTIBOT_SID: 'sid-1' }), 'live-aa');
+  assert.equal(defaultHolder({ MERGE_LOCK_HOLDER: 'agent-9', MULTIBOT_SESSION: 'live-aa' }), 'agent-9');
+  assert.equal(defaultHolder({ MULTIBOT_SID: 'e0d52105' }), 'e0d52105');
+  assert.equal(defaultHolder({}), hostname());
+  assert.doesNotMatch(defaultHolder({}), new RegExp(`-${process.pid}$`));
+});
+
+test('a second call in the same chat releases the lock the first one took', async () => {
+  const { acquireLock, releaseLock, defaultHolder } = await gate;
+  const env = { MULTIBOT_SESSION: 'live-27bf76b3' };
+  const store = makeStore();
+  await acquireLock(defaultHolder(env), { now: () => 1_700_000_000_000, run: store.gh });
+  const released = await releaseLock(defaultHolder(env), { run: store.gh });
+  assert.equal(released.released, true);
+  assert.equal(store.getRef(), '');
+});
+
+test('the ref patch sends force as a JSON false, not the string false', async () => {
+  const { acquireLock } = await gate;
+  const store = makeStore();
+  const patches = [];
+  const run = (command, args) => {
+    if (args[2] === 'PATCH') patches.push(args);
+    return store.gh(command, args);
+  };
+  const now = 1_700_000_000_000;
+  store.seedLock({ holder: 'agent-b', expiresAt: now - 1 });
+  await acquireLock('agent-a', { now: () => now, run });
+  assert.equal(patches.length, 1);
+  assert.equal(fieldFlag(patches[0], 'force'), '-F');
+  assert.equal(readField(patches[0], 'force'), 'false');
+});
+
+test('status asks GitHub for the lock ref with a cache-busting nonce', async () => {
+  const { lockStatus } = await gate;
+  const store = makeStore();
+  const reads = [];
+  store.seedLock({ holder: 'agent-a', expiresAt: Date.now() + 60_000 });
+  const run = (command, args) => {
+    if (args[2] === 'GET' && args[3].includes('/git/ref/merge-lock/main')) reads.push(args[3]);
+    return store.gh(command, args);
+  };
+  await lockStatus({ run });
+  assert.equal(reads.length, 1);
+  assert.match(reads[0], /^repos\/valentinyeo\/multiprompt-android\/git\/ref\/merge-lock\/main\?t=\d+$/);
+});
+
+test('status reads the lock fresh each time, never a cached copy', async () => {
+  const { acquireLock, releaseLock, lockStatus } = await gate;
+  const store = makeStore();
+  const now = 1_700_000_000_000;
+  await acquireLock('agent-a', { now: () => now, run: store.gh });
+  assert.equal((await lockStatus({ now: () => now, run: store.gh })).held, true);
+  await releaseLock('agent-a', { run: store.gh });
+  assert.deepEqual(await lockStatus({ now: () => now, run: store.gh }), { held: false });
+});
+
+test('merge refuses to run without the checked head sha', async () => {
+  const { mergePullRequest } = await gate;
+  await assert.rejects(mergePullRequest('7', ''), /checked head sha/);
+});
+
+test('merge runs through the API so it never needs a local checkout', async () => {
+  const { mergePullRequest, repo } = await gate;
+  const head = 'a'.repeat(40);
+  const mergeSha = 'e'.repeat(40);
+  const calls = [];
+  const run = (command, args) => {
+    assert.equal(command, 'gh');
+    calls.push(args);
+    const method = args[2];
+    const path = args[3];
+    if (method === 'GET' && path === `repos/${repo}/pulls/7`) return JSON.stringify({ head: { ref: 'mpa/mubo-231' } });
+    if (method === 'PUT' && path === `repos/${repo}/pulls/7/merge`) {
+      assert.equal(readField(args, 'merge_method'), 'squash');
+      assert.equal(readField(args, 'sha'), head);
+      return JSON.stringify({ merged: true, sha: mergeSha });
+    }
+    if (method === 'DELETE' && path === `repos/${repo}/git/refs/heads/mpa/mubo-231`) return '';
+    throw new Error(`unexpected gh ${method} ${path}`);
+  };
+  assert.deepEqual(await mergePullRequest('7', head, { run }), { merged: mergeSha, branch: 'mpa/mubo-231' });
+  assert.deepEqual(calls.map(args => [args[0], args[1], args[2]]), [
+    ['api', '-X', 'GET'],
+    ['api', '-X', 'PUT'],
+    ['api', '-X', 'DELETE'],
+  ]);
+  assert.ok(!calls.some(args => args[0] === 'pr' || args[0] === 'git'), 'the merge never touches the local checkout');
 });

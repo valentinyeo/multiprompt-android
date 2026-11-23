@@ -8,9 +8,15 @@ export const lockRef = 'merge-lock/main';
 export const lockRefFull = 'refs/merge-lock/main';
 export const lockExpiryMs = 1_800_000;
 export const lockPath = '.merge-lock.json';
+export const mergeMethod = 'squash';
+export const usage = 'Usage: node tools/merge-lock.mjs acquire|release|status [holder] | merge <PR> <checked-sha>';
 
-export function defaultHolder() {
-  return `${hostname()}-${process.pid}`;
+export const chatHolderVars = ['MERGE_LOCK_HOLDER', 'MULTIBOT_SESSION', 'ZSB_SESSION', 'MULTIBOT_SID', 'CLAUDE_CODE_SESSION_ID', 'PI_SESSION_ID', 'TMUX_PANE'];
+
+// One holder name per chat, so a later call in the same chat can renew or release its own lock.
+export function defaultHolder(env = process.env) {
+  const chat = chatHolderVars.map(name => env?.[name]).find(value => typeof value === 'string' && value.trim());
+  return chat ? chat.trim() : hostname();
 }
 
 export function encodeLock(holder, expiresAt) {
@@ -33,7 +39,10 @@ export function lockLive(lock, now = Date.now()) {
 export function ghApi(method, path, fields, run = execFileSync) {
   const args = ['api', '-X', method, path];
   if (fields) {
-    for (const [key, value] of Object.entries(fields)) args.push('-f', `${key}=${value}`);
+    for (const [key, value] of Object.entries(fields)) {
+      const typed = typeof value === 'boolean' || typeof value === 'number';
+      args.push(typed ? '-F' : '-f', `${key}=${value}`);
+    }
   }
   const options = { encoding: 'utf8', timeout: 60_000, maxBuffer: 4 * 1024 * 1024 };
   const out = run('gh', args, options);
@@ -50,8 +59,13 @@ export function ghApiMaybe(run, method, path, fields) {
   }
 }
 
+// GitHub can serve a just-released ref from a short cache, so every read asks for a fresh one.
+export function refReadPath(nonce = Date.now()) {
+  return `repos/${repo}/git/ref/${lockRef}?t=${nonce}`;
+}
+
 export async function readLockPayload(run = execFileSync) {
-  const ref = ghApiMaybe(run, 'GET', `repos/${repo}/git/ref/${lockRef}`);
+  const ref = ghApiMaybe(run, 'GET', refReadPath());
   if (!ref.ok) return { lock: null, commitSha: '', refSha: '' };
   const commitSha = ref.body?.object?.sha ?? '';
   if (!/^[a-f0-9]{40}$/.test(commitSha)) throw new Error('Lock ref is missing a commit');
@@ -124,6 +138,18 @@ export async function releaseLock(holder, { run = execFileSync } = {}) {
   return { released: true };
 }
 
+export async function mergePullRequest(pr, sha, { run = execFileSync } = {}) {
+  if (!/^[1-9][0-9]*$/.test(String(pr ?? ''))) throw new Error('Merge needs a pull request number');
+  if (!/^[a-f0-9]{40}$/.test(sha ?? '')) throw new Error('Merge needs the checked head sha');
+  const pull = ghApi('GET', `repos/${repo}/pulls/${pr}`, null, run);
+  const branch = typeof pull?.head?.ref === 'string' ? pull.head.ref : '';
+  const merged = ghApi('PUT', `repos/${repo}/pulls/${pr}/merge`, { merge_method: mergeMethod, sha }, run);
+  const mergeSha = merged?.sha ?? '';
+  if (!/^[a-f0-9]{40}$/.test(mergeSha)) throw new Error('Merge did not return a merge commit');
+  if (branch) ghApiMaybe(run, 'DELETE', `repos/${repo}/git/refs/heads/${branch}`);
+  return { merged: mergeSha, branch };
+}
+
 export async function lockStatus({ now = Date.now, run = execFileSync } = {}) {
   const current = await readLockPayload(run);
   if (!current.lock) return { held: false };
@@ -132,7 +158,13 @@ export async function lockStatus({ now = Date.now, run = execFileSync } = {}) {
 }
 
 async function main() {
-  const [command, holderArg] = process.argv.slice(2);
+  const [command, holderArg, mergeSha] = process.argv.slice(2);
+  if (command === 'merge') {
+    if (!mergeSha) throw new Error(usage);
+    const result = await mergePullRequest(holderArg, mergeSha);
+    console.log(`MERGED ${result.merged} ${result.branch}`.trim());
+    return;
+  }
   const holder = holderArg || defaultHolder();
   if (command === 'acquire') {
     const lock = await acquireLock(holder);
@@ -153,7 +185,7 @@ async function main() {
     console.log(`MERGE_LOCK_HELD ${status.holder} until ${new Date(status.expiresAt).toISOString()}`);
     return;
   }
-  throw new Error('Usage: node tools/merge-lock.mjs acquire|release|status [holder]');
+  throw new Error(usage);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
