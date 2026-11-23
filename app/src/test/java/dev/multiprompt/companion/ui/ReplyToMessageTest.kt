@@ -132,7 +132,9 @@ class ReplyToMessageTest {
 
     @Test
     fun codeScrollsBothWaysWithoutStartingReply() {
-        val wide = "CODE_START " + (0 until 40).joinToString(" ") { "column_%03d".format(it) } + " CODE_END"
+        val wide = (0 until 12).joinToString("\n") { row ->
+            (0 until 6).joinToString(" ") { "column_%02d_%02d".format(row, it) }
+        }
         harness("```\n$wide\n```")
         val code = compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange))
         fun position() = code.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange].value()
