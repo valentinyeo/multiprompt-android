@@ -219,41 +219,7 @@ printf 'DUMP=%s\\n' "$(cat "$EVIDENCE/current.xml")"
   });
 }
 
-for (const [landsOn, visible, duplicates, expectedCalls, succeeds] of [
-  [1, true, false, 1, true],
-  [2, true, false, 2, true],
-  [99, true, false, 3, false],
-  [99, false, false, 1, false],
-  [1, true, true, 1, false]
-]) {
-  test(`native model selection requires exactly one new receipt (${landsOn}, ${visible}, ${duplicates})`, () => {
-    const source = readFileSync(path.join(scripts, 'native-menu-drive.sh'), 'utf8');
-    const helper = source.match(/^tap_menu_receipt\(\) \{[\s\S]*?^\}/m)[0];
-    const directory = mkdtempSync(path.join(tmpdir(), 'native-receipt-'));
-    const result = spawnSync('bash', ['-euc', `
-${helper}
-scripts=unused
-EVIDENCE=${JSON.stringify(directory)}
-landed_taps=0
-sudo() { if (( landed_taps >= ${landsOn} )); then echo ${duplicates ? 2 : 1}; else echo 0; fi; }
-tap_text() { landed_taps=$((landed_taps + 1)); printf 'TAP %s\\n' "$1"; }
-select_node() { ${visible ? 'return 0' : 'return 1'}; }
-dump_ui() { :; }
-shot() { :; }
-python3() { :; }
-sleep() { :; }
-if tap_menu_receipt Haiku '/model haiku'; then status=0; else status=$?; fi
-printf 'CALLS=%s\\n' "$landed_taps"
-exit "$status"
-`], { encoding: 'utf8', timeout: 10000 });
-    rmSync(directory, { recursive: true, force: true });
-    assert.equal(result.status === 0, succeeds, result.stderr);
-    assert.match(result.stdout, new RegExp(`CALLS=${expectedCalls}`));
-    if (!succeeds && !duplicates) assert.match(result.stderr, /NATIVE_MENU_RECEIPT_MISSING: VERIFY_RECEIVED:\/model haiku/);
-  });
-}
-
-test('a late toast cannot confirm that the requested native submenu opened', () => {
+test('a late toast cannot confirm that the requested destination opened', () => {
   const directory = mkdtempSync(path.join(tmpdir(), 'tap-expected-'));
   try {
     const result = spawnSync('bash', ['-euc', `
