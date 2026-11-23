@@ -419,7 +419,9 @@ class SessionReaderConnection(
     }
 
     fun scrollLive() {
-        requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
+        if (_state.value.alternateOn) {
+            requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
+        }
     }
 
     private val _historyPage = MutableStateFlow<String?>(null)
@@ -473,7 +475,7 @@ class SessionReaderConnection(
         historyMode = false
         _historyPages.value = emptyList()
         _historyPage.value = null
-        scrollLive()
+        scrollLiveDirect()
     }
 
     suspend fun loadOlderIntoTranscript(): Boolean = historyMutex.withLock {
