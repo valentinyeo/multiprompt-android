@@ -202,7 +202,7 @@ data class ChatHistory(
         cards.filter { it.message.key !in placed && it.visible && !stale(it) }.forEach { append(it.message) }
         replies.values.flatten().forEach(::appendReply)
         val canonical = scoped.associateBy { it.id }
-        unresolved.filter { it.operation == "submit" && it.scope.sid == sid && !MessageIdentity.sameKnown(canonical[it.messageId]?.identityText, entry.identityText) }.forEach { entry ->
+        unresolved.filter { it.operation == "submit" && it.scope.sid == sid && !MessageIdentity.sameKnown(canonical[it.messageId]?.identityText, it.identityText) }.forEach { entry ->
             val key = if (entry.messageId in canonical) MessageIdentity.unknown(entry.id) else MessageIdentity.shared(entry.messageId)
             if (projected.values.none { it.role == "user" && it.requestId == entry.messageId && MessageIdentity.same(it.identityText, entry.identityText) }) {
                 projected[key] = ChatHistoryMessage(key, "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,

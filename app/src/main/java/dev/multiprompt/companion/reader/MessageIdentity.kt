@@ -21,7 +21,7 @@ internal object MessageIdentity {
     fun unsaved(key: String): Boolean =
         key.startsWith("@local:") || key.startsWith("@shared:") || key.startsWith("@unknown:")
 
-    fun unread(role: String, timestamp: String, text: String): String = "transcript:$role:$timestamp:${text.hashCode()}"
+    fun unread(role: String, timestamp: String?, text: String): String = "transcript:$role:$timestamp:${text.hashCode()}"
 
     fun unread(block: String): String = "block:${block.hashCode()}"
 
