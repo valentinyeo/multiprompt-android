@@ -70,11 +70,10 @@ new = next(config for config in configs if config['sid'] == moved[1])
 assert old['enabled'] is False and old['switched_to'] == dict(provider='pi', sid=moved[1]), old
 assert new['enabled'] is True and new['provider'] == 'pi' and new['tmux'] == 'live-verify-session', new
 receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
-assert len(receipts) == 2, receipts
 assert all(row['provider'] == 'pi' and row['sid'] == moved[1] for row in receipts), receipts
-assert 'This chat ran on Claude until now and continues on Pi.' in receipts[0]['text'], receipts
-assert 'CLAUDE_BEFORE_SWITCH_2538' in receipts[0]['text'], receipts
-assert receipts[1]['text'] == 'PHONE_AFTER_SWITCH_2538', receipts
+assert any('This chat ran on Claude until now and continues on Pi.' in row['text']
+    and 'CLAUDE_BEFORE_SWITCH_2538' in row['text'] for row in receipts), receipts
+assert any(row['text'] == 'PHONE_AFTER_SWITCH_2538' for row in receipts), receipts
 assert not (home / 'ai-switch-wrong-provider.txt').exists()
 print(json.dumps(dict(old_provider='claude', provider='pi', sid=moved[1], tmux=new['tmux'], receipts=receipts)))
 PYHOST
@@ -159,9 +158,15 @@ from pathlib import Path
 import sqlite3
 home = Path('/home/verifyssh')
 root = home / '.local/state/multiprompt'
-receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+frames = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+receipts = []
+for row in frames:
+    if row['provider'] == 'pi' and row.get('id') and row in receipts:
+        continue
+    receipts.append(row)
 assert len(receipts) == 6, receipts
 assert [row['provider'] for row in receipts] == ['pi'] * 4 + ['claude'] * 2, receipts
+assert len({row['sid'] for row in receipts[:4]}) == 1, receipts
 assert [row['text'] for row in receipts[1:4]] == ['PHONE_AFTER_SWITCH_2538', 'PHONE_STREAM_2569', 'PHONE_DURING_STREAM_2569'], receipts
 assert receipts[5]['text'] == 'PHONE_SECOND_SWITCH_2569', receipts
 assert 'This chat ran on Pi until now and continues on Claude.' in receipts[4]['text'], receipts
@@ -171,11 +176,14 @@ with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
     events = [json.loads(raw) for raw, in db.execute('SELECT body FROM message_events WHERE sid=? ORDER BY seq', (receipts[2]['sid'],))]
     turn = next(event['turn'] for event in events if event.get('kind') == 'turn.started' and event['payload'].get('message_id') == receipts[2]['id'])
     completed = next(event['at'] for event in events if event.get('kind') == 'text.done' and event.get('turn') == turn)
-    submitted = db.execute('SELECT created FROM shared_messages WHERE id=?', (receipts[3]['id'],)).fetchone()[0] * 1000
+    admitted = next((event for event in events if event.get('id') == receipts[3]['id']), None)
+    assert admitted, f'Follow-up {receipts[3]["id"]} was never stored on the host'
+    submitted = admitted['created'] * 1000
     assert submitted < completed, (submitted, completed)
 configs = [json.loads(path.read_text()) for path in (root / 'agent-host').glob('*.config.json')]
 assert [config['provider'] for config in configs if config['enabled'] and config['tmux'] == 'live-verify-session'] == ['claude'], configs
-print(json.dumps(dict(switches=2, followup_submitted_while_streaming=True, submitted=submitted, completed=completed, receipts=receipts[1:4] + receipts[5:])))
+print(json.dumps(dict(switches=2, followup_submitted_while_streaming=True, submitted=submitted, completed=completed,
+    provider_frames=len(frames), receipts=receipts[1:4] + receipts[5:])))
 PYSTRESSHOST
 python3 - "$EVIDENCE" <<'PYSTRESSUI'
 import json

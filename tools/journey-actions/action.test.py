@@ -220,6 +220,12 @@ adb() {
             self.assertEqual(self.plan(TERMINAL), 'swipe 540 940 540 460')
             print('PR383_REPLAY: 8dada246^ confuses both axes; current planner selects the vertical sheet')
 
+    def test_counted_newest_control_is_reachable_by_description_prefix(self):
+        xml = window('<node clickable="true" enabled="true" bounds="[477,682][603,808]"><node content-desc="Jump to newest, 4 new" bounds="[477,682][603,808]" /></node>')
+        self.assertEqual(self.plan(xml, mode='desc-prefix', value='Jump to newest'), 'tap 540 745')
+        with self.assertRaisesRegex(action.Unreachable, 'no unique active scroll container'):
+            self.plan(xml, mode='desc', value='Jump to newest')
+
     def test_real_past_helpers_are_rejected_by_ratchet(self):
         for commit in ('f6594348', '8dada246'):
             with self.subTest(commit=commit), tempfile.TemporaryDirectory() as directory:
@@ -367,13 +373,18 @@ exit "$code"
             folder = Path(directory)
             (folder / 'before.xml').write_text(TERMINAL)
             (folder / 'after.xml').write_text(TERMINAL.replace('[20,1120][500,1200]', '[20,900][500,980]'))
+            (folder / 'opened.xml').write_text(window('<node text="Live terminal" />'))
             shell = '''set -eu
 scripts=$SCRIPTS
 EVIDENCE=$TEST_DIR
 calls=0
 dump_ui() {
     calls=$((calls + 1))
-    if (( calls == 1 )); then cp "$TEST_DIR/before.xml" "$EVIDENCE/current.xml"; else cp "$TEST_DIR/after.xml" "$EVIDENCE/current.xml"; fi
+    case "$calls" in
+        1) cp "$TEST_DIR/before.xml" "$EVIDENCE/current.xml" ;;
+        2) cp "$TEST_DIR/after.xml" "$EVIDENCE/current.xml" ;;
+        *) cp "$TEST_DIR/opened.xml" "$EVIDENCE/current.xml" ;;
+    esac
 }
 adb() { printf '%s\n' "$*" >> "$TEST_DIR/actions"; }
 '''

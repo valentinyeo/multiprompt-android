@@ -58,7 +58,9 @@ fi
 if [[ "${VERIFY_FEATURE:-}" == folder-bar.md && "${BREAK_IT_MODE:-}" == true ]]; then
     VERIFY_FEATURE=ai-switch.md
 fi
-if [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-fresh-start.md ]]; then
+    source "$(dirname "$0")/session-fresh-start-setup.sh"
+elif [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
     source "$(dirname "$0")/host-restart-setup.sh"
 elif [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
     source "$(dirname "$0")/remote-control-setup.sh"
@@ -162,11 +164,11 @@ elif [[ "${VERIFY_FEATURE:-}" == chat-cancel.md ]]; then
     done
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh tmux new-session -d -s verify-session -x 100 -y 32 'env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/claude -u /home/verifyssh/cancel-console.py /home/verifyssh/receipts.txt'
-elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat-shared.md ]]; then
+elif [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat-shared.md || "${VERIFY_FEATURE:-}" == chat-clear.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/queued-console.py" /home/verifyssh/queued-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
-    if [[ "${VERIFY_FEATURE:-}" == chat-queued.md ]]; then
+    if [[ "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == chat-clear.md ]]; then
         sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/queue-reader.py
         for provider in claude codex; do
             sudo install -m 644 "app/src/main/assets/chat_connectors/$provider.py" "/home/verifyssh/queue-$provider.py"
@@ -302,7 +304,7 @@ if [[ "${BREAK_IT_MODE:-}" == true ]]; then
     sudo -u verifyssh tmux set-window-option -t verify-breakit-other automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-breakit-other verify-breakit-other
 fi
-if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true ]]; then
+if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true && "${VERIFY_FEATURE:-}" != session-fresh-start.md ]]; then
     sudo install -m 755 "$(dirname "$0")/mpa" "$(dirname "$0")/journey_action.py" /home/verifyssh/
     sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
     sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py

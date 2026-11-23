@@ -1,0 +1,1 @@
+Swiping a code block scrolls it instead of starting a reply

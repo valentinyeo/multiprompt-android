@@ -13,12 +13,21 @@ wait_for_text 'Message verify-session'
 wait_for_text VERIFY_READY_528
 fill 'Message verify-session' 'Please%sthis'
 pills_state draft 'Please this'
-tap_node editor ''
-select_node focused-field '' >/dev/null
-adb shell input keyevent KEYCODE_MOVE_END
-adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
-adb shell input text /%s
-adb shell input keyevent KEYCODE_DPAD_LEFT
+for attempt in {1..3}; do
+    tap_node editor ''
+    select_node focused-field '' >/dev/null || return
+    adb shell input keyevent KEYCODE_MOVE_END
+    adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
+    adb shell input text /%s
+    adb shell input keyevent KEYCODE_DPAD_LEFT
+    dump_ui || return
+    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value composer 'Please / this' &&
+        select_node contains '/pill-guide-01' >/dev/null 2>&1; then
+        break
+    fi
+    printf 'Pill picker missing after typing "/ " (attempt %s); restoring the draft\n' "$attempt" | tee -a "$EVIDENCE/pill-picker-retries.txt"
+    fill 'Message verify-session' 'Please%sthis' || return
+done
 wait_for_text '/pill-guide-01'
 pills_state picker 'Please / this'
 python3 "$scripts/ui.py" "$EVIDENCE/current.xml" absent '/review-native'

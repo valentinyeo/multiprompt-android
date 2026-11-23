@@ -1,0 +1,1 @@
+Android: splits open scrolled to the bottom

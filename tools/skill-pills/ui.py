@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from collections import Counter
 import json
 from pathlib import Path
 import re
@@ -34,6 +35,17 @@ def outlines(image, box, inset):
              if 12 <= bottom[2] - top[2] <= y2 - y1
              and abs(top[0] - bottom[0]) <= 3 and abs(top[1] - bottom[1]) <= 3]
     return pairs
+
+
+def composer_bounds(editor):
+    x1, y1, x2, y2 = bounds(editor)
+    actions = [bounds(child) for child in editor.iter('node')
+               if child.get('class') == 'android.widget.Button'
+               or child.get('content-desc') in ('Start dictation', 'Send prompt')]
+    if actions:
+        x2 = min(min(actions)[0] - 1, x2)
+    assert x1 < x2, 'Composer text area is missing'
+    return [x1, y1, x2, y2]
 
 
 def picker_swipe(xml):
@@ -83,15 +95,25 @@ def check(xml, screenshot, phase, text):
                            max(message_bounds[1], text_bounds[1] - pad_y),
                            min(message_bounds[2], text_bounds[2] + pad_x),
                            min(message_bounds[3], text_bounds[3] + pad_y)]
-            assert outlines(image, pill_bounds, False), 'Sent skill pill outline is missing'
-            result.update(sent_pill='/review-native', sent_pill_bounds=pill_bounds)
+            assert 0 <= pill_bounds[0] < pill_bounds[2] <= image.width and 0 <= pill_bounds[1] < pill_bounds[3] <= image.height, 'Pill is off screen'
+            fill, count = Counter(image.crop(tuple(text_bounds)).getdata()).most_common(1)[0]
+            bubble = Counter(image.getpixel((x, y))
+                for y in range(message_bounds[1], message_bounds[3])
+                for x in range(message_bounds[0], message_bounds[2])
+                if not (pill_bounds[0] <= x < pill_bounds[2] and pill_bounds[1] <= y < pill_bounds[3]))
+            assert bubble, 'Sent skill pill has no surrounding bubble'
+            background = bubble.most_common(1)[0][0]
+            area = (text_bounds[2] - text_bounds[0]) * height
+            assert count / area >= 0.35 and max(abs(a - b) for a, b in zip(fill, background)) >= 12, 'Sent skill pill fill is missing'
+            result.update(sent_pill='/review-native', sent_pill_bounds=pill_bounds,
+                          sent_pill_fill=fill, sent_bubble_fill=background)
     else:
         assert editor.get('text') == text, ('Wrong composer text', editor.get('text'), text)
         if phase in ('picker', 'scrolled'):
             label = '/pill-guide-01' if phase == 'picker' else '/review-native'
             assert any(node.get('text') == label for node in nodes), 'Skill picker is missing'
         else:
-            pairs = outlines(image, bounds(editor), True)
+            pairs = outlines(image, composer_bounds(editor), True)
             expected = phase in ('inserted', 'removable')
             assert bool(pairs) == expected, 'Composer skill pill outline is missing or survived removal'
             result['composer_pill'] = expected

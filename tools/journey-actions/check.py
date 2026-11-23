@@ -26,7 +26,7 @@ def violations(root):
                 if '"reach-$1"' not in helper:
                     found[f"{relative}: tap_node bypasses reachability"] += 1
                 else:
-                    source = source.replace('tap) adb shell input tap "$x1" "$y1"; return ;;', "", 1)
+                    source = source.replace('adb shell input tap "$x1" "$y1" || return', "", 1)
             elif relative == CLI:
                 if "from journey_action import Unreachable, plan" not in source:
                     found[f"{relative}: tap bypasses reachability"] += 1

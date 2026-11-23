@@ -1,19 +1,35 @@
 package dev.multiprompt.companion.ui
 
 internal object ReplyQuote {
+    private const val PREVIEW_LIMIT = 64
+    private const val MORE = "… more"
+    private const val ELLIPSIS = "…"
+    private val COMMAND = Regex("^/[A-Za-z0-9_:.@-]{1,64}$")
+
     data class Reply(val quoted: String, val body: String) {
-        val preview: String get() = ReplyQuote.preview(quoted.lines().joinToString("\n") { it.removePrefix(">").removePrefix(" ") })
+        val reference: Reference get() = ReplyQuote.reference(quoted)
+    }
+
+    data class Reference(val runs: List<InlineRun>, val longer: Boolean) {
+        val text: String get() = runs.joinToString("") { it.text }
     }
 
     fun parse(message: String): Reply? {
         val lines = message.lines()
-        val end = lines.indexOfFirst { it != ">" && !it.startsWith("> ") }
-        if (end <= 0 || !lines[end].isBlank()) return null
-        val quoted = lines.take(end).joinToString("\n")
-        if (lines.take(end).all { it.removePrefix(">").isBlank() }) return null
-        val body = lines.drop(end).dropWhile { it.isBlank() }.joinToString("\n")
+        val head = lines.firstOrNull().orEmpty()
+        val command = head.substringBefore(' ').takeIf { COMMAND.matches(it) }
+        val rest = when {
+            command == null -> lines
+            head == command -> lines.drop(1).dropWhile { it.isBlank() }
+            else -> listOf(head.removePrefix(command).trimStart()) + lines.drop(1)
+        }
+        val end = rest.indexOfFirst { it != ">" && !it.startsWith("> ") }
+        if (end <= 0 || !rest[end].isBlank()) return null
+        val block = rest.take(end)
+        if (block.all { it.removePrefix(">").isBlank() }) return null
+        val body = rest.drop(end).dropWhile { it.isBlank() }.joinToString("\n")
         if (body.isBlank()) return null
-        return Reply(quoted, body)
+        return Reply(block.joinToString("\n"), if (command == null) body else "$command $body")
     }
 
     fun sourceIndex(messages: List<String>, before: Int, quoted: String): Int? =
@@ -22,7 +38,7 @@ internal object ReplyQuote {
     fun quote(message: String): String {
         val lines = message.lines().dropWhile { it.isBlank() }.dropLastWhile { it.isBlank() }
             .map { it.trimEnd() }
-        val visible = if (lines.size > 10) lines.take(10) + "…" else lines
+        val visible = if (lines.size > 10) lines.take(10) + ELLIPSIS else lines
         return visible.joinToString("\n") { if (it.isEmpty()) ">" else "> $it" }
     }
 
@@ -32,6 +48,64 @@ internal object ReplyQuote {
         else -> quote(quoted) + "\n\n" + message
     }
 
-    fun preview(message: String): String = message.lineSequence()
-        .filter { it.isNotBlank() }.take(2).joinToString(" ")
+    fun preview(message: String, limit: Int = PREVIEW_LIMIT): String = cut(
+        message.lineSequence().filter { it.isNotBlank() }.take(2).joinToString(" "),
+        limit,
+    )
+
+    fun reference(quoted: String, limit: Int = PREVIEW_LIMIT): Reference {
+        val lines = quoted.lines().map { it.removePrefix(">").removePrefix(" ") }
+            .dropLastWhile { it.isBlank() }
+            .let { if (it.lastOrNull()?.trim() == ELLIPSIS) it.dropLast(1) else it }
+        val blocks = MarkdownParser.parse(lines.joinToString("\n"))
+        val first = blocks.indexOfFirst { MarkdownParser.blockText(it).isNotBlank() }
+        if (first < 0) return Reference(emptyList(), false)
+        val more = blocks.drop(first + 1).any { MarkdownParser.blockText(it).isNotBlank() }
+        val budget = (limit - if (more) MORE.length else 0).coerceAtLeast(16)
+        val (runs, truncated) = cutRuns(blockRuns(blocks[first]), budget)
+        val marker = when {
+            more -> MORE
+            truncated -> ELLIPSIS
+            else -> ""
+        }
+        return Reference(if (marker.isEmpty()) runs else runs + InlineRun(marker), more || truncated)
+    }
+
+    private fun blockRuns(block: MdBlock): List<InlineRun> = when (block) {
+        is MdBlock.Paragraph -> block.runs
+        is MdBlock.Heading -> block.runs
+        is MdBlock.Quote -> block.runs
+        is MdBlock.ListItem -> listOf(InlineRun(block.marker + " ")) + block.runs
+        is MdBlock.Code -> listOf(InlineRun(block.text.trim().lineSequence().firstOrNull().orEmpty()))
+        is MdBlock.Table -> block.header.firstOrNull().orEmpty()
+        MdBlock.Rule -> emptyList()
+    }
+
+    private fun cutRuns(runs: List<InlineRun>, limit: Int): Pair<List<InlineRun>, Boolean> {
+        if (runs.sumOf { it.text.length } <= limit) return runs to false
+        val out = ArrayList<InlineRun>()
+        var used = 0
+        for (run in runs) {
+            val room = limit - used
+            if (run.text.length <= room) {
+                out += run
+                used += run.text.length
+                continue
+            }
+            val head = wholeWords(run.text.take(room))
+            if (head.isNotEmpty()) out += run.copy(text = head)
+            break
+        }
+        return out to true
+    }
+
+    private fun cut(text: String, limit: Int): String {
+        val flat = text.trim()
+        return if (flat.length <= limit) flat else wholeWords(flat.take(limit)) + ELLIPSIS
+    }
+
+    private fun wholeWords(text: String): String {
+        val space = text.lastIndexOf(' ')
+        return (if (space > 0) text.substring(0, space) else text).trimEnd()
+    }
 }

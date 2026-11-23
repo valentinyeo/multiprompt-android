@@ -77,6 +77,35 @@ class VerifySeedTest(unittest.TestCase):
         self.assertEqual(real_chat.REPLY_NEWEST, counts['real_chat']['markers']['reply_newest'])
         self.assertEqual([real_chat.FIRST, real_chat.SECOND, real_chat.LIVE], counts['real_chat']['init_sessions'])
 
+    def test_fresh_start_inventory_matches_the_recorded_manifest(self):
+        manifest = dict(session='live-fresh-start-3000', sid='c0030000-3000-4000-8000-000000003000')
+        (self.home / seed.FRESH_START_MANIFEST).write_text(json.dumps(manifest))
+        names = [manifest['session']]
+        sids = {manifest['session']: manifest['sid']}
+
+        def tmux_fresh(*args, **kwargs):
+            command = args[0]
+            if command[0] != 'tmux':
+                return subprocess.check_output(*args, **kwargs)
+            if command[1] == 'show-options':
+                return sids[command[3]] + '\n'
+            return '\n'.join(names) + '\n'
+
+        evidence = self.home / 'fresh-start-counts.json'
+        recorded = dict(sessions=1, bulk_sessions=0, session_names=list(names), shapes=[], transcript=None,
+                        real_chat=None, fresh_start=manifest)
+        evidence.write_text(json.dumps(recorded))
+        with patch.object(seed.subprocess, 'check_output', side_effect=tmux_fresh):
+            self.assertEqual(recorded, seed.check(self.home, evidence))
+            names.extend(['live-pi_verify-breakit-probe', 'verify-breakit-other'])
+            self.assertEqual(recorded, seed.check(self.home, evidence))
+            sids[manifest['session']] = 'wrong-sid'
+            with self.assertRaisesRegex(AssertionError, 'SEED_FRESH_START_IDENTITY'):
+                seed.check(self.home, evidence)
+            names.remove(manifest['session'])
+            with self.assertRaisesRegex(AssertionError, 'SEED_FRESH_START_SESSIONS'):
+                seed.check(self.home, evidence)
+
     def test_rejects_tiny_inbox_and_missing_named_seed(self):
         self.names[:] = ['verify-session']
         with self.assertRaisesRegex(AssertionError, 'SEED_INBOX_TOO_SMALL'):

@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 BULK_NAMES = [f'pin-{index:02d}' for index in range(12)] + [f'row-{index:02d}' for index in range(28)]
 LONG_SESSION = 'cl-long-chat'
 LONG_SID = '11560000-0000-4000-8000-000000001156'
+FRESH_START_MANIFEST = 'session-fresh-start.json'
 SHAPES_SCRIPT = 'chat-shapes-fixture.py'
 SHAPES_MANIFEST = 'chat-shapes.json'
 REAL_SCRIPT = 'real-chat-fixture.py'
@@ -65,9 +66,22 @@ def inventory(home):
                 transcript=dict(session=LONG_SESSION, bytes=size, rows=rows, sid=LONG_SID, path=str(path), latest=source['latest']))
 
 
+def fresh_start_inventory(home):
+    manifest_path = home / FRESH_START_MANIFEST
+    assert manifest_path.is_file(), 'SEED_FRESH_START_MANIFEST_MISSING'
+    manifest = json.loads(manifest_path.read_text())
+    names = sorted(subprocess.check_output(['tmux', 'list-sessions', '-F', '#{session_name}'], text=True).splitlines())
+    assert manifest['session'] in names, 'SEED_FRESH_START_SESSIONS'
+    option = subprocess.check_output(['tmux', 'show-options', '-t', manifest['session'], '-v', '@mp_host_sid'], text=True).strip()
+    assert option == manifest['sid'], 'SEED_FRESH_START_IDENTITY'
+    return dict(sessions=1, bulk_sessions=0, session_names=[manifest['session']], shapes=[], transcript=None,
+                real_chat=None, fresh_start=manifest)
+
+
 def check(home, evidence):
     recorded = json.load(sys.stdin) if str(evidence) == '-' else json.loads(evidence.read_text())
-    assert recorded == inventory(home), 'SEED_EVIDENCE_MISMATCH'
+    live = fresh_start_inventory(home) if 'fresh_start' in recorded else inventory(home)
+    assert recorded == live, 'SEED_EVIDENCE_MISMATCH'
     return recorded
 
 

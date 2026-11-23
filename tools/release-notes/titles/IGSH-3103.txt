@@ -1,0 +1,1 @@
+Android checks fail when library downloads are refused

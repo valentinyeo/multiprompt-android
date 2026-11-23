@@ -38,7 +38,9 @@ if sys.argv[1:] in (['seed'], ['release'], ['proof'], ['stop']):
                 assert completed is None, 'Stream completed before follow-up admission'
                 (HOME / 'breakit-release-stream').touch()
             else:
-                submitted = rows[1][2] * 1000
+                admitted = next((event for event in events if event.get('id') == rows[1][0]), None)
+                assert admitted, f'Follow-up {rows[1][0]} was never stored on the host'
+                submitted = admitted['created'] * 1000
                 assert completed is not None and submitted < completed, (submitted, completed)
                 print(json.dumps(dict(followup_submitted_while_streaming=True, submitted=submitted, completed=completed, receipts=rows)))
         sys.exit(0)

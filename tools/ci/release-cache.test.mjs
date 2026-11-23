@@ -5,6 +5,7 @@ import test from 'node:test';
 const directory = new URL('../../.github/workflows/', import.meta.url);
 const read = file => readFileSync(new URL(file, directory), 'utf8');
 const blocks = source => [...source.matchAll(/^(\s*)- uses: gradle\/actions\/setup-gradle@v4\s*$\n([\s\S]*?)(?=^\1- |$(?![\s\S]))/gm)].map(match => match[2]);
+const ciBlocks = source => [...source.matchAll(/^(\s*)- uses: \.\/\.github\/actions\/gradle-ci\s*$\n([\s\S]*?)(?=^\1- |$(?![\s\S]))/gm)].map(match => match[2]);
 const jobBody = (source, job) => {
   const chunk = source.split(new RegExp(`^  ${job}:\\n`, 'm'))[1];
   assert.ok(chunk, `missing job ${job}`);
@@ -12,16 +13,30 @@ const jobBody = (source, job) => {
 };
 const jobs = source => [...source.matchAll(/^  ([\w-]+):$/gm)].map(match => match[1]);
 const cacheJob = source => source.match(/^\s+GRADLE_BUILD_ACTION_CACHE_KEY_JOB:\s*(\S+)\s*$/m)?.[1];
+const gradleCi = readFileSync(new URL('../../.github/actions/gradle-ci/action.yml', import.meta.url), 'utf8');
 
 const gradleWorkflows = () =>
   readdirSync(directory)
     .filter(file => file.endsWith('.yml'))
-    .filter(file => read(file).includes('gradle/actions/setup-gradle@v4'));
+    .filter(file => {
+      const source = read(file);
+      return source.includes('gradle/actions/setup-gradle@v4') || source.includes('./.github/actions/gradle-ci');
+    });
+
+test('shared Gradle setup pins 9.5.1, writes a strict home cache, and lets readers fall back', () => {
+  assert.match(gradleCi, /gradle-version:\s*"9\.5\.1"/);
+  assert.match(
+    gradleCi,
+    /gradle-home-cache-strict-match: \$\{\{ inputs\.read-only != 'true' \}\}/,
+    'only cache writers may pin the exact key'
+  );
+  assert.match(gradleCi, /cache-read-only: \$\{\{ inputs\.read-only == 'true' \}\}/);
+});
 
 test('a release never saves a Gradle cache that later releases restore', () => {
-  const steps = blocks(read('release.yml'));
-  assert.equal(steps.length, 1, 'release.yml setup-gradle step count changed, recheck the cache rule');
-  assert.match(steps[0], /^\s+cache-read-only: true\s*$/m, 'release.yml must set cache-read-only: true: a failed release saved a Gradle cache that every retry restored');
+  const release = jobBody(read('release.yml'), 'build-and-publish');
+  assert.equal(ciBlocks(release).length, 1, 'release.yml gradle-ci step count changed, recheck the cache rule');
+  assert.match(ciBlocks(release)[0], /^\s+read-only: true\s*$/m);
 });
 
 test('a merge to main starts the release at once instead of waiting for Android tests', () => {
@@ -37,9 +52,9 @@ test('a release restores the cache entry that the Android tests build job writes
   const target = cacheJob(read('release.yml'));
   assert.ok(target, 'release.yml must name the job whose Gradle cache it restores: its own job has no cache entry because a release never writes');
   assert.ok(jobs(workflow).includes(target), `${target} is not an Android tests job`);
-  const step = blocks(jobBody(workflow, target)).join('\n');
-  assert.ok(step, `${target} uses no setup-gradle`);
-  assert.doesNotMatch(step, /cache-read-only:\s*true/, `${target} must write the cache a release restores`);
+  const step = jobBody(workflow, target);
+  assert.match(step, /uses: \.\/\.github\/actions\/gradle-ci/);
+  assert.doesNotMatch(step, /read-only: true/, `${target} must write the cache a release restores`);
 });
 
 test('Android tests keeps its five jobs in parallel', () => {
@@ -49,7 +64,9 @@ test('Android tests keeps its five jobs in parallel', () => {
 });
 
 test('test workflows keep saving the Gradle cache', () => {
-  for (const file of ['test.yml', 'android-full.yml']) {
+  const build = jobBody(read('test.yml'), 'build');
+  assert.doesNotMatch(build, /read-only: true/, 'build must keep writing the Gradle cache');
+  for (const file of ['android-full.yml']) {
     const steps = blocks(read(file));
     assert.ok(steps.length > 0, `${file} has no setup-gradle step`);
     for (const step of steps) {
@@ -65,7 +82,9 @@ test('Gradle steps retry a busy repository through one wrapper', () => {
   for (const job of ['test', 'unit-tests', 'm3-unit-tests', 'lint']) {
     assert.match(jobBody(workflow, job), /GRADLE: tools\/ci\/gradle-retry\.sh/, `${job} must retry its Gradle step`);
   }
-  assert.match(readFileSync(new URL('../../tools/ci/gradle-retry.sh', import.meta.url), 'utf8'), /attempt.*-ge 3/);
+  const retry = readFileSync(new URL('../../tools/ci/gradle-retry.sh', import.meta.url), 'utf8');
+  assert.match(retry, /GRADLE_RETRY_ATTEMPTS:-6/);
+  assert.match(retry, /GRADLE_RETRY_WINDOW_SECONDS:-300/);
   assert.match(readFileSync(new URL('../../tools/check.sh', import.meta.url), 'utf8'), /tools\/ci\/gradle-retry\.test\.mjs/);
 });
 
@@ -73,15 +92,35 @@ test('every workflow that runs Gradle uses setup-gradle without a second home ca
   for (const file of gradleWorkflows()) {
     const source = read(file);
     const setupCount = (source.match(/gradle\/actions\/setup-gradle@v4/g) ?? []).length;
-    assert.ok(setupCount >= 1, `${file} must call setup-gradle`);
+    const ciCount = (source.match(/\.\/\.github\/actions\/gradle-ci/g) ?? []).length;
+    assert.ok(setupCount + ciCount >= 1, `${file} must call setup-gradle or gradle-ci`);
     const homeCache = (source.match(/actions\/cache@v4[\s\S]*?\.gradle\/caches/g) ?? []).length;
     assert.equal(homeCache, 0, `${file} must not stack actions/cache on ~/.gradle beside setup-gradle`);
   }
 });
 
 test('verify journeys avoid stale dependency metadata from older Gradle home caches', () => {
-  const steps = blocks(read('verify.yml'));
-  assert.equal(steps.length, 1, 'verify.yml setup-gradle step count changed, recheck the cache rule');
-  assert.match(steps[0], /^\s+gradle-home-cache-strict-match:\s*true\s*$/m);
-  assert.doesNotMatch(steps[0], /gradle-home-cache-excludes:\s*\n\s*caches\/modules-2/);
+  const steps = ciBlocks(read('verify.yml'));
+  assert.equal(steps.length, 1, 'verify.yml gradle-ci step count changed, recheck the cache rule');
+  assert.match(steps[0], /^\s+read-only: true\s*$/m);
+  assert.doesNotMatch(read('verify.yml'), /gradle-home-cache-excludes:\s*\n\s*caches\/modules-2/);
+});
+
+test('verify journey jobs restore the Android tests build cache and retry Gradle downloads', () => {
+  const verify = read('verify.yml');
+  const buildJob = jobBody(read('test.yml'), 'build');
+  assert.doesNotMatch(buildJob, /read-only: true/, 'build must keep writing the cache phone journeys restore');
+  assert.match(verify, /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_JOB:\s*build\s*$/m);
+  assert.match(verify, /tools\/ci\/gradle-retry\.sh -p "\$app_source"[^\n]*assembleDebug/);
+  assert.match(verify, /tools\/ci\/gradle-retry\.sh[^\n]*assembleDebugAndroidTest/);
+});
+
+test('checker jobs restore the Android tests build cache instead of cold-downloading dependencies', () => {
+  const workflow = read('test.yml');
+  for (const job of ['test', 'unit-tests', 'm3-unit-tests', 'lint']) {
+    const body = jobBody(workflow, job);
+    assert.match(body, /^\s+GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build\s*$/m, `${job} must restore the build cache`);
+    assert.match(body, /read-only: true/, `${job} must not overwrite the build cache`);
+    assert.match(body, /uses: \.\/\.github\/actions\/gradle-ci/, `${job} must use the shared Gradle setup`);
+  }
 });

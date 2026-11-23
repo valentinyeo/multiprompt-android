@@ -24,6 +24,17 @@ def source(name):
 
 
 class EmulatorProofTest(unittest.TestCase):
+    def write_emulator(self, home, version):
+        emulator = Path(home) / 'emulator'
+        emulator.mkdir(parents=True, exist_ok=True)
+        (emulator / 'package.xml').write_text('<repository><localPackage path="emulator"/></repository>')
+        binary = emulator / 'emulator'
+        if version.startswith('Android emulator version'):
+            binary.write_text(f'#!/usr/bin/env bash\necho "{version}"\n')
+        else:
+            binary.write_text(f'#!/usr/bin/env bash\necho "{version}" >&2\nexit 1\n')
+        binary.chmod(0o700)
+
     def test_every_emulator_job_uses_one_shared_lifecycle(self):
         for name in ('test' if args.ref else 'android-full', 'verify', 'top-fade', 'account-journey', 'working-dots'):
             workflow = source(f'.github/workflows/{name}.yml')
@@ -36,7 +47,8 @@ class EmulatorProofTest(unittest.TestCase):
         action = source('.github/actions/android-proof/action.yml')
         for option in ('api-level: 35', 'ram-size: 2048M', '-gpu swangle_indirect', 'uses: actions/cache@v4',
                        'disable-animations: true', '-no-snapshot', '-Vulkan',
-                       'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes', 'gdb libpulse0', 'sdk.sh', 'pre-emulator-launch-script:', 'emulator.sh', 'packages.sh', '~/.cache/android-proof/debs'):
+                       'test -r /dev/kvm && test -w /dev/kvm', 'kernel.txt', 'crashes', 'gdb libpulse0', 'sdk.sh', 'pre-emulator-launch-script:', 'emulator.sh', 'packages.sh', '~/.cache/android-proof/debs',
+                       'Emulator setup failed when pinned runner packages cannot install'):
             self.assertIn(option, action)
         self.assertNotIn('PerSourcePenalties', source('.claude/skills/verify-multiprompt-android/scripts/fixture.sh'))
         self.assertNotIn('-gpu off', action)
@@ -127,7 +139,7 @@ else: sys.exit(2)
                     self.assertEqual(calls.count('run watch'), 1)
                     self.assertNotIn('EMULATOR_SERIES_OK', result.stdout)
 
-    def test_complete_sdk_image_skips_the_installer(self):
+    def test_complete_sdk_image_and_emulator_skip_the_installer(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)
             script = path / 'sdk.sh'
@@ -142,11 +154,41 @@ echo "$*" >> "$ANDROID_HOME/calls"
             image.mkdir(parents=True)
             (image / 'system.img').write_text('image')
             (image / 'package.xml').write_text('package')
+            self.write_emulator(tmp, version='Android emulator version 35.6.11.0')
             env = dict(os.environ, ANDROID_HOME=tmp, PROOF_TARGET='default', PATH=f'{tmp}:{os.environ["PATH"]}')
             result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('ANDROID_IMAGE_READY', result.stdout)
             self.assertFalse((path / 'calls').exists())
+
+    def test_missing_or_broken_emulator_package_reinstalls_before_the_boot(self):
+        for breakage in ('missing', 'broken'):
+            with self.subTest(breakage=breakage), tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp)
+                script = path / 'sdk.sh'
+                script.write_text(source('.github/actions/android-proof/sdk.sh'))
+                installer = path / 'sdkmanager'
+                installer.write_text('''#!/usr/bin/env bash
+set -eu
+if [ "$*" = --licenses ]; then exit 0; fi
+echo "$*" > "$ANDROID_HOME/calls"
+mkdir -p "$ANDROID_HOME/emulator"
+printf '#!/usr/bin/env bash\\necho "Android emulator version 35.6.11.0"\\n' > "$ANDROID_HOME/emulator/emulator"
+chmod +x "$ANDROID_HOME/emulator/emulator"
+echo package > "$ANDROID_HOME/emulator/package.xml"
+''')
+                installer.chmod(0o700)
+                image = path / 'system-images/android-35/default/x86_64'
+                image.mkdir(parents=True)
+                (image / 'system.img').write_text('image')
+                (image / 'package.xml').write_text('package')
+                if breakage == 'broken':
+                    self.write_emulator(tmp, version='corrupt archive')
+                env = dict(os.environ, ANDROID_HOME=tmp, PROOF_TARGET='default', PATH=f'{tmp}:{os.environ["PATH"]}')
+                result = subprocess.run(['bash', str(script)], env=env, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('ANDROID_IMAGE_READY', result.stdout)
+                self.assertIn('emulator', (path / 'calls').read_text())
 
     def run_packages(self, cached, already=None):
         with tempfile.TemporaryDirectory() as tmp:
@@ -166,12 +208,18 @@ done
 ''')
             (path / 'dpkg').write_text('''#!/usr/bin/env bash
 set -u
+case "$*" in
+  --configure*) echo "dpkg $*" >> "$PROOF_CALLS"; exit 0 ;;
+esac
 echo "dpkg $*" >> "$PROOF_CALLS"
 printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE"
 ''')
             (path / 'apt-get').write_text('''#!/usr/bin/env bash
 set -u
 echo "apt-get $*" >> "$PROOF_CALLS"
+case "$*" in
+  *"-f install"*) exit 0 ;;
+esac
 for arg in "$@"; do
   case "$arg" in *Dir::Cache::archives=*) dir=${arg#*archives=} ; mkdir -p "$dir/partial"; : > "$dir/lock"; : > "$dir/fetched.deb" ;; esac
 done
@@ -194,7 +242,8 @@ done
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('ANDROID_PROOF_PACKAGES_FROM_CACHE', result.stdout)
         self.assertIn('dpkg', calls)
-        self.assertNotIn('apt-get', calls)
+        self.assertIn('-f install', calls)
+        self.assertNotIn('apt-get install -y gdb libpulse0', calls)
         self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
 
     def test_installed_emulator_packages_skip_every_installer(self):
@@ -229,7 +278,10 @@ for arg in "$@"; do
 done
 ''')
             (path / 'dpkg').write_text('''#!/usr/bin/env bash
-case "$*" in *stale.deb*) : > "$PROOF_BROKEN"; exit 1 ;; esac
+case "$*" in
+  --configure*) exit 0 ;;
+  *stale.deb*) : > "$PROOF_BROKEN"; exit 1 ;;
+esac
 printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE"
 ''')
             (path / 'apt-get').write_text('''#!/usr/bin/env bash
@@ -300,6 +352,83 @@ esac
             self.assertEqual(calls.read_text().count('apt-get install -y gdb libpulse0'), 1)
             self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
 
+    def test_runner_apt_unmet_dependencies_retry_install_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            script = path / 'packages.sh'
+            script.write_text(source('.github/actions/android-proof/packages.sh'))
+            state = path / 'state'
+            state.write_text('')
+            calls = path / 'calls'
+            calls.write_text('')
+            attempts = path / 'attempts'
+            attempts.write_text('0')
+            (path / 'dpkg-query').write_text('''#!/usr/bin/env bash
+set -u
+for arg in "$@"; do
+  case "$arg" in -*) continue ;; esac
+  if grep -qx "$arg" "$PROOF_STATE"; then echo 'install ok installed'; else echo 'deinstall ok config-files'; fi
+done
+''')
+            (path / 'dpkg').write_text('''#!/usr/bin/env bash
+case "$*" in --configure*) exit 0 ;; esac
+exit 1
+''')
+            (path / 'apt-get').write_text('''#!/usr/bin/env bash
+set -u
+echo "apt-get $*" >> "$PROOF_CALLS"
+case "$*" in
+  *"-f install"*) exit 0 ;;
+  *--download-only*) exit 0 ;;
+  install*gdb*libpulse0*)
+    n=$(( $(cat "$PROOF_ATTEMPTS") + 1 ))
+    echo "$n" > "$PROOF_ATTEMPTS"
+  if [ "$n" -eq 1 ]; then echo 'E: Unmet dependencies' >&2; exit 100; fi
+    printf 'gdb\\nlibpulse0\\n' > "$PROOF_STATE"
+    ;;
+esac
+''')
+            for name in ('dpkg-query', 'dpkg', 'apt-get'):
+                (path / name).chmod(0o700)
+            (path / 'sudo').write_text('#!/usr/bin/env bash\nexec "$@"\n')
+            (path / 'sudo').chmod(0o700)
+            env = dict(os.environ, HOME=tmp, PROOF_STATE=str(state), PROOF_CALLS=str(calls), PROOF_ATTEMPTS=str(attempts), PATH=f'{path}:{os.environ["PATH"]}')
+            result = subprocess.run(['bash', str(script), 'gdb', 'libpulse0'], env=env, capture_output=True, text=True)
+            text = calls.read_text()
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(text.count('apt-get install -y gdb libpulse0'), 2)
+            self.assertGreaterEqual(text.count('-f install'), 2)
+            self.assertIn('ANDROID_PROOF_PACKAGES_INSTALLED=2/2', result.stdout)
+
+    def test_broken_package_setup_reports_setup_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp)
+            script = path / 'packages.sh'
+            script.write_text(source('.github/actions/android-proof/packages.sh'))
+            (path / 'state').write_text('')
+            (path / 'dpkg-query').write_text('#!/usr/bin/env bash\necho "deinstall ok config-files"\n')
+            (path / 'dpkg').write_text('#!/usr/bin/env bash\ncase "$*" in --configure*) exit 0 ;; esac\nexit 1\n')
+            (path / 'apt-get').write_text('''#!/usr/bin/env bash
+echo "apt-get $*" >> "$PROOF_CALLS"
+case "$*" in
+  update*) exit 0 ;;
+  *"-f install"*) exit 0 ;;
+  *--download-only*) mkdir -p "$HOME/.cache/android-proof/debs"; : > "$HOME/.cache/android-proof/debs/broken.deb"; exit 0 ;;
+  install*gdb*libpulse0*) exit 100 ;;
+  *) exit 100 ;;
+esac
+''')
+            for name in ('dpkg-query', 'dpkg', 'apt-get'):
+                (path / name).chmod(0o700)
+            (path / 'sudo').write_text('#!/usr/bin/env bash\nexec "$@"\n')
+            (path / 'sudo').chmod(0o700)
+            calls = path / 'calls'
+            calls.write_text('')
+            env = dict(os.environ, HOME=tmp, PROOF_STATE=str(path / 'state'), PROOF_CALLS=str(calls), PATH=f'{path}:{os.environ["PATH"]}')
+            result = subprocess.run(['bash', str(script), 'gdb', 'libpulse0'], env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('ANDROID_PROOF_SETUP_FAILED', result.stdout)
+
     def double_boot_jobs(self, text):
         if 'jobs:' not in text:
             return []
@@ -338,6 +467,10 @@ if [ "$count" -eq "$READY_ON" ]; then
   mkdir -p "$image"
   echo image > "$image/system.img"
   echo package > "$image/package.xml"
+  mkdir -p "$ANDROID_HOME/emulator"
+  printf '#!/usr/bin/env bash\necho "Android emulator version 35.6.11.0"\n' > "$ANDROID_HOME/emulator/emulator"
+  chmod +x "$ANDROID_HOME/emulator/emulator"
+  echo package > "$ANDROID_HOME/emulator/package.xml"
 fi
 ''')
                 installer.chmod(0o700)

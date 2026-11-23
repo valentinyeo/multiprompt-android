@@ -1,0 +1,1 @@
+Session phone tests read the screen correctly again

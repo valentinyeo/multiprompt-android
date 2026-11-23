@@ -1,13 +1,19 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.os.Looper
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -23,7 +29,12 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.width
+import java.time.Duration
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.Assert.assertEquals
@@ -32,8 +43,10 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.util.ReflectionHelpers
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -45,9 +58,9 @@ class ChatTableExpandTest {
     @get:Rule
     val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
 
-    private fun show(source: String) {
+    private fun show(source: String, sunlight: Boolean = false) {
         compose.setContent {
-            MultipromptTheme {
+            MultipromptTheme(sunlight = sunlight) {
                 Box(Modifier.width(390.dp)) {
                     MarkdownText(source, 14.sp, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.primary)
                 }
@@ -95,5 +108,59 @@ class ChatTableExpandTest {
         compose.onNodeWithTag("md-table-expanded").assertDoesNotExist()
         compose.onNodeWithTag("table-expand").assertIsDisplayed()
         compose.onAllNodesWithText("Open plans").assertCountEquals(1)
+    }
+
+    @Test
+    fun theExpandedTablePaintsDarkTextOnTheLightSheet() {
+        assertSheetContrast(sunlight = true)
+    }
+
+    @Test
+    fun theExpandedTablePaintsLightTextOnTheDarkSheet() {
+        assertSheetContrast(sunlight = false)
+    }
+
+    private fun assertSheetContrast(sunlight: Boolean) {
+        show("## Garden harvest table\n\n| Plot | Northern beds |\n| --- | --- |\n| R01-C01 orchard | R01-C02 orchard |\n", sunlight)
+        compose.onNodeWithTag("table-expand").performClick()
+        compose.waitForIdle()
+        val contrast = paintedContrast(capture("md-table-expanded"))
+        assertTrue(
+            "the expanded table must paint its cells in the theme's text colour, contrast was $contrast with sunlight=$sunlight",
+            contrast > 100,
+        )
+    }
+
+    private fun paintedContrast(bitmap: Bitmap): Double {
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        val luma = pixels.filter { (it ushr 24) > 0 }.map { pixel ->
+            0.2126 * ((pixel shr 16) and 255) + 0.7152 * ((pixel shr 8) and 255) + 0.0722 * (pixel and 255)
+        }
+        assertTrue("the sheet painted nothing", luma.isNotEmpty())
+        return luma.max() - luma.min()
+    }
+
+    private fun capture(tag: String): Bitmap {
+        val root = compose.onNodeWithTag(tag)
+        val view = (checkNotNull(root.fetchSemanticsNode().root) as ViewRootForTest).view.rootView
+        val attachInfo = ReflectionHelpers.getField<Any>(view, "mAttachInfo")
+        val accelerated = view.isHardwareAccelerated
+        ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", false)
+        val redraw = CoroutineScope(UnconfinedTestDispatcher(scheduler)).launch {
+            while (isActive) {
+                delay(16)
+                shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(32))
+                view.draw(Canvas(Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)))
+                view.viewTreeObserver.dispatchOnDraw()
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+        }
+        return try {
+            root.captureToImage().asAndroidBitmap()
+        } finally {
+            redraw.cancel()
+            ReflectionHelpers.setField(attachInfo, "mHardwareAccelerated", accelerated)
+        }
     }
 }
