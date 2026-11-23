@@ -335,7 +335,19 @@ private fun ChatTable(
     }
     if (open) {
         KitSheet(onDismiss = { open = false }) {
-            ExpandedChatTable(table, fontSize, title, matchHits, activeHit, tableBase, mentionChats, onSessionLink) { open = false }
+            ExpandedChatTable(
+                table,
+                fontSize,
+                color,
+                linkColor,
+                codeBg,
+                title,
+                matchHits,
+                activeHit,
+                tableBase,
+                mentionChats,
+                onSessionLink,
+            ) { open = false }
         }
     }
 }
@@ -344,6 +356,9 @@ private fun ChatTable(
 private fun ExpandedChatTable(
     table: MdBlock.Table,
     fontSize: TextUnit,
+    color: Color,
+    linkColor: Color,
+    codeBg: Color,
     title: String?,
     matchHits: List<ChatFind.Hit>,
     activeHit: ChatFind.Hit?,
@@ -366,7 +381,7 @@ private fun ExpandedChatTable(
                     Text(
                         title,
                         style = Kit.Heading,
-                        color = Kit.Text,
+                        color = color,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
@@ -386,9 +401,9 @@ private fun ExpandedChatTable(
                     MarkdownTable(
                         table,
                         fontSize,
-                        Kit.Text,
-                        Kit.Text,
-                        Kit.Text.copy(alpha = 0.10f),
+                        color,
+                        linkColor,
+                        codeBg,
                         matchHits = matchHits,
                         activeHit = activeHit,
                         tableBase = tableBase,
