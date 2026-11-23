@@ -173,7 +173,7 @@ object MessageProtocol {
         val row = if (value == JSONObject.NULL) null else row(jsonObject(value), scope)
         if (row != null) {
             require(row.id == messageId)
-            if (text != null) require(row.text == text)
+            if (text != null) require(MessageIdentity.same(row.identityText, MessageIdentity.text(text)))
         }
         return Result(integral(result.get("epoch")), integral(result.get("seq")), row)
     }
