@@ -1963,6 +1963,15 @@ internal fun SessionsScreen(
             sessionListState.scrollToItem(0)
         }
     }
+    var lastPinnedKeys by remember { mutableStateOf(state.pinnedSessionKeys) }
+    LaunchedEffect(state.pinnedSessionKeys) {
+        if (state.pinnedSessionKeys != lastPinnedKeys) {
+            lastPinnedKeys = state.pinnedSessionKeys
+            if (sessionListEntries > 0) {
+                sessionListState.scrollToItem(0)
+            }
+        }
+    }
     Scaffold(
         modifier = Modifier.fillMaxSize().imePadding(),
         containerColor = MaterialTheme.colorScheme.background,

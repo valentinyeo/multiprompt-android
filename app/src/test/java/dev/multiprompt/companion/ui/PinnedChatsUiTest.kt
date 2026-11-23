@@ -120,4 +120,35 @@ class PinnedChatsUiTest {
         assertEquals(emptyList<String>(), state.value.pinnedSessionKeys)
         assertTrue(topY("alpha") < topY("beta"))
     }
+
+    @Test
+    fun pinningAndUnpinningInLongReversedListKeepsFirstRowVisible() {
+        val many = listOf(first, second) + (1..20).map { index ->
+            TmuxSession(host.id, "row-$index", 1, 0, 100L - index)
+        }
+        state.value = state.value.copy(
+            sessions = many,
+            newestSessionsAtBottom = true,
+        )
+        render()
+        compose.onNodeWithText("alpha").assertIsDisplayed()
+        compose.onNodeWithText("beta").assertIsDisplayed()
+        assertTrue(topY("beta") < topY("alpha"))
+
+        compose.onNodeWithText("beta").performTouchInput { longClick() }
+        compose.onNodeWithText(PinnedChats.PIN_LABEL).performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("beta").assertIsDisplayed()
+        compose.onNodeWithText("alpha").assertIsDisplayed()
+        assertTrue(topY("alpha") < topY("beta"))
+
+        compose.onNodeWithText("beta").performTouchInput { longClick() }
+        compose.onNodeWithText(PinnedChats.UNPIN_LABEL).performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("alpha").assertIsDisplayed()
+        compose.onNodeWithText("beta").assertIsDisplayed()
+        assertTrue(topY("beta") < topY("alpha"))
+    }
 }
