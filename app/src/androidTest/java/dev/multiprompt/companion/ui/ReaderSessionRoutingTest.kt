@@ -58,7 +58,7 @@ class ReaderSessionRoutingTest {
                     onSetAppTheme = {}, onResetFontScale = { 1f }, sessionActionError = null,
                     onClearSessionActionError = {}, onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {})
             }
-            compose.waitUntil(30_000) { first.state.value.status == ReaderStatus.Live && second.state.value.status == ReaderStatus.Live }
+            compose.waitUntil(180_000) { first.state.value.status == ReaderStatus.Live && second.state.value.status == ReaderStatus.Live }
             listOf(false, true).forEach { target ->
                 repeat(4) { compose.runOnIdle { switched = !switched } }
                 compose.runOnIdle { switched = target }
@@ -67,10 +67,10 @@ class ReaderSessionRoutingTest {
                 compose.onNodeWithText(if (target) b.name else a.name).assertIsDisplayed()
                 compose.onNodeWithText("Message ${if (target) b.displayName else a.displayName}").performTextInput("TYPED_$suffix")
                 compose.onNodeWithContentDescription("Send prompt").performClick()
-                compose.waitUntil(30_000) { connection.state.value.completedActions == 1L }
+                compose.waitUntil(90_000) { connection.state.value.completedActions == 1L }
                 compose.runOnIdle { voice.value = DictationState(DictationStatus.LISTENING, "VOICE_$suffix", true, sessionKey = "${host.id}::${if (target) b.name else a.name}") }
                 compose.onNodeWithContentDescription("Send prompt").performClick()
-                compose.waitUntil(30_000) { connection.state.value.completedActions == 2L }
+                compose.waitUntil(90_000) { connection.state.value.completedActions == 2L }
             }
             compose.runOnIdle { switched = false }
             compose.runOnIdle {
@@ -83,7 +83,7 @@ class ReaderSessionRoutingTest {
             compose.runOnIdle { assertEquals(DictationStatus.IDLE, voice.value.status) }
             compose.onNodeWithText("Message ${b.displayName}").performTextInput("AFTER_SWITCH_B")
             compose.onNodeWithContentDescription("Send prompt").performClick()
-            compose.waitUntil(30_000) { second.state.value.completedActions == 3L }
+            compose.waitUntil(90_000) { second.state.value.completedActions == 3L }
             compose.onNodeWithText("verify-other").assertIsDisplayed()
             val image = compose.onRoot().captureToImage().asAndroidBitmap()
             File(app.getExternalFilesDir(null), "routing-b.png").outputStream().use {

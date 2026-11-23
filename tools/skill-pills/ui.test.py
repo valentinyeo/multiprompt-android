@@ -77,6 +77,11 @@ class SkillPillsUiTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'outline'):
             ui.check(fixture, self.png, 'sent', 'Please /review-native this')
 
+    def test_real_draft_with_dictation_button_has_no_composer_pill(self):
+        fixture = Path(__file__).with_name('fixtures') / 'soft3030-composer-draft.xml'
+        result = ui.check(fixture, fixture.with_suffix('.png'), 'draft', 'Please this')
+        self.assertFalse(result['composer_pill'])
+
     def test_scroll_uses_the_skill_picker_when_the_chat_also_scrolls(self):
         window = self.node(bounds='[0,0][400,400]')
         self.node(parent=window, bounds='[0,0][400,400]', scrollable='true')

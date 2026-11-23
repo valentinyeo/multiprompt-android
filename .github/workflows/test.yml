@@ -8,15 +8,21 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-tests-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: robolectric-warm-v1 # gitleaks:allow
+
 jobs:
   build:
     name: build
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,15 +31,19 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Warm the Robolectric test jars for the read only jobs
+        run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:syncRobolectricAndroidAll :app:generateDebugUnitTestLintModel
       - name: Build the app
         run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug
 
   test:
     name: test
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -57,9 +67,9 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
 
       - name: Install screenshot text reader
         run: |
@@ -96,6 +106,8 @@ jobs:
   unit-tests:
     name: unit-tests
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -104,9 +116,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
       - name: Debug unit tests
         env:
           GRADLE: tools/ci/gradle-retry.sh
@@ -131,6 +143,8 @@ jobs:
   m3-unit-tests:
     name: m3-unit-tests
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -139,9 +153,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
       - name: Material 3 unit tests
         env:
           GRADLE: tools/ci/gradle-retry.sh
@@ -158,6 +172,8 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -166,9 +182,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
       - name: Android lint
         env:
           GRADLE: tools/ci/gradle-retry.sh

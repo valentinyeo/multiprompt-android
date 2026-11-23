@@ -135,15 +135,24 @@ hold_inbox_session() {
     read -r x y <<< "$point"
     adb shell input swipe "$x" "$y" "$x" "$y" 800
 }
+reset_inbox_search() {
+    local attempt
+    for attempt in {1..5}; do
+        select_node desc 'Close session search' >/dev/null 2>&1 || return 0
+        tap_desc 'Close session search'
+        sleep 1
+    done
+    return 1
+}
 find_inbox_session() {
     if ! select_node desc 'Close session search' >/dev/null 2>&1; then
         tap_desc 'Search sessions'
-        select_node focused-field '' >/dev/null
+        select_node desc 'Close session search' >/dev/null
+        adb shell input keyevent KEYCODE_BACK
         clear_field ''
         adb shell input text verify-session
         dump_ui
         python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value '' verify-session
-        adb shell input keyevent KEYCODE_BACK
     fi
     wait_for_text '1 result across all splits'
     tap_node desc 'Robot verify-session' reveal
@@ -216,6 +225,9 @@ open_inbox_reminder
 adb shell input keyevent KEYCODE_BACK
 inbox_control_state reminder-dismissed '{"text":["Inbox"],"desc":["Robot verify-session"],"absent":["Remind me"]}'
 adb shell wm size 1080x1280
+wait_for_text Inbox
+sleep 2
+reset_inbox_search
 open_inbox_reminder
 inbox_control_state reminder-scroll-top '{"text":["In 30 minutes"],"absent":["Custom time"]}'
 tap_node field 'Custom time' reveal

@@ -60,14 +60,13 @@ internal val ReaderBadgeForeground = Color(0xFFFFFFFF)
 internal val ReaderBadgeShape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
 internal val ReaderCardShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 internal val ReaderComposerShape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp)
-internal val ReaderComposerFieldShape = androidx.compose.foundation.shape.RoundedCornerShape(22.dp)
 internal val ReaderInsetCardShape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
 internal val ReaderCardPadding = 16.dp
 internal val ReaderScreenPadding = 12.dp
 internal val ReaderMessageSpacing = 6.dp
-internal val ReaderControlSize = 44.dp
+internal val ReaderControlSize = Kit.ControlHeight
 internal val ReaderControlSpacing = 8.dp
-internal val ReaderSendSize = 28.dp
+internal const val ReaderComposerMaxLines = 6
 internal val ReaderJumpSize = 40.dp
 internal val ReaderFloatingInset = 96.dp
 internal val ReaderTextSize = 16.sp
@@ -261,6 +260,51 @@ internal val Material3DarkColors = darkColorScheme(
 
 val LocalMaterial3 = staticCompositionLocalOf { false }
 internal val LocalReaderStyle = staticCompositionLocalOf { false }
+internal val LocalSunlight = staticCompositionLocalOf { false }
+
+internal data class KitPalette(
+    val page: Color,
+    val sheet: Color,
+    val surface: Color,
+    val surfaceRaised: Color,
+    val outline: Color,
+    val divider: Color,
+    val text: Color,
+    val textMuted: Color,
+    val accentUnread: Color,
+    val danger: Color,
+)
+
+internal fun kitPalette(sunlight: Boolean) = if (sunlight) {
+    KitPalette(
+        page = Color(0xFFFFFFFF),
+        sheet = Color(0xFFF4F4F4),
+        surface = ChatBubbleAgentLight,
+        surfaceRaised = ChatBubbleUserLight,
+        outline = Color(0xFFD4D4D4),
+        divider = Color(0xFFE6E6E6),
+        text = ChatTextLight,
+        textMuted = ChatHintLight,
+        accentUnread = ReaderChoiceBlue,
+        danger = Color(0xFFA2191F),
+    )
+} else {
+    KitPalette(
+        page = ReaderBackground,
+        sheet = ReaderSheet,
+        surface = ReaderControl,
+        surfaceRaised = ReaderSelected,
+        outline = ReaderOutline,
+        divider = ReaderDivider,
+        text = ReaderForeground,
+        textMuted = ReaderHint,
+        accentUnread = ReaderChoiceBlue,
+        danger = ReaderDanger,
+    )
+}
+
+@Composable
+internal fun kit(): KitPalette = kitPalette(LocalSunlight.current)
 
 @Composable
 fun MultipromptTheme(
@@ -296,6 +340,7 @@ fun MultipromptTheme(
     CompositionLocalProvider(
         LocalMaterial3 provides material3,
         LocalReaderStyle provides readerStyle,
+        LocalSunlight provides sunlight,
         LocalContentColor provides if (readerStyle || material3) colors.onBackground else LocalContentColor.current,
     ) {
         MaterialTheme(

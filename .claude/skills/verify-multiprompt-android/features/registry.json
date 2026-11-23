@@ -393,7 +393,7 @@
     },
     "session-gestures.md": {
       "name": "Session gestures",
-      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "description": "no session swipes, a code drag that starts no reply, ten replies, back to inbox on the signed APK.",
       "runner": {
         "kind": "signed",
         "workflow": "verify.yml",
@@ -1088,6 +1088,33 @@
         "seed-counts.json": 3000
       }
     },
+    "session-fresh-start.md": {
+      "name": "Fresh start keeps one inbox row and the new conversation",
+      "description": "Desktop Fresh start keeps one tmux-named inbox row and shows the handover-led new transcript without stale cache after relaunch and resync. SOFT-3000.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/session-fresh-start-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/session-fresh-start-setup.sh",
+          "tools/session-fresh-start/fixture.py"
+        ]
+      },
+      "outcomes": [
+        "session.fresh-start"
+      ],
+      "evidence": {
+        "fresh-start-state.json": 1200,
+        "fresh-start-host.json": 4000,
+        "fresh-start-open-proof.txt": 700,
+        "fresh-start-applied.json": 1000,
+        "fresh-start-inbox-inbox-after-fresh-start.json": 400,
+        "session-fresh-start-seed.json": 1000
+      }
+    },
     "crash-report.md": {
       "name": "Crash report for every app exit",
       "description": "signs in through the local account fixture, plants uncaught exception, native crash, system kill and ANR exits, relaunches and requires one uploaded crash report per exit with a summary naming it.",
@@ -1248,7 +1275,7 @@
       "match": []
     },
     "session-gestures.journey": {
-      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "description": "no session swipes, a code drag that starts no reply, ten replies, back to inbox on the signed APK.",
       "journey": "session-gestures.md",
       "sideEffect": false,
       "match": []
@@ -1718,6 +1745,33 @@
       "match": [
         "ScreencastAccountKey|ScreencastUploader|screencastKey|screencast\\.prepare"
       ]
+    },
+    "session.fresh-start": {
+      "description": "After desktop Fresh start the inbox keeps exactly one row for the tmux chat, opens on the handover-led new transcript, and stays correct across relaunch and resync.",
+      "journey": "session-fresh-start.md",
+      "sideEffect": true,
+      "match": [
+        "FreshStart|fresh_start|FRESH_START_STALE|FRESH_START_ONE_ROW|live-fresh-start-3000",
+        "session-fresh-start|session\\.fresh-start"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/FreshStart\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/reader/ChatHistory\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "apply-fresh-start"
+        },
+        "result": {
+          "file": "fresh-start-state.json",
+          "quote": "HANDOVER_3000"
+        },
+        "sideEffect": {
+          "file": "fresh-start-host.json",
+          "quote": "\"sid\": \"c0030000-3000-4000-8000-000000003000\""
+        }
+      }
     },
     "reader.host-restart": {
       "description": "A desktop-hosted chat catches up and keeps showing replies after its agent host process restarts, without reopening the phone reader.",

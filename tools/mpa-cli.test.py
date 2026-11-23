@@ -107,6 +107,20 @@ class MpaCliTest(unittest.TestCase):
         self.assertEqual([975, 110], payload['point'])
         self.assertTrue(payload['node']['clickable'])
 
+    def test_desc_prefix_matches_a_description_that_carries_a_live_count(self):
+        newest = self.root / 'newest.xml'
+        newest.write_text(
+            '<hierarchy rotation="0"><node class="android.widget.FrameLayout" package="dev.multiprompt.companion.debug" bounds="[0,0][1080,1920]">'
+            '<node content-desc="Jump to newest, 4 new" package="dev.multiprompt.companion.debug" bounds="[477,682][603,808]" clickable="true" enabled="true" class="android.view.View">'
+            '<node text="\u2193 4" package="dev.multiprompt.companion.debug" bounds="[512,717][567,774]" class="android.widget.TextView" />'
+            '</node></node></hierarchy>'
+        )
+        exact = self.run_cli('read', '--xml', str(newest), '--select', 'desc', '--value', 'Jump to newest')
+        self.assertEqual(1, exact.returncode, 'the label carries a live count, so an exact match must miss')
+        payload = self.payload('read', '--xml', str(newest), '--select', 'desc-prefix', '--value', 'Jump to newest')
+        self.assertEqual(1, payload['matches'])
+        self.assertEqual([540, 745], payload['point'])
+
     def test_selector_failure_says_what_to_do_instead(self):
         result = self.run_cli('read', '--xml', str(self.screen), '--select', 'text', '--value', 'Checkout')
         self.assertEqual(1, result.returncode)

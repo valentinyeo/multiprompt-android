@@ -188,30 +188,53 @@ fun MarkdownText(
                         modifier = Modifier.padding(start = 10.dp).weight(1f).pin(base, piece.length),
                     )
                 }
-                is MdBlock.Code -> Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(codeBg, chromeShape(RoundedCornerShape(4.dp)))
-                        .padding(10.dp)
-                        .pin(base, piece.length),
-                ) {
-                    Text(
-                        mark(AnnotatedString(block.text), base),
-                        fontFamily = codeFontFamily,
-                        fontSize = if (LocalReaderStyle.current) ReaderCodeTextSize * scale else (fontSize.value * 0.88f).sp,
-                        lineHeight = if (LocalReaderStyle.current) ReaderCodeLineHeight * scale else (fontSize.value * 1.35f).sp,
-                        color = color,
-                        modifier = Modifier.testTag("md-code"),
-                    )
-                    Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
-                        KitRoundButton(
-                            onClick = {
-                                clipboard.setText(AnnotatedString(block.text))
-                                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
-                            },
-                            icon = Icons.Default.ContentCopy,
-                            description = "Copy code",
-                        )
+                is MdBlock.Code -> {
+                    val readerStyle = LocalReaderStyle.current
+                    val scrollWide = block.scrollsHorizontally()
+                    val horizontal = rememberScrollState()
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(codeBg, chromeShape(RoundedCornerShape(4.dp)))
+                            .padding(10.dp)
+                            .pin(base, piece.length),
+                    ) {
+                        val marked = mark(AnnotatedString(block.text), base)
+                        val codeFontSize = if (readerStyle) ReaderCodeTextSize * scale else (fontSize.value * 0.88f).sp
+                        val codeLineHeight = if (readerStyle) ReaderCodeLineHeight * scale else (fontSize.value * 1.35f).sp
+                        if (scrollWide) {
+                            Text(
+                                marked,
+                                fontFamily = codeFontFamily,
+                                fontSize = codeFontSize,
+                                lineHeight = codeLineHeight,
+                                color = color,
+                                softWrap = false,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(horizontal)
+                                    .testTag("md-code"),
+                            )
+                        } else {
+                            Text(
+                                marked,
+                                fontFamily = codeFontFamily,
+                                fontSize = codeFontSize,
+                                lineHeight = codeLineHeight,
+                                color = color,
+                                modifier = Modifier.fillMaxWidth().testTag("md-code"),
+                            )
+                        }
+                        Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.End) {
+                            KitRoundButton(
+                                onClick = {
+                                    clipboard.setText(AnnotatedString(block.text))
+                                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                                },
+                                icon = Icons.Default.ContentCopy,
+                                description = "Copy code",
+                            )
+                        }
                     }
                 }
                 is MdBlock.Table -> ChatTable(
@@ -561,6 +584,12 @@ internal fun MarkdownLinkedText(
             fontFamily = chatFontFamily(),
         ),
     )
+}
+
+private fun MdBlock.Code.scrollsHorizontally(): Boolean {
+    if (!text.contains('\n')) return false
+    val words = text.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    return words.size >= 20 && words.all { it.length <= 16 }
 }
 
 internal fun openMarkdownUrl(context: android.content.Context, url: String) {

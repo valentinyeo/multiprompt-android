@@ -30,7 +30,7 @@ object TmuxCommands {
         return "python3 -c '$ETA_PYTHON'$argument 2>/dev/null || true"
     }
 
-    private const val ETA_PYTHON = "import json,os,sys,time\n" +
+    private const val ETA_PYTHON = "import glob,json,os,re,sys,time\n" +
         "d=os.environ.get(\"MULTIPROMPT_STATE_DIR\") or os.path.join(os.path.expanduser(\"~\"),\".local/state/multiprompt\")\n" +
         "now=int(time.time())\n" +
         "want=sys.argv[1] if len(sys.argv)>1 else \"\"\n" +
@@ -69,7 +69,17 @@ object TmuxCommands {
         "            continue\n" +
         "        if c.get(\"enabled\") is True and isinstance(t, str) and t and isinstance(v, str) and (t not in prov or m > prov[t][0]):\n" +
         "            prov[t]=(m, v)\n" +
-        "    sys.stdout.write(\"\".join(\"@provider\\t%s\\t%s\\n\" % (t, v) for t, (m, v) in prov.items()))"
+        "    sys.stdout.write(\"\".join(\"@provider\\t%s\\t%s\\n\" % (t, v) for t, (m, v) in prov.items()))\n" +
+        "    hostsid={}\n" +
+        "    for p in glob.glob(os.path.join(d,\"agent-host\",\"*.config.json\")):\n" +
+        "        try:\n" +
+        "            c=json.load(open(p)); m=os.path.getmtime(p); t=c.get(\"tmux\"); s=c.get(\"sid\")\n" +
+        "        except Exception:\n" +
+        "            continue\n" +
+        "        if (c.get(\"enabled\") is True and isinstance(t, str) and t and isinstance(s, str) and\n" +
+        "                re.fullmatch(r\"[A-Za-z0-9_-]{1,80}\", s) and (t not in hostsid or m > hostsid[t][0])):\n" +
+        "            hostsid[t]=(m, s)\n" +
+        "    sys.stdout.write(\"\".join(\"\\n@hostsid\\t%s\\t%s\" % (t, s) for t, (m, s) in hostsid.items()))"
 
     fun etaLogCommand(): String =
         "mp_dir=\"\${MULTIPROMPT_STATE_DIR:-\$HOME/.local/state/multiprompt}\"; " +

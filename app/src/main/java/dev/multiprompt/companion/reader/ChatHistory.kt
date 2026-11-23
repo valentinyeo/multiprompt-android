@@ -192,7 +192,13 @@ data class ChatHistory(
         }
         ordered.forEach(::append)
         unmatched.filter { it.turn != host.turn }.forEach(::appendReply)
-        cards.filter { it.message.key !in placed && it.visible }.forEach { append(it.message) }
+        val settledThrough = cards.filter { it.message.key in placed }.mapNotNull { it.shared?.position }.maxOrNull()
+        fun stale(card: Card): Boolean {
+            val row = card.shared ?: return false
+            if (settledThrough == null || row.position >= settledThrough) return false
+            return row.state == MessageProtocol.State.ACCEPTED || row.state == MessageProtocol.State.STARTED
+        }
+        cards.filter { it.message.key !in placed && it.visible && !stale(it) }.forEach { append(it.message) }
         replies.values.flatten().forEach(::appendReply)
         val canonical = scoped.associateBy { it.id }
         unresolved.filter { it.operation == "submit" && it.scope.sid == sid && canonical[it.messageId]?.text != it.text }.forEach { entry ->
@@ -258,11 +264,11 @@ data class ChatHistory(
         }
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
         val mergedDeliveries = previousDeliveries + page.deliveries + previousDeliveries.filterValues { it in terminal }
-        return if (mode == "older") {
-            copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
-        } else {
-            ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
+        if (mode == "older") {
+            return copy(start = page.oldest, rows = merged, deliveries = mergedDeliveries, held = page.held, pendingQuestions = page.pendingQuestions)
         }
+        val next = ChatHistory(page.sid, page.inode, page.end, page.oldest, page.mtime, page.probe, page.more, merged, mergedDeliveries, page.held, page.pendingQuestions)
+        return if (mode == "tail" && olderThan(this, next)) this else next
     }
 
     companion object {
@@ -278,5 +284,14 @@ data class ChatHistory(
 
         fun cancellable(row: MessageProtocol.Row, now: Double?, seen: Double? = null): Boolean =
             row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT) && !notSent(row, now, seen)
+
+        fun olderThan(shown: ChatHistory, incoming: ChatHistory): Boolean {
+            val shownNewest = newestSeconds(shown) ?: return false
+            val incomingNewest = newestSeconds(incoming) ?: return false
+            return incomingNewest < shownNewest
+        }
+
+        private fun newestSeconds(history: ChatHistory): Double? =
+            history.rows.mapNotNull { LegacyMessageIdentity.seconds(it.timestamp) }.maxOrNull()
     }
 }

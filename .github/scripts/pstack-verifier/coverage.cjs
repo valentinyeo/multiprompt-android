@@ -6,7 +6,18 @@ const { execFileSync } = require('node:child_process');
 const registry = require('../../../.claude/skills/verify-multiprompt-android/features/registry.json');
 const baseline = require('../../../.claude/skills/verify-multiprompt-android/features/coverage-baseline.json');
 const REGISTRY_PATH = '.claude/skills/verify-multiprompt-android/features';
-const HARNESS = /^(?:tools\/journey-actions\/|\.claude\/skills\/verify-multiprompt-android\/scripts\/)/;
+const HARNESS = /^(?:tools\/journey-actions\/|\.claude\/skills\/verify-multiprompt-android\/scripts\/|\.github\/workflows\/verify\.yml$)/;
+const PR_NON_JOURNEY_CHECKS = 9;
+const PR_CHECK_CAP = 20;
+const MAX_PR_JOURNEYS = PR_CHECK_CAP - PR_NON_JOURNEY_CHECKS;
+const HARNESS_SMOKE_JOURNEYS = [
+  'sessions.md',
+  'session-reader.md',
+  'settings-controls.md',
+  'chat-search.md',
+  'terminal.md',
+  'hosts.md',
+];
 const ownedScripts = new Set(Object.values(registry.journeys).flatMap(journey => journey.runner.scripts ?? []));
 const debugJourneys = Object.entries(registry.journeys).filter(([, journey]) => journey.runner.kind === 'debug').map(([name]) => name);
 const prJourneys = Object.entries(registry.journeys).filter(([, journey]) => ['debug', 'signed'].includes(journey.runner.kind)).map(([name]) => name);
@@ -38,12 +49,42 @@ function sharedHarness(paths) {
   return [...paths].some(file => HARNESS.test(file) && !ownedScripts.has(file));
 }
 
-function changedJourneys(diff, files = []) {
-  const paths = changedPaths(diff, files);
-  const shared = sharedHarness(paths);
-  return prJourneys.filter(name => shared
-    || paths.has(`${REGISTRY_PATH}/${name}`)
+function directJourneys(paths) {
+  return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`)
     || (registry.journeys[name].runner.scripts ?? []).some(script => paths.has(script)));
+}
+
+function harnessSmokeJourneys(direct) {
+  const skip = new Set(direct);
+  return HARNESS_SMOKE_JOURNEYS.filter(name => prJourneys.includes(name) && !skip.has(name));
+}
+
+function selectionForChange(diff, files = []) {
+  const paths = changedPaths(diff, files);
+  const direct = directJourneys(paths);
+  const shared = sharedHarness(paths);
+  const smoke = shared ? harnessSmokeJourneys(direct) : [];
+  const required = shared ? [...new Set([...direct, ...smoke])] : direct;
+  return { direct, shared, smoke, required };
+}
+
+function prioritizeJourneys(features, { direct = [], smoke = [] } = {}) {
+  const directSet = new Set(direct);
+  const smokeSet = new Set(smoke);
+  const first = features.filter(name => directSet.has(name));
+  const last = features.filter(name => smokeSet.has(name) && !directSet.has(name));
+  const middle = features.filter(name => !directSet.has(name) && !smokeSet.has(name));
+  return [...new Set([...first, ...middle, ...last])];
+}
+
+function capPrJourneys(features, meta = {}) {
+  const ordered = prioritizeJourneys(features, meta);
+  if (ordered.length <= MAX_PR_JOURNEYS) return { features: ordered, dropped: [] };
+  return { features: ordered.slice(0, MAX_PR_JOURNEYS), dropped: ordered.slice(MAX_PR_JOURNEYS) };
+}
+
+function changedJourneys(diff, files = []) {
+  return selectionForChange(diff, files).required;
 }
 
 function changedProduct(diff) {
@@ -176,7 +217,12 @@ function renderWorkflow(source) {
   return source.replace(/^      VERIFY_FEATURE: .*$/m, `      VERIFY_FEATURE: \${{ inputs.driver_feature || inputs.feature || '${registry.smoke}' }}`).replace(/(      feature:\n        description:[^\n]+\n        required: true\n        type: choice\n        options:\n)(?:          - [^\n]+\n)+/, `$1${options}\n`);
 }
 
-module.exports = { registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, changedRecipes, changedJourneys, changedProduct, pathOutcomes, recipeOutcomes, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors, renderIndex, renderWorkflow };
+module.exports = {
+  registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, HARNESS_SMOKE_JOURNEYS, MAX_PR_JOURNEYS, PR_CHECK_CAP,
+  changedRecipes, changedJourneys, directJourneys, selectionForChange, prioritizeJourneys, capPrJourneys, changedProduct,
+  pathOutcomes, recipeOutcomes, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors,
+  renderIndex, renderWorkflow,
+};
 
 if (require.main === module) {
   if (process.argv[2] === 'journey') {

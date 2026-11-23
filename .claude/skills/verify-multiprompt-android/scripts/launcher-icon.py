@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from PIL import Image
 
 APP_PACKAGE = "dev.multiprompt.companion.debug"
-LABEL = "multiprompt"
+LABEL = "Multi Bot"
 
 
 def bounds(node):

@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.ui
 
 import android.app.Application
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
@@ -40,12 +41,27 @@ class CodeBlockCopyTest {
 
     private lateinit var clipboard: ClipboardManager
 
-    private fun show(source: String) {
+    private fun show(source: String, nativeChat: Boolean = false) {
         compose.setContent {
-            MultipromptTheme(readerStyle = true) {
-                clipboard = LocalClipboardManager.current
-                Box(Modifier.width(320.dp)) {
-                    MarkdownText(source, 16.sp, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.primary)
+            if (nativeChat) {
+                MaterialTheme {
+                    clipboard = LocalClipboardManager.current
+                    Box(Modifier.width(320.dp).background(MaterialTheme.colorScheme.surface)) {
+                        MarkdownText(
+                            source,
+                            15.sp,
+                            MaterialTheme.colorScheme.onSurface,
+                            MaterialTheme.colorScheme.primary,
+                            imagePreviews = true,
+                        )
+                    }
+                }
+            } else {
+                MultipromptTheme(readerStyle = true) {
+                    clipboard = LocalClipboardManager.current
+                    Box(Modifier.width(320.dp)) {
+                        MarkdownText(source, 16.sp, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }
@@ -73,6 +89,44 @@ class CodeBlockCopyTest {
                 layout.getLineRight(line) <= layout.size.width,
             )
         }
+    }
+
+    @Test
+    fun spaceSeparatedEightHundredCharLineShowsInNativeChatBubble() {
+        val body = buildString {
+            while (length < 800) {
+                if (isNotEmpty()) append(' ')
+                append("tok%03d".format(length))
+            }
+        }
+        assertTrue(body.length >= 800)
+        val source = "Before the fence.\n\n```\n$body\n```\n\nAfter the fence."
+        show(source, nativeChat = true)
+        val layout = codeLayout()
+        assertEquals(body, layout.layoutInput.text.text)
+        assertTrue(
+            "fenced code must occupy vertical space, got ${layout.lineCount} line(s) and ${layout.size.height}px height",
+            layout.lineCount >= 1 && layout.size.height > 0,
+        )
+        assertTrue(
+            "at least one code glyph must paint inside the block width",
+            layout.getLineRight(0) > 0f,
+        )
+        assertTrue(
+            "one-line fences must wrap inside the bubble instead of hiding in horizontal scroll",
+            layout.lineCount > 1,
+        )
+    }
+
+    @Test
+    fun unlabelledFenceKeepsLongSingleToken() {
+        val body = "X".repeat(800)
+        val source = "Intro.\n\n```\n$body\n```\n\nOutro."
+        show(source)
+        val layout = codeLayout()
+        assertEquals(body, layout.layoutInput.text.text)
+        assertTrue(layout.lineCount > 1)
+        assertTrue(layout.size.height > layout.getLineBottom(0) - layout.getLineTop(0))
     }
 
     @Test
