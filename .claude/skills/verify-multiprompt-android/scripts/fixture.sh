@@ -58,7 +58,9 @@ fi
 if [[ "${VERIFY_FEATURE:-}" == folder-bar.md && "${BREAK_IT_MODE:-}" == true ]]; then
     VERIFY_FEATURE=ai-switch.md
 fi
-if [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-fresh-start.md ]]; then
+    source "$(dirname "$0")/session-fresh-start-setup.sh"
+elif [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
     source "$(dirname "$0")/host-restart-setup.sh"
 elif [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
     source "$(dirname "$0")/remote-control-setup.sh"
@@ -302,7 +304,7 @@ if [[ "${BREAK_IT_MODE:-}" == true ]]; then
     sudo -u verifyssh tmux set-window-option -t verify-breakit-other automatic-rename off
     sudo -u verifyssh tmux rename-window -t verify-breakit-other verify-breakit-other
 fi
-if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true ]]; then
+if [[ "${VERIFY_FEATURE:-}" != long-chat.md && "${PIN_SCROLL_PROOF:-}" != true && "${VERIFY_FEATURE:-}" != session-fresh-start.md ]]; then
     sudo install -m 755 "$(dirname "$0")/mpa" "$(dirname "$0")/journey_action.py" /home/verifyssh/
     sudo install -m 755 "$(dirname "$0")/seed.sh" /home/verifyssh/seed.sh
     sudo install -m 755 tools/long-chat/fixture.py /home/verifyssh/long-chat-fixture.py

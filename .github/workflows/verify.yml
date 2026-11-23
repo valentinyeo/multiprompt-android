@@ -159,6 +159,7 @@ on:
           - host-restart.md
           - folder-bar.md
           - chat-shapes.md
+          - session-fresh-start.md
           - crash-report.md
           - chat-clear.md
       expect_settings_missing:

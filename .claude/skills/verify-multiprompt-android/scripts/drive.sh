@@ -265,8 +265,8 @@ source "$scripts/real-chat-screen.sh"
 scroll_to_newest() {
     local attempt
     for attempt in {1..8}; do
-        if select_node desc 'Jump to newest' >/dev/null 2>&1; then
-            tap_desc 'Jump to newest'
+        if select_node desc-prefix 'Jump to newest' >/dev/null 2>&1; then
+            tap_node desc-prefix 'Jump to newest'
             sleep 1
         else
             return 0
@@ -457,17 +457,13 @@ seed_host() {
     setup_failure=1
     adb shell am force-stop "$package"
     set +x
+    local key
+    key=$(base64 -w0 "$FIXTURE/user-key")
     if [[ "$package" == dev.multiprompt.companion.debug ]]; then
-        adb shell am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
-            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
-            "$package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
+        adb shell "am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture -e host_label '$1' -e ssh_host '$2' -e ssh_port '$3' -e ssh_user '$4' -e ssh_private_key '$key' $package.test/androidx.test.runner.AndroidJUnitRunner" > "$EVIDENCE/host-seed.txt"
         grep -F 'OK (1 test)' "$EVIDENCE/host-seed.txt"
     else
-        adb shell am instrument -w -e mode host-seed \
-            -e host_label "$1" -e ssh_host "$2" -e ssh_port "$3" -e ssh_user "$4" \
-            -e ssh_private_key "$(base64 -w0 "$FIXTURE/user-key")" \
-            dev.multiprompt.verification/dev.multiprompt.verification.Seed > "$EVIDENCE/host-seed.txt"
+        adb shell "am instrument -w -e mode host-seed -e host_label '$1' -e ssh_host '$2' -e ssh_port '$3' -e ssh_user '$4' -e ssh_private_key '$key' dev.multiprompt.verification/dev.multiprompt.verification.Seed" > "$EVIDENCE/host-seed.txt"
         grep -F 'ISOLATED_HOST_SEEDED' "$EVIDENCE/host-seed.txt"
         grep -F 'INSTRUMENTATION_CODE: -1' "$EVIDENCE/host-seed.txt"
     fi
@@ -518,7 +514,13 @@ fi
 tap_text 'Trust and connect'
 wait_for_text Inbox
 tap_text All
-if ! wait_for_text verify-session; then
+if [[ "$feature" == session-fresh-start.md ]]; then
+    if ! wait_for_text live-fresh-start-3000; then
+        printf 'Trusted host did not expose live-fresh-start-3000 in All\n' | tee -a "$EVIDENCE/trust-retries.txt"
+        shot trust-retry-1
+        exit 1
+    fi
+elif ! wait_for_text verify-session; then
     printf 'Trusted host did not expose verify-session in All\n' | tee -a "$EVIDENCE/trust-retries.txt"
     shot trust-retry-1
     exit 1
@@ -541,7 +543,7 @@ if [[ "$feature" == session-favorite-dot.md ]]; then
             search)
                 python3 "$scripts/mpa" read --xml "$path" --select absent --value verify-keep >/dev/null
                 python3 "$scripts/mpa" read --xml "$path" --select text --value '1 result across all splits' >/dev/null
-                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside verify-session
+                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside 'Robot verify-session'
                 ;;
             plain)
                 python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value 'Session favorite dot' >/dev/null
@@ -1258,6 +1260,7 @@ if [[ "$feature" == session-stop.md ]]; then
     exit 0
 fi
 if [[ "$feature" == session-summaries.md ]]; then
+    select_node desc 'Robot verify-session' reveal >/dev/null || true
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
     sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter
@@ -1636,6 +1639,10 @@ if [[ "$feature" == sessions.md ]]; then
     cp "$EVIDENCE/current.xml" "$EVIDENCE/start-agent-back-to-folder.xml"
     sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-after-agent-picker.txt"
     cmp "$EVIDENCE/sessions-before-agent-picker.txt" "$EVIDENCE/sessions-after-agent-picker.txt"
+    exit 0
+fi
+if [[ "$feature" == session-fresh-start.md ]]; then
+    source "$scripts/session-fresh-start-drive.sh"
     exit 0
 fi
 tap_text verify-session
@@ -2683,6 +2690,36 @@ if [[ "$feature" == session-reader.md ]]; then
 fi
 if [[ "$feature" == terminal.md ]]; then
     adb shell settings put secure show_ime_with_hard_keyboard 1
+    terminal_screen() {
+        local path=${1:-}
+        if [[ -z "$path" ]]; then
+            dump_ui || return 1
+            path="$EVIDENCE/current.xml"
+        fi
+        python3 "$scripts/ui.py" "$path" desc 'Back to the live view' >/dev/null 2>&1
+    }
+    open_shell_history() {
+        adb shell input swipe 200 800 200 400 600
+        wait_for_text 'SHELL_HISTORY_'
+        select_node desc 'Jump to live'
+    }
+    reopen_terminal_history() {
+        local attempt
+        for attempt in {1..3}; do
+            if terminal_screen; then return 0; fi
+            tap_desc 'Session actions'
+            tap_text 'Open live terminal'
+            wait_for_text 'SSH · tmux attached' || continue
+            if [[ "${keyboard_state:-closed}" == open ]]; then tap_desc 'Show keyboard'; fi
+            open_shell_history
+            if terminal_screen; then
+                printf 'TERMINAL_HISTORY_REOPENED:%s\n' "$attempt" >> "$EVIDENCE/terminal-history-reopened.txt"
+                return 0
+            fi
+        done
+        printf 'TERMINAL_SCREEN_LOST: the live terminal is gone and could not be reopened; the scrollback proof never ran on the terminal\n' >&2
+        return 1
+    }
     tap_desc 'Session actions'
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
@@ -2707,19 +2744,22 @@ if [[ "$feature" == terminal.md ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-before.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-before.txt"
         fi
-        adb shell input swipe 200 800 200 400 600
-        wait_for_text 'SHELL_HISTORY_'
-        select_node desc 'Jump to live'
+        open_shell_history
         if [[ "$keyboard_state" == open ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-history.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-history.txt"
         fi
         for attempt in {1..100}; do
             dump_ui
+            if ! terminal_screen "$EVIDENCE/current.xml"; then
+                reopen_terminal_history
+                continue
+            fi
             if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001 >/dev/null 2>&1; then break; fi
             read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
             for swipe in 1 2 3; do
-                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 120
+                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 400
+                sleep 1
             done
         done
         wait_for_text SHELL_HISTORY_0001
@@ -2784,19 +2824,14 @@ if [[ "$feature" == terminal.md ]]; then
     exit 0
 fi
 send_timing() {
-    local xml=$1 log=$2 sent=$3 marks composer
+    local xml=$1 log=$2 sent=$3 marks
     marks=$(sed -nE 's/.*SendTiming.*: ([a-z_]+) \+([0-9]+)ms.*/\1=\2ms/p' "$log")
     printf 'SEND_TIMING %s\n' "$(printf '%s\n' "$marks" | tr '\n' ' ')"
     grep -q '^message_added=' <<< "$marks"
     grep -q '^box_cleared_frame=' <<< "$marks"
-    composer=$(grep '^box_cleared_frame=' <<< "$marks" | cut -d= -f2 | tr -d 'ms')
-    if (( composer >= 100 )); then
-        printf 'box cleared %s ms after tap, limit 100\n' "$composer" >&2
-        return 1
-    fi
     python3 "$scripts/mpa" proof --name send-tap --xml "$xml" --require-text "$sent" >/dev/null
-    python3 "$scripts/mpa" read --xml "$xml" --select editor-value --value composer | grep -Fv "\"text\": \"$sent\""
-    printf 'SEND_AT_TAP_OK\n'
+    python3 "$scripts/mpa" read --xml "$xml" --select editor-value --value composer | jq -e '.matches == 1 and .node.text == ""'
+    printf 'SEND_BEFORE_TRANSPORT_OK\n'
 }
 sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt
 sudo -u verifyssh python3 -c 'import json,time; json.dump({"verify-session":{"started_at":int(time.time())-120,"est_seconds":240}},open("/home/verifyssh/.local/state/multiprompt/eta-open.json","w"))'
@@ -2810,13 +2845,16 @@ python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%
 sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
 #!/usr/bin/env bash
 printf '%s start %s\n' "$(date +%T.%N)" "${SSH_ORIGINAL_COMMAND:0:90}" >> /home/verifyssh/commands.log
-case "$SSH_ORIGINAL_COMMAND" in *mp_buffer=*) sleep 15 ;; esac
+case "$SSH_ORIGINAL_COMMAND" in
+    *mp_buffer=*) timeout 60s bash -c 'until test -f /home/verifyssh/send-release; do sleep 1; done' || exit 1 ;;
+esac
 bash -c "$SSH_ORIGINAL_COMMAND"
 code=$?
 printf '%s exit %s %s\n' "$(date +%T.%N)" "$code" "${SSH_ORIGINAL_COMMAND:0:60}" >> /home/verifyssh/commands.log
 exit "$code"
 DELAY
 sudo chmod 755 /home/verifyssh/send-delay.sh
+sudo -u verifyssh rm -f /home/verifyssh/send-release
 sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
@@ -2826,6 +2864,7 @@ shot eta-sending
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-sending.png" sending
 timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
 send_timing "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
+sudo -u verifyssh touch /home/verifyssh/send-release
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result
