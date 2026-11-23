@@ -143,43 +143,55 @@ def resolve(root, mode, value, extra=(), inside=None):
         return {"mode": mode, "value": value, "stdout": f"{x} {y}", "point": [x, y]}
     parents = {child: parent for parent in root.iter() for child in parent}
     application = package()
-    candidates = list(root.iter("node"))
+
+    def matching(scope):
+        found = []
+        for node in scope:
+            if mode == "scroll-back" and node.get("scrollable") == "true" and node.get("package") == application and node.get("class") != "android.widget.HorizontalScrollView":
+                found.append(node)
+            elif mode in ("text", "absent", "version") and value == node.get("text"):
+                found.append(node)
+            elif mode in ("contains", "lacks", "text-containing") and value in (node.get("text") or ""):
+                found.append(node)
+            elif mode in ("desc", "checked", "unchecked", "key-row") and value == node.get("content-desc"):
+                found.append(node)
+            elif mode in ("editor", "editor-value") and node.get("class") == "android.widget.EditText" and node.get("package") == application:
+                found.append(node)
+            elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
+                found.append(node)
+            elif mode == "visible" and node.get("package") == application and value in (node.get("text"), node.get("content-desc")):
+                found.append(node)
+            elif mode == "current" and node.get("package") == application and (node.get("text") or "").startswith("Current: ") and value in node.get("text"):
+                found.append(node)
+            elif mode == "draft" and node.get("class") == "android.widget.EditText" and node.get("text") == value and node.get("package") == application:
+                found.append(node)
+            elif mode == "desc-absent" and value in (node.get("content-desc") or "") and node.get("package") == application:
+                found.append(node)
+            elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
+                if value == "" and mode == "focused-field":
+                    if node.get("focused") == "true" and node.get("package") == application:
+                        found.append(node)
+                elif any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
+                    found.append(node)
+        return found
+
+    nodes = list(root.iter("node"))
     if inside:
-        anchors = [node for node in candidates if node.get("text") == inside or node.get("content-desc") == inside]
+        anchors = [node for node in nodes if node.get("text") == inside or node.get("content-desc") == inside]
         if not anchors:
             raise MpaError("INSIDE_MISSING", f"Missing container: {inside}", f"Run `mpa read`; `{inside}` is not on screen.")
         if len(anchors) != 1:
             raise MpaError("INSIDE_AMBIGUOUS", f"Ambiguous container: {inside} ({len(anchors)})", "Scope with a unique text or description, then retry.")
         allowed = {id(node) for node in anchors[0].iter("node")}
-        candidates = [node for node in candidates if id(node) in allowed]
-    matches = []
-    for node in candidates:
-        if mode == "scroll-back" and node.get("scrollable") == "true" and node.get("package") == application and node.get("class") != "android.widget.HorizontalScrollView":
-            matches.append(node)
-        elif mode in ("text", "absent", "version") and value == node.get("text"):
-            matches.append(node)
-        elif mode in ("contains", "lacks", "text-containing") and value in (node.get("text") or ""):
-            matches.append(node)
-        elif mode in ("desc", "checked", "unchecked", "key-row") and value == node.get("content-desc"):
-            matches.append(node)
-        elif mode in ("editor", "editor-value") and node.get("class") == "android.widget.EditText" and node.get("package") == application:
-            matches.append(node)
-        elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
-            matches.append(node)
-        elif mode == "visible" and node.get("package") == application and value in (node.get("text"), node.get("content-desc")):
-            matches.append(node)
-        elif mode == "current" and node.get("package") == application and (node.get("text") or "").startswith("Current: ") and value in node.get("text"):
-            matches.append(node)
-        elif mode == "draft" and node.get("class") == "android.widget.EditText" and node.get("text") == value and node.get("package") == application:
-            matches.append(node)
-        elif mode == "desc-absent" and value in (node.get("content-desc") or "") and node.get("package") == application:
-            matches.append(node)
-        elif mode in ("field", "focused-field") and node.get("class") == "android.widget.EditText":
-            if value == "" and mode == "focused-field":
-                if node.get("focused") == "true" and node.get("package") == application:
-                    matches.append(node)
-            elif any(value == item.get("text") or value == item.get("content-desc") for item in node.iter()):
-                matches.append(node)
+        matches = matching([node for node in nodes if id(node) in allowed])
+        row = anchors[0]
+        while not matches and row in parents:
+            row = parents[row]
+            if row.get("clickable") == "true":
+                matches = matching([node for node in row.iter("node")])
+                break
+    else:
+        matches = matching(nodes)
     if mode in ("absent", "lacks", "desc-absent"):
         if not any(node.get("package") == application for node in root.iter("node")):
             raise MpaError("APP_UI_MISSING", "App UI is missing", "Run `mpa launch` and `mpa doctor` before asserting absence.")
@@ -350,7 +362,7 @@ def rect(bounds_text):
     return tuple(numbers)
 
 
-def screen_order(root, values):
+def screen_text_nodes(root, values):
     application = package()
     matches = {}
     for node in root.iter("node"):
@@ -361,34 +373,55 @@ def screen_order(root, values):
             raise MpaError("SELECTOR_MISSING", f"Missing text: {value}", f"Run `mpa read`; `{value}` is not on screen.")
         if len(matches[value]) > 1:
             raise MpaError("SELECTOR_AMBIGUOUS", f"Ambiguous text: {value} ({len(matches[value])})", "Match a unique row or description, then retry `mpa proof --order`.")
-    parents = {child: parent for parent in root.iter() for child in parent}
+    return matches, {child: parent for parent in root.iter() for child in parent}
+
+
+def screen_rect(node, parents, value):
+    found = rect(node.get("bounds"))
+    if not found:
+        raise MpaError("SELECTOR_EMPTY_BOUNDS", f"Empty bounds: {value}", f"`{value}` has no usable bounds; run `mpa read` and look at that node.")
+    ancestors = []
+    parent = parents.get(node)
+    while parent is not None:
+        ancestors.append(parent)
+        parent = parents.get(parent)
+    if ancestors:
+        window = rect(ancestors[-1].get("bounds"))
+        if window and not (window[0] <= found[0] and found[2] <= window[2] and window[1] <= found[1] and found[3] <= window[3]):
+            raise MpaError("ORDER_OFFSCREEN", f"Off screen: {value}", "Run `mpa read` and scroll the row fully on screen before asserting order.")
+    for ancestor in ancestors:
+        if ancestor.get("scrollable") != "true":
+            continue
+        outer = rect(ancestor.get("bounds"))
+        if outer and not (outer[0] <= found[0] and found[2] <= outer[2] and outer[1] <= found[1] and found[3] <= outer[3]):
+            raise MpaError("ORDER_OFFSCREEN", f"Clipped by its scroll container: {value}", "Scroll the container until the whole row is visible, then retry `mpa proof`.")
+    return found
+
+
+def screen_order(root, values):
+    matches, parents = screen_text_nodes(root, values)
     positioned = []
     for value in values:
-        node = matches[value][0]
-        found = rect(node.get("bounds"))
-        if not found:
-            raise MpaError("SELECTOR_EMPTY_BOUNDS", f"Empty bounds: {value}", f"`{value}` has no usable bounds; run `mpa read` and look at that node.")
-        ancestors = []
-        parent = parents.get(node)
-        while parent is not None:
-            ancestors.append(parent)
-            parent = parents.get(parent)
-        if ancestors:
-            window = rect(ancestors[-1].get("bounds"))
-            if window and not (window[0] <= found[0] and found[2] <= window[2] and window[1] <= found[1] and found[3] <= window[3]):
-                raise MpaError("ORDER_OFFSCREEN", f"Off screen: {value}", "Run `mpa read` and scroll the row fully on screen before asserting order.")
-        for ancestor in ancestors:
-            if ancestor.get("scrollable") != "true":
-                continue
-            outer = rect(ancestor.get("bounds"))
-            if outer and not (outer[0] <= found[0] and found[2] <= outer[2] and outer[1] <= found[1] and found[3] <= outer[3]):
-                raise MpaError("ORDER_OFFSCREEN", f"Clipped by its scroll container: {value}", "Scroll the container until the whole row is visible, then retry `mpa proof --order`.")
+        found = screen_rect(matches[value][0], parents, value)
         positioned.append((found[1], found[0], value))
     positioned.sort()
     observed = [item[2] for item in positioned]
     if observed != list(values):
         raise MpaError("ORDER_MISMATCH", f"Screen order is {observed}, expected {list(values)}", "Run `mpa read`; the rows are not in the expected top-to-bottom order.")
     return observed
+
+
+def screen_inline(root, pairs):
+    values = list(dict.fromkeys(value for pair in pairs for value in pair))
+    matches, parents = screen_text_nodes(root, values)
+    for first, second in pairs:
+        left = screen_rect(matches[first][0], parents, first)
+        right = screen_rect(matches[second][0], parents, second)
+        if min(left[3], right[3]) <= max(left[1], right[1]):
+            raise MpaError("INLINE_WRAPPED", f"{first} is not on the same line as {second}", "Run `mpa read`; the label must sit on the preview's line, not above or below it.")
+        if left[2] > right[0]:
+            raise MpaError("INLINE_ORDER", f"{first} ends at x={left[2]} after {second} starts at x={right[0]}", "Read the screen with `mpa read`; the first label must end before the second one starts.")
+    return [list(pair) for pair in pairs]
 
 
 def fill(field, value, xml_path, dry_run):
@@ -591,7 +624,7 @@ def screenshot(name):
     return {"ok": True, "command": "screenshot", "name": name, "step": index, "xml": str(xml), "png": str(png), "next_step": index + 1}
 
 
-def proof(name, note, proof_file, required, forbidden, required_desc, forbidden_desc, order_values, xml_path, dry_run):
+def proof(name, note, proof_file, required, forbidden, required_desc, forbidden_desc, order_values, inline_pairs, xml_path, dry_run):
     directory = artifacts_dir()
     current = Path(xml_path) if xml_path else dump_ui()
     root = load_tree(current)
@@ -612,6 +645,12 @@ def proof(name, note, proof_file, required, forbidden, required_desc, forbidden_
             checks.append({"kind": "order", "values": list(order_values), "passed": True})
         except MpaError as error:
             checks.append({"kind": "order", "values": list(order_values), "passed": False, "detail": f"{error.code}: {error.message}"})
+    if inline_pairs:
+        try:
+            screen_inline(root, inline_pairs)
+            checks.append({"kind": "inline", "values": [list(pair) for pair in inline_pairs], "passed": True})
+        except MpaError as error:
+            checks.append({"kind": "inline", "values": [list(pair) for pair in inline_pairs], "passed": False, "detail": f"{error.code}: {error.message}"})
     passed = all(check["passed"] for check in checks)
     record = {"name": name, "xml": current.name, "passed": passed, "checks": checks}
     if dry_run:
@@ -619,7 +658,7 @@ def proof(name, note, proof_file, required, forbidden, required_desc, forbidden_
     output = directory / f"{name}.json"
     output.write_text(json.dumps(record, separators=(",", ":")) + "\n")
     if not passed:
-        failed = ", ".join(check["value"] if "value" in check else ", ".join(check["values"]) for check in checks if not check["passed"])
+        failed = ", ".join(check["value"] if "value" in check else ", ".join(", ".join(values) if isinstance(values, list) else values for values in check["values"]) for check in checks if not check["passed"])
         raise MpaError("PROOF_FAILED", f"Screen does not prove {name}: {failed}", "Run `mpa screenshot NAME` and `mpa read` to inspect the screen, then fix the state before retrying.")
     if note:
         proof_path = Path(proof_file) if proof_file else directory / f"{name}-proof.txt"
@@ -957,7 +996,7 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     read_parser.add_argument("--select", choices=SELECTOR_MODES, help="Answer one selector instead of printing the whole tree. With --timeout it polls until the selector matches.")
     read_parser.add_argument("--value", default="", help="Selector value for --select.")
     read_parser.add_argument("--extra", nargs="*", default=[], help="Selector extras, for example the expected field value, `enabled`, `disabled` or a scroll direction.")
-    read_parser.add_argument("--inside", help="Scope the selector to the subtree of the one node with this text or description.")
+    read_parser.add_argument("--inside", help="Scope the selector to the subtree of the one node with this text or description, or to the clickable row that holds it when nothing matches in the node itself.")
     read_parser.add_argument("--before", help="With --select visible, the earlier dump the row must have been missing from.")
     read_parser.add_argument("--wait-text", help="Poll until some text contains this value.")
     read_parser.add_argument("--wait-absent", help="Poll until no text contains this value.")
@@ -967,7 +1006,7 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     screenshot_parser = commands.add_parser("screenshot", formatter_class=argparse.RawDescriptionHelpFormatter, help="Keep a numbered PNG/XML pair in the evidence directory.", description="Dump the UI and screencap the phone into EVIDENCE, numbered after the files already there.", epilog="Examples:\n  mpa screenshot reader-sync")
     screenshot_parser.add_argument("name", help="Artifact name, for example reader-sync.")
 
-    proof_parser = commands.add_parser("proof", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the current screen and record the result as evidence.", description="Assert required and forbidden text on the current screen, write NAME.json, and add the note and result to NAME-proof.txt. --order asserts that each named row appears exactly once, fully on screen, in the given top-to-bottom order. Failing assertions exit non-zero.", epilog="Examples:\n  mpa proof --name reader-sync --require-text 'Sign in to sync' --forbid-text 'Sync: signed in' --note SIGNED_OUT_SYNC_MENU_OK\n  mpa proof --name clear-query --order /clear --order /client --order /aaa-paper")
+    proof_parser = commands.add_parser("proof", formatter_class=argparse.RawDescriptionHelpFormatter, help="Check the current screen and record the result as evidence.", description="Assert required and forbidden text on the current screen, write NAME.json, and add the note and result to NAME-proof.txt. --order asserts that each named row appears exactly once, fully on screen, in the given top-to-bottom order. --inline asserts that two labels appear exactly once, fully on screen, on one line, with the first ending before the second starts. Failing assertions exit non-zero.", epilog="Examples:\n  mpa proof --name reader-sync --require-text 'Sign in to sync' --forbid-text 'Sync: signed in' --note SIGNED_OUT_SYNC_MENU_OK\n  mpa proof --name clear-query --order /clear --order /client --order /aaa-paper\n  mpa proof --name inbox-draft --inline Draft 'Inbox preview stays.'")
     proof_parser.add_argument("--name", required=True, help="Evidence name; the result is written to NAME.json.")
     proof_parser.add_argument("--note", help="Line to keep at the top of the proof file.")
     proof_parser.add_argument("--proof-file", help="Proof file to write with --note (default: NAME-proof.txt in EVIDENCE).")
@@ -976,6 +1015,7 @@ Commands that need a device run only on a GitHub runner, never on the local serv
     proof_parser.add_argument("--require-desc", action="append", default=[], help="Content description that must appear. Repeatable.")
     proof_parser.add_argument("--forbid-desc", action="append", default=[], help="Content description that must not appear. Repeatable.")
     proof_parser.add_argument("--order", action="append", default=[], help="Text that must appear exactly once, fully on screen, in this top-to-bottom order. Repeatable.")
+    proof_parser.add_argument("--inline", action="append", nargs=2, default=[], metavar=("FIRST", "SECOND"), help="Two texts that must appear exactly once, fully on screen, on one line, with the first ending before the second starts. Repeatable.")
     proof_parser.add_argument("--xml", help="Read this UI dump instead of dumping the phone.")
     proof_parser.add_argument("--dry-run", action="store_true", help="Check without writing evidence files.")
 
@@ -1036,7 +1076,7 @@ def main(argv=None):
         elif args.command == "screenshot":
             payload = screenshot(args.name)
         elif args.command == "proof":
-            payload = proof(args.name, args.note, args.proof_file, args.require_text, args.forbid_text, args.require_desc, args.forbid_desc, args.order, args.xml, args.dry_run)
+            payload = proof(args.name, args.note, args.proof_file, args.require_text, args.forbid_text, args.require_desc, args.forbid_desc, args.order, args.inline, args.xml, args.dry_run)
         elif args.command == "fill":
             payload = fill(args.field, args.value, args.xml, args.dry_run)
         elif args.command == "hold":

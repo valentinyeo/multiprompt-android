@@ -23,7 +23,7 @@ Read [the feature index](features/README.md), then the selected recipe. Everythi
 | `mpa fill 'Message verify-session' /cl` | Tap the field, clear it, type the value, read it back, dismiss the keyboard. A literal `%s` becomes a space. |
 | `mpa hold text REPLY_BUBBLE_418` | Scroll a reachable label into view, then press and hold its center for 800 ms. |
 | `mpa screenshot reader-sync` | Numbered PNG/XML pair in `$EVIDENCE`. |
-| `mpa proof --name reader-sync --require-text 'Sign in to sync'` | Assert text and content descriptions, write `reader-sync.json` and a proof file. `--order A --order B` requires each row exactly once, fully on screen, in that top-to-bottom order. |
+| `mpa proof --name reader-sync --require-text 'Sign in to sync'` | Assert text and content descriptions, write `reader-sync.json` and a proof file. `--order A --order B` requires each row exactly once, fully on screen, in that top-to-bottom order. `--inline A B` requires both labels exactly once, fully on screen, on one line, with the first ending before the second starts. |
 | `mpa key back` | One keyevent. |
 | `mpa swipe [--inside LABEL] [--axis vertical] [--direction forward]` | Scroll the one visible container, or the container holding LABEL, by a fifth of its size. `--dry-run` prints the swipe. |
 | `mpa terminal --step ready` | Read the fixture pane and assert the terminal fallback's shell: ready prompt, typed echo, real sleep, Ctrl+C, history or tab completion. Runner only. |

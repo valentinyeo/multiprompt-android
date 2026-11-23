@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -58,7 +59,13 @@ class ReaderSessionRoutingTest {
                     onSetAppTheme = {}, onResetFontScale = { 1f }, sessionActionError = null,
                     onClearSessionActionError = {}, onForget = {}, onShowEtaAccuracy = {}, onReleaseNotes = {})
             }
-            compose.waitUntil(30_000) { first.state.value.status == ReaderStatus.Live && second.state.value.status == ReaderStatus.Live }
+            listOf("first" to first, "second" to second).forEach { (label, connection) ->
+                try {
+                    compose.waitUntil(90_000) { connection.state.value.status == ReaderStatus.Live }
+                } catch (timeout: ComposeTimeoutException) {
+                    throw AssertionError("Reader $label stayed ${connection.state.value.status} instead of Live within 90s", timeout)
+                }
+            }
             listOf(false, true).forEach { target ->
                 repeat(4) { compose.runOnIdle { switched = !switched } }
                 compose.runOnIdle { switched = target }

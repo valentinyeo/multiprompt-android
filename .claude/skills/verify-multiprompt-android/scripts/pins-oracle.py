@@ -64,34 +64,39 @@ def clickable(name):
         n = parents.get(n)
     raise ValueError("no visible clickable ancestor for " + name)
 
+
+def content_viewport():
+    controls = header()
+    top = max(rect[3] for rect in controls.values())
+    bottom = screen[3]
+    for name in ("Frequent", "All", "Favorites"):
+        try:
+            tab = one(name)
+            while tab is not None and tab is not root:
+                if visible(tab) and (tab.get("clickable") == "true"
+                                     or tab.get("selected") == "true"):
+                    break
+                tab = parents.get(tab)
+            if tab is None or tab is root:
+                raise ValueError("no visible clickable or selected ancestor for " + name)
+            tab = raw_bounds(tab)
+        except ValueError as error:
+            raise ValueError("invalid fixed tab " + name + ": " + str(error))
+        if tab[1] + tab[3] < screen[1] + screen[3]:
+            top = max(top, tab[3])
+        else:
+            bottom = min(bottom, tab[1])
+    if top >= bottom:
+        raise ValueError("invalid content viewport after fixed tabs")
+    return top, bottom
+
 try:
     if mode == "guard":
         print("PINS_PACKAGE_VISIBLE")
     elif mode == "header":
         print(json.dumps(header(), sort_keys=True))
     elif mode == "top":
-        controls = header()
-        top = max(rect[3] for rect in controls.values())
-        bottom = screen[3]
-        for name in ("Frequent", "All", "Favorites"):
-            try:
-                tab = one(name)
-                while tab is not None and tab is not root:
-                    if visible(tab) and (tab.get("clickable") == "true"
-                                         or tab.get("selected") == "true"):
-                        break
-                    tab = parents.get(tab)
-                if tab is None or tab is root:
-                    raise ValueError("no visible clickable or selected ancestor for " + name)
-                tab = raw_bounds(tab)
-            except ValueError as error:
-                raise ValueError("invalid fixed tab " + name + ": " + str(error))
-            if tab[1] + tab[3] < screen[1] + screen[3]:
-                top = max(top, tab[3])
-            else:
-                bottom = min(bottom, tab[1])
-        if top >= bottom:
-            raise ValueError("invalid content viewport after fixed tabs")
+        top, bottom = content_viewport()
         complete = False
         for name in pin_names:
             if named(name):
@@ -108,19 +113,26 @@ try:
     elif mode == "pin-bounds":
         if len(args) != 1 or (args[0] != "any" and args[0] not in pin_names):
             raise ValueError("invalid pin")
+        top, bottom = content_viewport()
         if args[0] == "any":
             pin = None
             for name in pin_names:
                 if named(name):
                     try:
-                        pin = clickable(name)
-                        break
+                        candidate = clickable(name)
                     except ValueError:
-                        pass
+                        continue
+                    box = raw_bounds(candidate)
+                    if top <= box[1] and box[3] <= bottom:
+                        pin = candidate
+                        break
             if pin is None:
-                raise ValueError("no visible clickable pin")
+                raise ValueError("no visible clickable pin inside the content viewport")
         else:
             pin = clickable(args[0])
+            box = raw_bounds(pin)
+            if not (top <= box[1] and box[3] <= bottom):
+                raise ValueError("pin outside the content viewport: " + args[0])
         x1, y1, x2, y2 = raw_bounds(pin)
         y = (y1 + y2) // 2
         print(screen[0] + (screen[2] - screen[0]) // 8, y,

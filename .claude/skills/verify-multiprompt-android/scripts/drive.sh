@@ -1062,7 +1062,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_for_text Draft
     wait_for_text 'Inbox preview stays.'
     shot inbox-draft
-    python3 "$scripts/mpa" proof --name inbox-draft --xml "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft.xml" --order Draft --order 'Inbox preview stays.'
+    python3 "$scripts/mpa" proof --name inbox-draft --xml "$EVIDENCE/$(printf '%02d' "$step")-inbox-draft.xml" --inline Draft 'Inbox preview stays.'
     tap_text verify-session
     wait_for_text 'unsent draft text'
     sent=0
@@ -1258,6 +1258,7 @@ if [[ "$feature" == session-stop.md ]]; then
     exit 0
 fi
 if [[ "$feature" == session-summaries.md ]]; then
+    python3 "$scripts/mpa" tap text verify-session --reveal
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
     sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter

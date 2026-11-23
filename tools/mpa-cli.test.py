@@ -824,6 +824,13 @@ class MovedPhoneScriptTest(unittest.TestCase):
         dotted = self.write('dot-plain', row + '<node package="' + PACKAGE + '" text="verify-keep" clickable="true" bounds="[0,520][1080,700]">' + item(description='Session favorite dot', bounds='[900,540][980,620]') + '</node>')
         self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', dotted, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-keep')['error'])
 
+    def test_inside_reaches_a_sibling_of_the_row_label(self):
+        row = '<node package="' + PACKAGE + '" clickable="true" bounds="[0,300][1080,500]">' + item(text='verify-session', bounds='[40,320][600,420]') + item(text='Keep the preview', bounds='[40,430][600,480]') + item(description='Session favorite dot', bounds='[900,340][980,420]') + '</node>'
+        keep = '<node package="' + PACKAGE + '" clickable="true" bounds="[0,520][1080,700]">' + item(text='verify-keep', bounds='[40,540][600,640]') + '</node>'
+        path = self.write('dot-sibling', row + keep)
+        self.assertEqual('desc', self.payload('read', '--xml', path, '--select', 'desc', '--value', 'Session favorite dot', '--inside', 'verify-session')['mode'])
+        self.assertEqual('desc-absent', self.payload('read', '--xml', path, '--select', 'desc-absent', '--value', 'Session favorite dot', '--inside', 'verify-keep')['mode'])
+
     def test_swipe_scrolls_the_one_visible_container(self):
         path = self.write('scroll', '<node package="' + PACKAGE + '" scrollable="true" bounds="[0,1000][1080,1600]">' + item(text='Add image', bounds='[40,1140][700,1200]') + '</node>')
         payload = self.payload('swipe', '--xml', path, '--dry-run')
@@ -857,10 +864,21 @@ class MovedPhoneScriptTest(unittest.TestCase):
         two = self.write('two-editors', '<node package="' + PACKAGE + '" class="android.widget.EditText" text="" bounds="[40,1600][1000,1700]" /><node package="' + PACKAGE + '" class="android.widget.EditText" text="" bounds="[40,1700][1000,1800]" />')
         self.assertEqual('SELECTOR_AMBIGUOUS', self.failure('read', '--xml', two, '--select', 'editor-value', '--value', 'composer', '--extra', '')['error'])
         draft = self.write('draft', '<node package="' + PACKAGE + '" text="verify-session" clickable="true" bounds="[0,300][1080,500]">' + item(text='Draft', bounds='[40,340][200,400]') + item(text='Inbox preview stays.', bounds='[220,340][700,400]') + '</node>')
-        record = self.payload('proof', '--name', 'inbox-draft', '--xml', draft, '--order', 'Draft', '--order', 'Inbox preview stays.', '--dry-run')['record']
+        record = self.payload('proof', '--name', 'inbox-draft', '--xml', draft, '--inline', 'Draft', 'Inbox preview stays.', '--dry-run')['record']
         self.assertTrue(record['passed'])
         self.payload('read', '--xml', empty, '--select', 'absent', '--value', 'Draft')
         self.assertEqual('UNEXPECTED_TEXT', self.failure('read', '--xml', draft, '--select', 'absent', '--value', 'Draft')['error'])
+
+    def test_proof_inline_requires_one_line_with_the_label_first(self):
+        row = '<node package="' + PACKAGE + '" text="verify-session" clickable="true" bounds="[0,1500][1080,1600]">'
+        same_line = self.write('draft-inline', row + item(text='Draft', bounds='[200,1536][280,1573]') + item(text='Inbox preview stays.', bounds='[296,1528][954,1581]') + '</node>')
+        record = self.payload('proof', '--name', 'inbox-draft', '--xml', same_line, '--inline', 'Draft', 'Inbox preview stays.', '--dry-run')['record']
+        self.assertEqual([{'kind': 'inline', 'values': [['Draft', 'Inbox preview stays.']], 'passed': True}], record['checks'])
+        ordered = self.failure('proof', '--name', 'inbox-draft', '--xml', same_line, '--order', 'Draft', '--order', 'Inbox preview stays.', '--dry-run')['record']
+        self.assertIn('ORDER_MISMATCH', ordered['checks'][0]['detail'])
+        wrapped = self.write('draft-wrapped', row + item(text='Draft', bounds='[200,1536][280,1573]') + item(text='Inbox preview stays.', bounds='[40,1600][700,1660]') + '</node>')
+        self.assertIn('INLINE_WRAPPED', self.failure('proof', '--name', 'inbox-draft', '--xml', wrapped, '--inline', 'Draft', 'Inbox preview stays.', '--dry-run')['record']['checks'][0]['detail'])
+        self.assertIn('INLINE_ORDER', self.failure('proof', '--name', 'inbox-draft', '--xml', same_line, '--inline', 'Inbox preview stays.', 'Draft', '--dry-run')['record']['checks'][0]['detail'])
 
 
 if __name__ == '__main__':

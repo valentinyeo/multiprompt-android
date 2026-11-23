@@ -8,15 +8,21 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-tests-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: robolectric-warm-v1 # gitleaks:allow
+
 jobs:
   build:
     name: build
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,6 +32,10 @@ jobs:
           distribution: temurin
           java-version: "17"
       - uses: ./.github/actions/gradle-ci
+        with:
+          read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Warm the Robolectric test jars for the read only jobs
+        run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:syncRobolectricAndroidAll :app:generateDebugUnitTestLintModel
       - name: Build the app
         run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug
 
