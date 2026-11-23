@@ -208,7 +208,8 @@ browser_handoff() {
     return 1
 }
 dismiss_system_anr() {
-    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then
+    if grep -Fq "responding" "$EVIDENCE/current.xml" 2>/dev/null &&
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then
         printf 'System ANR dialog dismissed with Wait\n' | tee -a "$EVIDENCE/system-anr.txt"
         point=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Wait)
         read -r x y <<< "$point"
@@ -1295,7 +1296,7 @@ if [[ "$feature" == session-summaries.md ]]; then
     "$scripts/mpa" proof --name summary-working --require-text 'Working: Reading CI logs' --forbid-text 'Which route should we use?'
     started=$(date +%s%3N)
     sudo -u verifyssh tmux send-keys -t verify-session summary-next Enter
-    wait_for_text 'The release is ready.'
+    wait_for_text 'The release is ready.' 0
     elapsed=$(( $(date +%s%3N) - started ))
     test "$elapsed" -le 5000
     shot summary-updated
