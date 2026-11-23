@@ -83,8 +83,11 @@ internal class ReaderStreamPump<C : Any>(
                         }
                     }
                 } catch (throwable: Throwable) {
-                    if (throwable is CancellationException) currentCoroutineContext().ensureActive()
-                    if (!reused) onFailure(throwable)
+                    if (throwable is CancellationException) {
+                        currentCoroutineContext().ensureActive()
+                    } else if (!reused) {
+                        onFailure(throwable)
+                    }
                 }
                 val dropped = warm
                 warm = null

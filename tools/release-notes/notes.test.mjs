@@ -29,10 +29,20 @@ test('every line shows ticket number plus exact ticket title, once per ticket', 
   ], catalog), ['- IGSH-1694 Rooms on the phone', '- HYCI-12 Android checks finish in ten minutes']);
 });
 
+test('mubo ticket prefixes build release notes', () => {
+  const mubo = loadCatalog(titleDirectory({ 'MUBO-216.txt': 'Two chats open at once never both go live\n' }));
+  assert.deepEqual(noteLines(['MUBO-216: hold a visibility lease per reader'], mubo), [
+    '- MUBO-216 Two chats open at once never both go live',
+  ]);
+  const pr = spawnSync('node', [tool, '--pr-title', 'MUBO-216: Two chats connecting together both go live'], { encoding: 'utf8' });
+  assert.equal(pr.status, 0, pr.stderr);
+});
+
 test('a commit without its ticket is refused', () => {
   assert.throws(() => noteLines(['Session previews no longer show terminal reply codes (#260)'], catalog), /must start with its ticket/);
   assert.throws(() => ticketFor('IGSH-0: nothing'), /must start with its ticket/);
   assert.throws(() => ticketFor('IGSH-12 no colon'), /must start with its ticket/);
+  assert.throws(() => ticketFor('MUBO-0: nothing'), /must start with its ticket/);
 });
 
 test('a ticket missing from the title list is refused', () => {
@@ -81,11 +91,11 @@ test('the shipped titles directory holds one valid file per ticket and no shared
   const shipped = loadCatalog();
   assert.ok(Object.keys(shipped).length > 0);
   for (const id of Object.keys(shipped)) {
-    assert.match(id, /^(?:IGSH|HYCI)-[1-9]\d*$/);
+    assert.match(id, /^(?:IGSH|HYCI|MUBO)-[1-9]\d*$/);
     assert.deepEqual(noteLines([`${id}: x`], shipped), [`- ${id} ${shipped[id]}`]);
   }
   const directory = fileURLToPath(new URL('./titles/', import.meta.url));
-  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI)-[1-9]\d*\.txt$/);
+  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI|MUBO)-[1-9]\d*\.txt$/);
   assert.throws(() => readdirSync(fileURLToPath(new URL('./ticket-titles.json', import.meta.url))), /ENOENT/);
 });
 

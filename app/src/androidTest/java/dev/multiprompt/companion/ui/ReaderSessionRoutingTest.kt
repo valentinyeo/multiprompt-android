@@ -40,6 +40,8 @@ class ReaderSessionRoutingTest {
             historyScript = app.chatHistoryScript, historyCache = app.chatHistoryCache).apply { start() }
         val first = reader(a)
         val second = reader(b)
+        val firstVisibility = first.observe()
+        val secondVisibility = second.observe()
         var switched by mutableStateOf(false)
         val field = app.deepgramDictation.javaClass.getDeclaredField("_state").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
@@ -92,6 +94,8 @@ class ReaderSessionRoutingTest {
             assertEquals(listOf("TYPED_A", "VOICE_A"), first.state.value.sentPrompts)
             assertEquals(listOf("TYPED_B", "VOICE_B", "AFTER_SWITCH_B"), second.state.value.sentPrompts)
         } finally {
+            firstVisibility.close()
+            secondVisibility.close()
             first.close()
             second.close()
             app.deepgramDictation.discard()
