@@ -81,12 +81,20 @@ test('the shipped titles directory holds one valid file per ticket and no shared
   const shipped = loadCatalog();
   assert.ok(Object.keys(shipped).length > 0);
   for (const id of Object.keys(shipped)) {
-    assert.match(id, /^(?:IGSH|HYCI)-[1-9]\d*$/);
+    assert.match(id, /^(?:IGSH|HYCI|MUBO)-[1-9]\d*$/);
     assert.deepEqual(noteLines([`${id}: x`], shipped), [`- ${id} ${shipped[id]}`]);
   }
   const directory = fileURLToPath(new URL('./titles/', import.meta.url));
-  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI)-[1-9]\d*\.txt$/);
+  for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI|MUBO)-[1-9]\d*\.txt$/);
   assert.throws(() => readdirSync(fileURLToPath(new URL('./ticket-titles.json', import.meta.url))), /ENOENT/);
+});
+
+test('MUBO ticket prefixes are accepted', () => {
+  const directory = titleDirectory({ 'MUBO-240.txt': 'Android: check a chat reply never shows twice\n' });
+  const shipped = loadCatalog(directory);
+  assert.deepEqual(noteLines(['MUBO-240: dedupe display-history replies'], shipped), [
+    '- MUBO-240 Android: check a chat reply never shows twice',
+  ]);
 });
 
 test('the command line checks PR titles and builds notes from a git range', () => {
