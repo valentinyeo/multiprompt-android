@@ -42,8 +42,14 @@ export const prFields = ['state', 'headRefOid', 'mergeable', 'statusCheckRollup'
 export function inspectPr(pr, run = execFileSync) {
   const options = { encoding: 'utf8', timeout: 30_000, maxBuffer: 2 * 1024 * 1024 };
   const view = JSON.parse(run('gh', ['pr', 'view', pr, '--repo', repo, '--json', prFields.join(',')], options));
-  const base = run('gh', ['api', `repos/${repo}/pulls/${pr}`, '--jq', '.base.sha'], options).trim();
-  return { ...view, baseRefOid: base };
+  const pull = JSON.parse(run('gh', ['api', `repos/${repo}/pulls/${pr}`], options));
+  const base = pull?.base?.sha ?? '';
+  const mergeableState = typeof pull?.mergeable_state === 'string' ? pull.mergeable_state : 'unknown';
+  return { ...view, baseRefOid: base, mergeableState, number: Number(pr) };
+}
+
+export function behindMessage(prNumber = '<PR>') {
+  return `BEHIND: base moved forward; run gh pr update-branch ${prNumber} --repo ${repo}`;
 }
 
 function checkFailed(check) {
@@ -148,7 +154,16 @@ export function checkStatus(pr, { redOnMain = { journeys: [], url: '' } } = {}) 
   }
   const missing = requiredChecks.filter(name => !checks.some(check => check.__typename === 'CheckRun' && check.name === name));
   const pending = checks.filter(check => check.__typename === 'CheckRun' ? check.status !== 'COMPLETED' : check.state !== 'SUCCESS');
-  const ready = pr.mergeable === 'MERGEABLE' && missing.length === 0 && pending.length === 0;
+  const checksReady = missing.length === 0 && pending.length === 0;
+  if (pr.mergeableState === 'behind' && checksReady) {
+    return {
+      ready: false,
+      message: behindMessage(pr.number),
+      toleratedRedOnMain,
+      redOnMainUrl: redOnMain.url ?? '',
+    };
+  }
+  const ready = pr.mergeable === 'MERGEABLE' && checksReady;
   return {
     ready,
     message: ready ? `COMPLETE_CHECKS_GREEN ${pr.headRefOid}` : `Waiting: missing [${missing.join(', ')}], pending ${pending.length}, mergeable ${pr.mergeable}`,

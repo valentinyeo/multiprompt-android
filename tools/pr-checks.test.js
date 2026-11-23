@@ -629,7 +629,7 @@ test('pr view asks only for fields gh 2.45 knows', async () => {
   assert.ok(!prFields.join(',').includes('baseRef'));
 });
 
-test('the base sha comes from the REST pull request, not pr view', async () => {
+test('the base sha and mergeable_state come from the REST pull request, not pr view', async () => {
   const { inspectPr } = await gate;
   const head = 'a'.repeat(40);
   const base = 'b'.repeat(40);
@@ -637,21 +637,41 @@ test('the base sha comes from the REST pull request, not pr view', async () => {
   const run = (command, args) => {
     calls.push([command, ...args]);
     if (args[0] === 'pr') return JSON.stringify({ state: 'OPEN', headRefOid: head, mergeable: 'MERGEABLE', statusCheckRollup: [] });
-    return `${base}\n`;
+    return JSON.stringify({ base: { sha: base }, mergeable_state: 'behind' });
   };
   assert.deepEqual(inspectPr('3026', run), {
     state: 'OPEN', headRefOid: head, mergeable: 'MERGEABLE', statusCheckRollup: [], baseRefOid: base,
+    mergeableState: 'behind', number: 3026,
   });
   assert.deepEqual(calls, [
     ['gh', 'pr', 'view', '3026', '--repo', 'valentinyeo/multiprompt-android', '--json', 'state,headRefOid,mergeable,statusCheckRollup'],
-    ['gh', 'api', 'repos/valentinyeo/multiprompt-android/pulls/3026', '--jq', '.base.sha'],
+    ['gh', 'api', 'repos/valentinyeo/multiprompt-android/pulls/3026'],
   ]);
+});
+
+test('green checks with mergeable_state behind replay the lost merge turn', async () => {
+  const { checkStatus, waitForChecks, behindMessage } = await gate;
+  const pr = await green();
+  pr.mergeableState = 'behind';
+  pr.number = 3188;
+  const status = checkStatus(pr);
+  assert.equal(status.ready, false);
+  assert.equal(status.message, behindMessage(3188));
+  let step = 0;
+  const message = await waitForChecks(async () => {
+    const next = await green();
+    next.number = 3188;
+    next.mergeableState = step++ === 0 ? 'behind' : 'clean';
+    return next;
+  }, { wait: true, pause: async () => {}, report: () => {} });
+  assert.equal(message, `COMPLETE_CHECKS_GREEN ${pr.headRefOid}`);
+  assert.equal(step, 2);
 });
 
 test('an unresolvable base sha never passes the wait', async () => {
   const { inspectPr, checkStatus } = await gate;
   const run = (command, args) => (args[0] === 'pr'
     ? JSON.stringify({ state: 'OPEN', headRefOid: 'a'.repeat(40), mergeable: 'MERGEABLE', statusCheckRollup: [] })
-    : '\n');
+    : JSON.stringify({ base: { sha: '' }, mergeable_state: 'unknown' }));
   assert.throws(() => checkStatus(inspectPr('3026', run)), /Missing exact PR revisions/);
 });
