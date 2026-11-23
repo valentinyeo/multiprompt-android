@@ -35,6 +35,14 @@ test('every line shows ticket number plus exact ticket title, once per ticket', 
   ], catalog), ['- IGSH-1694 Rooms on the phone', '- HYCI-12 Android checks finish in ten minutes']);
 });
 
+test('MUBO tickets are accepted like other board prefixes', () => {
+  const directory = titleDirectory({ 'MUBO-236.txt': 'Jump to newest sends a stray key that breaks the next command\n' });
+  const shipped = { ...catalog, ...loadCatalog(directory) };
+  assert.deepEqual(noteLines(['MUBO-236: stop sending End from jump to newest'], shipped), [
+    '- MUBO-236 Jump to newest sends a stray key that breaks the next command',
+  ]);
+});
+
 test('a commit without its ticket is refused', () => {
   assert.throws(() => noteLines(['Session previews no longer show terminal reply codes (#260)'], catalog), /must start with its ticket/);
   assert.throws(() => ticketFor('IGSH-0: nothing'), /must start with its ticket/);
@@ -93,6 +101,14 @@ test('the shipped titles directory holds one valid file per ticket and no shared
   const directory = fileURLToPath(new URL('./titles/', import.meta.url));
   for (const name of readdirSync(directory)) assert.match(name, /^(?:IGSH|HYCI|MUBO)-[1-9]\d*\.txt$/);
   assert.throws(() => readdirSync(fileURLToPath(new URL('./ticket-titles.json', import.meta.url))), /ENOENT/);
+});
+
+test('MUBO ticket prefixes are accepted', () => {
+  const directory = titleDirectory({ 'MUBO-240.txt': 'Android: check a chat reply never shows twice\n' });
+  const shipped = loadCatalog(directory);
+  assert.deepEqual(noteLines(['MUBO-240: dedupe display-history replies'], shipped), [
+    '- MUBO-240 Android: check a chat reply never shows twice',
+  ]);
 });
 
 test('the command line checks PR titles and builds notes from a git range', () => {

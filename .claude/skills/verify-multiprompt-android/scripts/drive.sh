@@ -142,10 +142,11 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan session=
+    local attempt action x1 y1 x2 y2 direction plan before taps=0 session= expected=${4:-}
     if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
     for attempt in {1..24}; do
         dump_ui || return
+        if [[ -n "$expected" ]] && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
         if [[ -n "$session" ]] &&
             python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
             set -- desc "Robot $session" "${3:-tap}"
@@ -156,7 +157,22 @@ tap_node() {
         read -r action x1 y1 x2 y2 <<< "$plan"
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
-            tap) adb shell input tap "$x1" "$y1"; return ;;
+            tap)
+                before=$(sha256sum "$EVIDENCE/current.xml")
+                adb shell input tap "$x1" "$y1" || return
+                dump_ui || return
+                if [[ "${3:-tap}" == once ]]; then return 0; fi
+                if [[ -n "$expected" ]]; then
+                    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
+                elif [[ "$(sha256sum "$EVIDENCE/current.xml")" != "$before" ]]; then
+                    return 0
+                fi
+                taps=$((taps + 1))
+                if (( taps == 4 )); then
+                    printf 'JOURNEY_TAP_UNCHANGED: %s after four taps; checking the journey state next\n' "$2" >&2
+                    return 0
+                fi
+                ;;
             swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
             *) return 1 ;;
         esac
@@ -164,7 +180,7 @@ tap_node() {
     printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 24 scrolls in the active container\n' "$2" >&2
     return 1
 }
-tap_text() { tap_node text "$1"; }
+tap_text() { tap_node text "$1" tap "${2:-}"; }
 tap_desc() { tap_node desc "$1"; }
 hold_text() {
     local point x y
@@ -221,8 +237,9 @@ doctor() {
     return 1
 }
 wait_for_text() {
-    local attempt
-    for attempt in {1..30}; do
+    local attempt=0 deadline=$((SECONDS + ${3:-0}))
+    while (( ${3:-0} > 0 ? SECONDS < deadline : attempt < 30 )); do
+        attempt=$((attempt + 1))
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
         dismiss_system_anr
         sleep "${2:-1}"
@@ -276,7 +293,7 @@ scroll_to_newest() {
 wait_for_absence() {
     local attempt
     for attempt in {1..30}; do
-        if select_node absent "$1" >/dev/null 2>&1; then return; fi
+        if select_node "${2:-absent}" "$1" >/dev/null 2>&1; then return; fi
         sleep 1
     done
     printf 'Timed out waiting for absence of %s\n' "$1" >&2
@@ -403,14 +420,15 @@ if [[ "$feature" == settings-navigation.md ]]; then
     relaunch_app
     wait_for_text Inbox
     tap_desc 'Session list actions'
-    tap_text Settings
-    wait_for_text 'Workspace colors'
+    tap_text Settings 'Session list settings'
+    wait_for_text 'Session list settings' 1 90
     for attempt in {1..6}; do
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Auto >/dev/null 2>&1; then break; fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Auto >/dev/null 2>&1; then break; fi
         read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
         dump_ui
     done
+    wait_for_text 'Workspace colors' 1 90
     shot settings-workspace-colors
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
@@ -810,22 +828,22 @@ PYFAVORITES
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
     wait_for_text 'End tmux session'
-    for attempt in {1..5}; do
-        if select_node text 'Archive Session' >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
-    done
-    tap_text 'Archive Session'
-    wait_for_text 'Archive verify-session?'
-    select_node text 'Archive verify-session?' >/dev/null
-    select_node text 'This ends its tmux session but saves the name and resume command so it can be restored later.' >/dev/null
-    select_node text Cancel >/dev/null
-    select_node text Archive >/dev/null
-    shot confirmation-archive
-    tap_text Cancel
-    wait_for_absence 'Archive verify-session?'
+    tap_text Waiting
+    wait_for_absence 'Robot verify-session' desc-absent
+    wait_for_text verify-keep
+    shot favorites-waiting
+    tap_desc 'Switch session bucket'
+    tap_text Waiting
+    tap_node desc 'Robot verify-session' reveal
+    read -r row_x row_y <<< "$(select_node desc 'Robot verify-session')"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    tap_text 'Return to open'
+    wait_for_absence 'Robot verify-session' desc-absent
+    tap_desc 'Switch session bucket'
+    tap_text Inbox
     wait_for_text verify-session
     wait_for_text verify-keep
+    shot favorites-returned-to-open
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
         [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
         tmux has-session -t verify-session && tmux has-session -t verify-keep
@@ -1048,6 +1066,7 @@ if [[ "$feature" == chat-search.md ]]; then
 fi
 
 if [[ "$feature" == session-drafts.md ]]; then
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value Draft
     shot inbox-before-draft
@@ -1061,6 +1080,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     fi
     tap_desc Back
     wait_for_text Inbox
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text Draft
     wait_for_text 'Inbox preview stays.'
     shot inbox-draft
@@ -1081,6 +1101,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:unsent draft text'
     tap_desc Back
     wait_for_text Inbox
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text 'Inbox preview stays.'
     for attempt in {1..30}; do
         dump_ui
@@ -1646,6 +1667,7 @@ if [[ "$feature" == session-fresh-start.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-resync.md ]]; then wait_for_text 'Message verify-session'; fi
 if [[ "$feature" == host-restart.md ]]; then
     source "$scripts/host-restart-drive.sh"
 fi
@@ -2109,8 +2131,6 @@ fi
 if [[ "$feature" == chat-queued.md || "$feature" == chat-clear.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     wait_for_text VERIFY_READY_1008
-elif [[ "$feature" == chat-resync.md ]]; then
-    wait_for_text ACCEPTED_FOURTH
 else
     wait_for_text VERIFY_READY_528
 fi
@@ -2537,38 +2557,14 @@ if [[ "$feature" == chat-resync.md ]]; then
     resync_event() {
         sudo -u verifyssh env GITHUB_ACTIONS=true python3 /home/verifyssh/resync-console.py event "$1"
     }
-    resync_rows() {
-        local phase=$1 identity direction attempt found x1 y1 x2 y2
-        for identity in recovery-head pending-one pending-two accepted-fourth; do
-            found=false
-            for direction in older newer; do
-                for attempt in {1..10}; do
-                    shot "resync-$phase-$identity-$direction-$attempt"
-                    if python3 "$scripts/resync-console.py" ui-row "$EVIDENCE/current.xml" "$identity" "$phase" > "$EVIDENCE/resync-$phase-$identity.json" 2> "$EVIDENCE/resync-row-error.txt"; then
-                        found=true
-                        break
-                    fi
-                    read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
-                    if [[ "$direction" == older ]]; then
-                        adb shell input swipe "$x1" "$y1" "$x2" "$y2" 450
-                    else
-                        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 450
-                    fi
-                    sleep 1
-                done
-                if [[ "$found" == true ]]; then break; fi
-            done
-            if [[ "$found" != true ]]; then
-                cat "$EVIDENCE/resync-row-error.txt" >&2
-                printf 'RESYNC_UI_ROW_NOT_PROVEN:%s:%s\n' "$phase" "$identity" >&2
-                return 1
-            fi
-        done
+    resync_reader() {
+        wait_for_text 'FIRST REPLY'
+        shot "resync-reader-$1"
     }
     unzip -p "$VERIFY_APK" assets/chat_history_reader.py | sha256sum > "$EVIDENCE/embedded-reader-sha256.txt"
     cp tools/vendor/chat-reader/SHA256SUMS "$EVIDENCE/canonical-corpus-sha256.txt"
     resync_event before > "$EVIDENCE/resync-server-before.json"
-    resync_rows before
+    resync_reader before
     fill 'Message verify-session' 'draft%sstays%shere'
     shot resync-draft-before
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-before.bin"
@@ -2597,7 +2593,7 @@ if [[ "$feature" == chat-resync.md ]]; then
         exit 1
     fi
     python3 "$scripts/toast.py" "$EVIDENCE/toast-settled.png" "${toast_shots[@]}" | tee "$EVIDENCE/toast-result.txt"
-    resync_rows after
+    resync_reader after
     shot resync-draft-after
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-after.bin"
     cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-after.bin"
@@ -2605,7 +2601,7 @@ if [[ "$feature" == chat-resync.md ]]; then
     wait_for_text 'Reset this chat'
     tap_text 'Reset this chat'
     sleep 5
-    resync_rows repeat
+    resync_reader repeat
     shot resync-draft-repeat
     python3 "$scripts/resync-console.py" draft "$EVIDENCE/current.xml" "$EVIDENCE/resync-draft-repeat.bin"
     cmp "$EVIDENCE/resync-draft-before.bin" "$EVIDENCE/resync-draft-repeat.bin"
@@ -2794,7 +2790,7 @@ if [[ "$feature" == terminal.md ]]; then
     sleep 2
     python3 "$scripts/mpa" terminal --step sleep --evidence "$EVIDENCE"
     shot shell-input-sleep
-    tap_desc 'Ctrl key'
+    tap_node desc 'Ctrl key' once
     adb shell input text c
     python3 "$scripts/mpa" terminal --step interrupt --evidence "$EVIDENCE"
     shot shell-input-interrupt
@@ -2804,8 +2800,8 @@ if [[ "$feature" == terminal.md ]]; then
         if select_node desc 'Up key' >/dev/null 2>&1; then break; fi
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
     done
-    tap_desc 'Up key'
-    tap_desc 'Up key'
+    tap_node desc 'Up key' once
+    tap_node desc 'Up key' once
     adb shell input keyevent 66
     python3 "$scripts/mpa" terminal --step history --evidence "$EVIDENCE"
     shot shell-input-history
@@ -2817,7 +2813,7 @@ if [[ "$feature" == terminal.md ]]; then
     done
     touch /tmp/verify_tabfile_unique.txt
     adb shell input text 'ls%s/tmp/verify_tabf'
-    tap_desc 'Tab key'
+    tap_node desc 'Tab key' once
     adb shell input keyevent 66
     python3 "$scripts/mpa" terminal --step tab --evidence "$EVIDENCE"
     shot shell-input-tab

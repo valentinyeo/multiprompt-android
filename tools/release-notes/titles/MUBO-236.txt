@@ -1,0 +1,1 @@
+Jump to newest sends a stray key that breaks the next command
