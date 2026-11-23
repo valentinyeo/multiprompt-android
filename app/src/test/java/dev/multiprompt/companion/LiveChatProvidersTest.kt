@@ -62,6 +62,33 @@ class LiveChatProvidersTest {
     }
 
     @Test
+    fun everyNewPhoneChatStartsItsAiAsALiveChatAndShellAsATerminal() {
+        agents.forEach { harness ->
+            val command = TmuxCommands.newSessionCommand("live-x1", "/srv/api", harness, sid)
+            assertTrue(harness.name, command.contains("reader.py host start"))
+            assertTrue(harness.name, command.contains("exec sleep infinity"))
+            assertFalse(harness.name, command.contains("exec ${harness.binary}"))
+        }
+        val shell = TmuxCommands.newSessionCommand("shell-x1", "/srv/api", AgentHarness.SHELL, "")
+        assertTrue(shell.contains("tmux new-session -d -s 'shell-x1' -c '/srv/api'"))
+        assertFalse(shell.contains("reader.py"))
+    }
+
+    @Test
+    fun aNewPiChatRunsTheDesktopPiLiveChatCommand() {
+        val command = TmuxCommands.newSessionCommand("live-pi_x1", "/srv/api", AgentHarness.PI, sid)
+        assertTrue(command.contains("host enable pi $sid --tmux live-pi_x1 --cwd /srv/api >/dev/null 2>&1"))
+        assertTrue(command.contains("python3 ~/.multiprompt-runtime/reader.py host start pi $sid"))
+        assertFalse(command.contains("--permission-mode"))
+        assertFalse(command.contains("--dangerously"))
+    }
+
+    @Test
+    fun onlyClaudeKeepsTheBypassPermissionsModeInANewPhoneChat() {
+        assertTrue(TmuxCommands.newSessionCommand("live-x1", "/srv/api", AgentHarness.CLAUDE, sid).contains("--permission-mode bypassPermissions"))
+    }
+
+    @Test
     fun aShellCannotStartALiveChat() {
         assertThrows(IllegalArgumentException::class.java) {
             TmuxCommands.createLiveChat("live-x1", "/srv/api", sid, AgentHarness.SHELL)
