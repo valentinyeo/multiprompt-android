@@ -103,6 +103,29 @@ test('an empty red list and a missing one behave as before', () => {
   assert.match(noted.notes.join(' '), /No journey counts as red on main/);
 });
 
+test('a journey this PR changes blocks even while it is red on main', () => {
+  const ruled = verifier.applyRules({
+    modelVerdict: 'PASS', features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' },
+    redOnMain: ['session-pins.md'], redOnMainUrl: runUrl, direct: ['session-pins.md'],
+  });
+  assert.equal(ruled.verdict, 'FAIL');
+  assert.equal(ruled.journeys[0].direct, true);
+  assert.match(ruled.notes.join(' '), /Journey not passed: session-pins\.md \(failure\)\./);
+  assert.match(ruled.notes.join(' '), /This PR changes session-pins\.md, so being red on main \(nightly \S+\) does not exempt it/);
+  assert.doesNotMatch(ruled.notes.join(' '), /tracked as a ticket, not a PR block/);
+});
+
+test('a red-on-main journey the PR does not change stays a note', () => {
+  const ruled = verifier.applyRules({
+    modelVerdict: 'PASS', features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' },
+    redOnMain: ['session-pins.md'], redOnMainUrl: runUrl, direct: ['terminal.md'],
+  });
+  assert.equal(ruled.verdict, 'PASS+NOTES');
+  assert.equal(ruled.journeys[0].direct, false);
+  assert.match(ruled.notes.join(' '), /Already red on main .*session-pins\.md; tracked as a ticket, not a PR block\./);
+  assert.equal(verifier.applyRules({ features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' }, redOnMain: ['session-pins.md'], direct: [] }).verdict, 'PASS+NOTES');
+});
+
 test('only journeys that did not pass are written for the verify chat', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'red-journeys-'));
   try {
@@ -332,20 +355,34 @@ test('changed recipes and owned drivers are mandatory before model suggestions',
   assert.equal(verifier.noProductChange([{ filename: 'tools/session-gestures/scroll.test.py' }], 1), true);
 });
 
-test('a harness change runs every journey that clicks through the shared action', () => {
+test('a harness-only change runs the fixed smoke set instead of every journey', () => {
   const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
   const changed = [
     { filename: 'tools/journey-actions/action.test.py' },
     { filename: 'tools/journey-actions/fixtures/chat-shared-verify-session-text-visible.xml' },
     { filename: '.claude/skills/verify-multiprompt-android/scripts/journey_action.py' },
   ];
-  assert.deepEqual(gate.changedJourneys('', changed), gate.prJourneys);
-  assert.ok(gate.changedJourneys('', changed).includes('chat-shared.md'));
+  assert.deepEqual(gate.changedJourneys('', changed), gate.HARNESS_SMOKE_JOURNEYS);
+  assert.ok(!gate.changedJourneys('', changed).includes('chat-shared.md'));
   const diff = changed.map(file => `diff --git a/${file.filename} b/${file.filename}\n+changed`).join('\n');
-  assert.deepEqual(gate.changedJourneys(diff), gate.prJourneys);
-  assert.deepEqual(verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff).features, gate.prJourneys);
+  assert.deepEqual(gate.changedJourneys(diff), gate.HARNESS_SMOKE_JOURNEYS);
+  assert.deepEqual(verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff).features, gate.HARNESS_SMOKE_JOURNEYS);
   assert.equal(verifier.noProductChange([{ filename: 'tools/journey-actions/action.test.py' }], 1), false);
   assert.deepEqual(gate.changedJourneys('', [{ filename: '.claude/skills/verify-multiprompt-android/scripts/pins-drive.sh' }]), ['session-pins.md']);
+  assert.equal(gate.MAX_PR_JOURNEYS, gate.PR_CHECK_CAP - 9);
+});
+
+test('the journey cap keeps direct feature checks ahead of harness smoke', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const recipes = gate.prJourneys.slice(0, gate.MAX_PR_JOURNEYS + 1);
+  const diff = [
+    'diff --git a/.claude/skills/verify-multiprompt-android/scripts/drive.sh b/.claude/skills/verify-multiprompt-android/scripts/drive.sh',
+    ...recipes.map(name => `diff --git a/${gate.REGISTRY_PATH}/${name} b/${gate.REGISTRY_PATH}/${name}`),
+  ].join('\nchanged\n') + '\n+changed';
+  const selected = verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff);
+  assert.equal(selected.features.length, gate.MAX_PR_JOURNEYS);
+  for (const name of recipes.slice(0, gate.MAX_PR_JOURNEYS)) assert.ok(selected.features.includes(name), name);
+  assert.ok(selected.dropped.length >= 1);
 });
 
 test('a shared-driver change runs every journey it touches instead of deferring guards', () => {
@@ -454,7 +491,7 @@ test('signed candidate preparation builds and records each pinned revision with 
       git(['checkout', '--detach', '-q', ref]);
       const run = spawnSync('bash', ['-euc', `work="$WORK"; app_apk="$EVIDENCE/app.apk"; task=assembleRelease; apk=app/build/outputs/apk/release/app-release.apk; suffix=\n${block}`], {
         encoding: 'utf8', env: {
-          PATH: `${bin}:${process.env.PATH}`, GITHUB_WORKSPACE: directory, GITHUB_SHA: sha, APP_REF: ref,
+          PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME, GITHUB_WORKSPACE: directory, GITHUB_SHA: sha, APP_REF: ref,
           EVIDENCE: evidence, WORK: work, VERIFY_FEATURE: 'settings-navigation.md', EXPECTED_COMMIT: '',
           ANDROID_KEYSTORE_PASSWORD: 'fixture', ANDROID_KEY_ALIAS: 'fixture', ANDROID_KEY_PASSWORD: 'fixture',
         },
@@ -665,6 +702,42 @@ else console.log(JSON.stringify({ number: 1, title: 'Tidy the checks', body: 'to
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /^pstack-verifier: PASS\+NOTES @ /m);
     assert.match(run.stdout, /Head journey results decide this check\./);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the judge blocks a changed journey that is red on main', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-judge-direct-'));
+  try {
+    const recipe = '.claude/skills/verify-multiprompt-android/features/session-pins.md';
+    fs.writeFileSync(path.join(directory, 'change.diff'), `diff --git a/${recipe} b/${recipe}\n+Pin the row.\n`);
+    fs.writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args[1] === 'list') console.log(JSON.stringify([{ databaseId: '42', url: '${runUrl}' }]));
+else if (args[0] === 'run' && args[1] === 'download') {
+  const out = args[args.indexOf('-D') + 1];
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, 'red-journeys.json'), JSON.stringify(['session-pins.md']));
+}
+else if (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync('${path.join(directory, 'change.diff').replace(/\\/g, '\\\\')}', 'utf8'));
+else if (args.some(arg => String(arg).includes('/jobs?'))) console.log(JSON.stringify([{ jobs: [{ name: 'journey session-pins.md / verify', status: 'completed', conclusion: 'failure' }] }]));
+else console.log(JSON.stringify({ number: 1, title: 'IGSH-3028: Session phone tests read the screen correctly again', body: 'Fixes the session pins journey.', head: { sha: '${sha}' } }));
+`, { mode: 0o755 });
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        PATH: `${directory}:${process.env.PATH}`, PICK_RESULT: 'success', REPO: 'a/b', PR_NUMBER: '1',
+        HEAD_SHA: sha, RUN_ID: '1', RUN_URL: runUrl, FEATURES: '["session-pins.md"]', CHANGED_OUTCOMES: '[]', VERIFIER_DRY: '1',
+        COVERAGE_REPORT: path.join(directory, 'coverage.json'),
+      },
+    });
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stdout, /^pstack-verifier: FAIL @ /m);
+    assert.match(run.stdout, /This PR changes session-pins\.md, so being red on main/);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

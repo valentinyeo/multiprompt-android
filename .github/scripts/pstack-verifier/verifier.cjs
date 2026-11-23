@@ -122,13 +122,24 @@ function validateFeatures(raw) {
   return { features, dropped };
 }
 
-function includeRequiredJourneys(picked, plan, diff = '', changed = coverageGate.changedJourneys(diff)) {
+function includeRequiredJourneys(picked, plan, diff = '', changed, files) {
+  const selection = coverageGate.selectionForChange(diff, files);
+  const mapped = changed ?? selection.required;
+  const direct = [...new Set([...selection.direct, ...coverageGate.changedRecipes(diff, files)])];
   const required = [...new Set([
-    ...changed,
-    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id].journey),
+    ...mapped,
+    ...plan.outcomes.map(id => coverageGate.registry.outcomes[id]?.journey),
   ].filter(name => ALLOWLIST.includes(name)))];
-  const { features } = validateFeatures(required);
-  return { ...picked, features, dropped: (picked.dropped ?? []).filter(name => !required.includes(name)), smoke: false };
+  const { features: requiredFeatures } = validateFeatures(required);
+  const { features, dropped: capDropped } = coverageGate.capPrJourneys(requiredFeatures, { direct, smoke: selection.smoke });
+  const invalidDropped = (picked.dropped ?? []).filter(name => !features.includes(name));
+  return {
+    ...picked,
+    features,
+    dropped: [...new Set([...invalidDropped, ...capDropped])],
+    smoke: false,
+    harnessSmoke: selection.shared ? selection.smoke : [],
+  };
 }
 
 function journeyRunners(features) {
@@ -242,20 +253,25 @@ function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {})
   return ids.some(id => saysBug(tickets[id]));
 }
 
-function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '' }) {
+function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '', direct = [] }) {
   const notes = [];
   let verdict = 'PASS';
   const knownRed = Array.isArray(redOnMain) ? redOnMain : [];
+  const changedDirect = new Set(Array.isArray(direct) ? direct : []);
   const journeys = features.map(feature => {
     const conclusion = conclusions?.[feature] ?? null;
     const passed = conclusion === 'success';
-    return { feature, conclusion, passed, redOnMain: !passed && knownRed.includes(feature) };
+    return { feature, conclusion, passed, redOnMain: !passed && knownRed.includes(feature), direct: changedDirect.has(feature) };
   });
-  const alreadyRed = journeys.filter(journey => journey.redOnMain);
-  const failed = journeys.filter(journey => !journey.passed && !journey.redOnMain);
+  const alreadyRed = journeys.filter(journey => journey.redOnMain && !journey.direct);
+  const failed = journeys.filter(journey => !journey.passed && (!journey.redOnMain || journey.direct));
   if (failed.length) {
     verdict = 'FAIL';
     notes.push(`Journey not passed: ${failed.map(journey => `${journey.feature} (${journey.conclusion ?? 'no result'})`).join(', ')}.`);
+  }
+  const blockedRed = failed.filter(journey => journey.redOnMain);
+  if (blockedRed.length) {
+    notes.push(`This PR changes ${blockedRed.map(journey => journey.feature).join(', ')}, so being red on main (${redOnMainUrl ? `nightly ${redOnMainUrl}` : 'nightly run link unavailable'}) does not exempt it: fix its own journey before merge.`);
   }
   for (const journey of alreadyRed) {
     notes.push(`Already red on main (${redOnMainUrl ? `nightly ${redOnMainUrl}` : 'nightly run link unavailable'}): ${journey.feature}; tracked as a ticket, not a PR block.`);
@@ -567,9 +583,10 @@ async function finishPick(state, env, picked) {
   if (picked.unmapped) console.error(`pstack-verifier pick: the model also answered unmapped; the ${state.codePlan.outcomes.length} code-mapped outcome(s) stand.`);
   const plan = coverageGate.planChange(state.diff, picked.changedOutcomes, state.files);
   if (plan.product && picked.changeKind === 'tooling') throw new Error('FEATURE_UNMAPPED: product source changes cannot use tooling-only validation.');
-  const selected = includeRequiredJourneys(picked, plan, state.diff, state.changed);
+  const selected = includeRequiredJourneys(picked, plan, state.diff, state.changed, state.files);
   const reason = picked.reason || 'Journeys chosen for this change.';
-  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
+  const harness = selected.harnessSmoke?.length ? ` harness_smoke=${JSON.stringify(selected.harnessSmoke)}` : '';
+  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} cap=${selected.features.length}/${coverageGate.MAX_PR_JOURNEYS}${harness} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
   setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind });
 }
 
@@ -695,6 +712,7 @@ async function judge(env) {
   const ruled = applyRules({
     features, conclusions, notDrivenReason: env.PICK_REASON, smoke, featureProof,
     redOnMain: red.journeys, redOnMainUrl: red.url, redOnMainNote: red.note,
+    direct: coverageGate.selectionForChange(diff).direct,
   });
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {
