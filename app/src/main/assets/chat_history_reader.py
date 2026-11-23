@@ -2472,7 +2472,7 @@ def message_expire(db, provider, sid):
         return [row for row in rows if row[0] not in held]
     now = time.time()
     for row in idle(db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') AND deadline IS NOT NULL AND deadline<=? ORDER BY position", (provider, sid, now)).fetchall()):
-        db.execute("UPDATE shared_messages SET state='failed',deadline=NULL,receipt='not_sent' WHERE id=? AND state IN ('queued','sent')", (row[0],))
+        db.execute("UPDATE shared_messages SET state='failed',deadline=NULL WHERE id=? AND state IN ('queued','sent')", (row[0],))
         message_event(db, provider, sid, message_row(db.execute("SELECT * FROM shared_messages WHERE id=?", (row[0],)).fetchone()))
     for row in idle(db.execute("SELECT * FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent') AND created<=? ORDER BY position", (provider, sid, now - 600)).fetchall()):
         db.execute("UPDATE shared_messages SET state='failed',deadline=NULL,receipt='waiting_too_long' WHERE id=? AND state IN ('queued','sent')", (row[0],))

@@ -351,7 +351,7 @@ session['db'].close()
                 namespace['advance_queue']()
                 self.assertEqual(('queued', None), state())
                 namespace['fail_messages']()
-                self.assertEqual(('failed', 'not_sent'), state())
+                self.assertEqual(('failed', 'waiting_too_long'), state())
                 events = [event['event'] for event in reader.message_events_page('claude', queue.SID, 0)['events'] if event['event'].get('id') == 'message_fixture_9001']
                 self.assertEqual('failed', events[-1]['state'])
 

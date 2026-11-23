@@ -122,7 +122,7 @@ def fail_messages():
     if reader is None:
         return
     with closing(reader.message_store_db('verify-session')) as db, db:
-        db.execute("UPDATE shared_messages SET deadline=1 WHERE provider='claude' AND sid=? AND state IN ('queued','sent')", (SID,))
+        db.execute("UPDATE shared_messages SET deadline=NULL,created=1 WHERE provider='claude' AND sid=? AND state IN ('queued','sent')", (SID,))
         reader.message_expire(db, 'claude', SID)
 
 
