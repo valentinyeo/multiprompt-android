@@ -27,11 +27,11 @@ open_model_menu() {
     wait_for_text 'Open model picker (/model)'
 }
 tap_menu_receipt() {
-    local label=$1 command=$2 before after attempt retry
+    local label=$1 command=$2 section=${3:-} before after attempt retry
     before=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
-    for retry in 1 2; do
+    for retry in 1 2 3; do
         tap_text "$label"
-        for attempt in {1..30}; do
+        for attempt in {1..15}; do
             after=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
             if (( after > before )); then
                 (( after == before + 1 ))
@@ -39,10 +39,14 @@ tap_menu_receipt() {
             fi
             sleep 1
         done
-        if [[ "$retry" == 1 ]] && select_node text "$label" >/dev/null 2>&1; then
-            printf 'Native menu tap did not send %s; retrying the visible row once\n' "$command" >&2
-        else
-            break
+        dump_ui
+        shot "native-menu-$label-missing-$retry"
+        python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" > "$EVIDENCE/native-menu-$label-missing-$retry-tree.json"
+        printf 'Native menu tap did not send %s on attempt %s; the retained tree names the toast or the remaining menu\n' "$command" "$retry" >&2
+        if [[ -n "$section" ]] && ! select_node text "$label" >/dev/null 2>&1; then
+            tap_desc Attach
+            wait_for_text 'Add image'
+            tap_text "$section" "$label"
         fi
     done
     printf 'NATIVE_MENU_RECEIPT_MISSING: VERIFY_RECEIVED:%s\n' "$command" >&2
@@ -82,7 +86,7 @@ menu_scroll() {
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
     tap_text Model Opus
-    tap_menu_receipt "$model" "/model ${model,,}"
+    tap_menu_receipt "$model" "/model ${model,,}" Model
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received /model ${model,,}. Claude $model 5.5 high"
@@ -93,8 +97,8 @@ for model in Opus Haiku Fable; do
     menu_state "attach-${model,,}-selected" visible "$model ›"
 done
 for effort in Low Medium; do
-    tap_text Effort Low
-    tap_menu_receipt "$effort" "/effort ${effort,,}"
+    tap_text Effort "$effort"
+    tap_menu_receipt "$effort" "/effort ${effort,,}" Effort
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"
