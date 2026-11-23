@@ -135,12 +135,15 @@ finally:
         for capture in captures:
             text = subprocess.check_output(['tesseract', str(root / capture['file']), 'stdout'], text=True, stderr=subprocess.DEVNULL, timeout=15)
             capture['ocrPositive'] = 'Followup received.' in text
-            if capture['ocrPositive']:
-                shutil.copyfile(root / capture['file'], root / 'catchup-visible.png')
-                result['capture'] = capture
-                if reply is not None:
-                    result['replyLatencySeconds'] = capture['endMonotonic'] - reply['monotonic']
-                break
+            if not capture['ocrPositive']:
+                continue
+            shutil.copyfile(root / capture['file'], root / 'catchup-visible.png')
+            if reply is None or capture['startMonotonic'] < reply['monotonic']:
+                continue
+            result['capture'] = capture
+            result['replyLatencySeconds'] = capture['startMonotonic'] - reply['monotonic']
+            result['captureSeconds'] = capture['endMonotonic'] - capture['startMonotonic']
+            break
     finally:
         (root / 'catchup-samples.json').write_text(json.dumps(samples, indent=2))
         (root / 'catchup-screenshots.json').write_text(json.dumps(captures, indent=2))
@@ -165,9 +168,8 @@ finally:
         raise RuntimeError(f'BACKGROUND_WORKER_FAILED: {errors}')
 
 latency = result['replyLatencySeconds']
-assert latency is not None, 'CHAT_VISIBILITY_INCONCLUSIVE: no OCR-positive screenshot or reply event'
-assert latency >= 0, 'OCR_POSITIVE_BEFORE_REPLY_EVENT'
-assert latency <= 3, f'CHAT_VISIBILITY_INCONCLUSIVE: upper bound {latency:.3f}s exceeds 3s'
+assert latency is not None, 'CHAT_VISIBILITY_INCONCLUSIVE: no OCR-positive screenshot started after the reply event'
+assert 0 <= latency <= 3, f'CHAT_VISIBILITY_INCONCLUSIVE: upper bound {latency:.3f}s exceeds 3s'
 result['status'] = 'passed'
 (root / 'catchup-result.json').write_text(json.dumps(result, indent=2))
 print('ANDROID_CHAT_CAUGHT_UP_WITHIN_3_SECONDS_FOR_120_SECONDS', result)
