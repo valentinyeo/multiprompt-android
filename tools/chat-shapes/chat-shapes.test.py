@@ -62,7 +62,10 @@ class ChatShapesTest(unittest.TestCase):
                 self.assertLess(path.stat().st_size, 8192, path)
                 for row in path.read_text().splitlines():
                     text = ''.join(part.get('text', '') for part in json.loads(row)['message']['content'])
-                    self.assertTrue(text.endswith('_2715'), text)
+                    if fixture.CODE_BLOCK_FIRST in text:
+                        self.assertIn('_2715', text)
+                    else:
+                        self.assertTrue(text.endswith('_2715'), text)
         self.assertEqual(fixture.host_key('c02715c0-0000-4000-8000-000000002715'),
                          Path(self.manifest['shapes'][0]['config']).name.removesuffix('.config.json'))
 
@@ -75,7 +78,8 @@ class ChatShapesTest(unittest.TestCase):
         self.assertEqual('COMPACTED_AFTER_2715', shapes['compacted']['visible'][-1])
         self.assertNotIn('COMPACTED_BEFORE_2715', shapes['compacted']['visible'])
         self.assertEqual(fixture.shape('resumed')['native'] + '.jsonl', shapes['resumed']['transcript'])
-        self.assertEqual('RESUMED_READY_2715', shapes['resumed']['visible'][-1])
+        self.assertIn('RESUMED_READY_2715', shapes['resumed']['visible'])
+        self.assertIn(fixture.CODE_BLOCK_FIRST, shapes['resumed']['visible'][-1])
         self.assertEqual(fixture.shape('fresh')['sid'] + '.jsonl', shapes['fresh']['transcript'])
         self.assertEqual('FRESH_READY_2715', shapes['fresh']['visible'][-1])
         self.assertNotIn('FRESH_NEIGHBOUR_2715', shapes['fresh']['visible'])
@@ -98,6 +102,15 @@ class ChatShapesTest(unittest.TestCase):
         print(repro.report(result).strip(), flush=True)
         self.assertTrue(result['red'], result['preFix'])
         self.assertTrue(result['green'], result['current'])
+
+    def test_code_block_journey_swipes_only_when_the_marker_is_still_missing(self):
+        source = (SCRIPTS / 'chat-shapes-drive.sh').read_text()
+        probe = 'if ! "$mpa" read --select contains --value CODE_BLOCK_2975_START --timeout 3 >/dev/null 2>&1; then'
+        swipe = '"$mpa" swipe --inside RESUMED_READY_2715 --axis vertical --direction forward'
+        self.assertIn(probe, source)
+        self.assertIn(swipe, source)
+        self.assertLess(source.index(probe), source.index(swipe))
+        self.assertNotIn('"$mpa" swipe --axis vertical --direction forward\n"$mpa" read --select contains --value CODE_BLOCK_2975_START', source)
 
     def test_seed_command_creates_the_shapes_as_supervised_live_chats(self):
         mpa = load('chat_shapes_mpa', SCRIPTS / 'mpa')
