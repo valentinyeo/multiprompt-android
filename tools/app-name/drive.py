@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ INSTALLERS = {"com.android.packageinstaller", "com.google.android.packageinstall
 REMOTE_VIDEO = "/data/local/tmp/app-name-update.mp4"
 REMOTE_PID = "/data/local/tmp/app-name-screenrecord.pid"
 REMOTE_XML = "/data/local/tmp/app-name-window.xml"
+RECORDER_STOP_SECONDS = 30
 
 
 def require(condition, message):
@@ -194,6 +196,7 @@ class Proof:
             ["adb", "shell", script],
             stdout=self.recorder_log,
             stderr=subprocess.STDOUT,
+            start_new_session=True,
         )
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -227,10 +230,15 @@ class Proof:
             else:
                 errors.append("Recorder PID was not obtained")
             try:
-                self.recorder.wait(timeout=30)
+                self.recorder.wait(timeout=RECORDER_STOP_SECONDS)
             except subprocess.TimeoutExpired:
-                self.recorder.kill()
+                try:
+                    os.killpg(self.recorder.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
                 self.recorder.wait(timeout=10)
+                if self.device_pid:
+                    adb("shell", "kill", "-9", self.device_pid, check=False)
                 errors.append("Recorder did not stop within deadline")
             if self.recorder_log is not None:
                 self.recorder_log.close()

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 : "${FIXTURE:?}"
 : "${EVIDENCE:?}"
+source "$(dirname "${BASH_SOURCE[0]}")/recorder-guard.sh"
 RECORDER_STOP_SECONDS="${RECORDER_STOP_SECONDS:-60}"
 RECORDER_LIMIT_SECONDS="${RECORDER_LIMIT_SECONDS:-780}"
 RECORDER_REMOTE=/sdcard/release-journey.mp4
@@ -18,27 +19,36 @@ recorder_start() {
         fi
         sleep 0.2
     done
-    [[ "$RECORDER_DEVICE" =~ ^[0-9]+$ ]]
-    timeout 30 adb shell kill -0 "$RECORDER_DEVICE"
+    if ! [[ "$RECORDER_DEVICE" =~ ^[0-9]+$ ]] || ! timeout 30 adb shell kill -0 "$RECORDER_DEVICE"; then
+        recorder_reap || true
+        return 1
+    fi
 }
 
 recorder_stop() {
-    local code=0 watchdog
-    [[ "${RECORDER_DEVICE:-}" =~ ^[0-9]+$ ]] || return 1
-    timeout 30 adb shell kill -2 "$RECORDER_DEVICE" || code=1
-    if kill -0 "$RECORDER_CLIENT" 2>/dev/null; then
-        (
-            sleep "$RECORDER_STOP_SECONDS"
-            printf 'release recorder client still running after %ss; killing it\n' "$RECORDER_STOP_SECONDS" >&2
-            kill -9 "$RECORDER_CLIENT" 2>/dev/null
-        ) &
-        watchdog=$!
-        wait "$RECORDER_CLIENT" || code=1
-        kill "$watchdog" 2>/dev/null || true
-        wait "$watchdog" 2>/dev/null || true
-    else
-        wait "$RECORDER_CLIENT" || code=1
+    local code=0
+    if ! [[ "${RECORDER_DEVICE:-}" =~ ^[0-9]+$ ]]; then
+        recorder_reap || true
+        return 1
     fi
+    timeout 30 adb shell kill -2 "$RECORDER_DEVICE" || code=1
+    recorder_wait_client "${RECORDER_CLIENT:-}" "$RECORDER_STOP_SECONDS" release || code=1
+    if (( code != 0 )); then
+        timeout 30 adb shell kill -9 "$RECORDER_DEVICE" >/dev/null 2>&1 || true
+    fi
+    RECORDER_DEVICE=
+    RECORDER_CLIENT=
+    return "$code"
+}
+
+recorder_reap() {
+    local code=0
+    if [[ "${RECORDER_DEVICE:-}" =~ ^[0-9]+$ ]]; then
+        timeout 30 adb shell kill -9 "$RECORDER_DEVICE" >/dev/null 2>&1 || code=1
+    fi
+    RECORDER_DEVICE=
+    recorder_wait_client "${RECORDER_CLIENT:-}" "$RECORDER_STOP_SECONDS" release || code=1
+    RECORDER_CLIENT=
     return "$code"
 }
 
