@@ -373,13 +373,18 @@ exit "$code"
             folder = Path(directory)
             (folder / 'before.xml').write_text(TERMINAL)
             (folder / 'after.xml').write_text(TERMINAL.replace('[20,1120][500,1200]', '[20,900][500,980]'))
+            (folder / 'opened.xml').write_text(window('<node text="Live terminal" />'))
             shell = '''set -eu
 scripts=$SCRIPTS
 EVIDENCE=$TEST_DIR
 calls=0
 dump_ui() {
     calls=$((calls + 1))
-    if (( calls == 1 )); then cp "$TEST_DIR/before.xml" "$EVIDENCE/current.xml"; else cp "$TEST_DIR/after.xml" "$EVIDENCE/current.xml"; fi
+    case "$calls" in
+        1) cp "$TEST_DIR/before.xml" "$EVIDENCE/current.xml" ;;
+        2) cp "$TEST_DIR/after.xml" "$EVIDENCE/current.xml" ;;
+        *) cp "$TEST_DIR/opened.xml" "$EVIDENCE/current.xml" ;;
+    esac
 }
 adb() { printf '%s\n' "$*" >> "$TEST_DIR/actions"; }
 '''

@@ -50,7 +50,7 @@ ${shellFunction('select_node')}
 ${shellFunction('tap_node')}
 ${shellFunction('tap_text')}
 dump_ui() { :; }
-adb() { printf '%s\\n' "$*" >> "$EVIDENCE/actions"; }
+adb() { printf '%s\\n' "$*" >> "$EVIDENCE/actions"; echo reader > "$EVIDENCE/current.xml"; }
 scripts=${JSON.stringify(scripts)}
 EVIDENCE=${JSON.stringify(directory)}
 select_node text row-27 >/dev/null
@@ -85,19 +85,21 @@ ${shellFunction('select_node')}
 ${shellFunction('tap_node')}
 ${shellFunction('tap_text')}
 ${shellFunction('wait_for_text')}
-dump_ui() { cp "$EVIDENCE/page-$page.xml" "$EVIDENCE/current.xml"; }
+dump_ui() { cp "$EVIDENCE/page-$page.xml" "$EVIDENCE/current.xml"; if [[ "$opened" == true ]]; then sed -i 's/<hierarchy>/<hierarchy opened="true">/' "$EVIDENCE/current.xml"; fi; }
 dismiss_system_anr() { :; }
 sleep() { :; }
 adb() {
     if [[ "$3" == swipe ]]; then
         if (( $5 > $7 )); then page=$((page < 10 ? page + 1 : 10)); else page=$((page > 0 ? page - 1 : 0)); fi
     else
+        opened=true
         printf 'TAPPED_PAGE=%s\\n' "$page"
     fi
 }
 scripts=${JSON.stringify(scripts)}
 EVIDENCE=${JSON.stringify(directory)}
 page=0
+opened=false
 wait_for_text ${target}
 [[ "$page" == 10 ]]
 cp "$EVIDENCE/page-10.xml" "$EVIDENCE/page-10-original.xml"
@@ -108,11 +110,13 @@ select_node desc 'Robot ${seededName}' >/dev/null
 tap_text ${target}
 cp "$EVIDENCE/page-10-original.xml" "$EVIDENCE/page-10.xml"
 page=10
+opened=false
 wait_for_text ${target}-neighbor
 [[ "$page" == 0 ]]
 page=0
+opened=false
 tap_text ${target}
-`], { encoding: 'utf8', timeout: 30000 });
+`], { encoding: 'utf8', timeout: 60000 });
       assert.equal(result.status, 0, result.stderr);
       assert.deepEqual(result.stdout.trim().split('\n'), ['TAPPED_PAGE=10', 'TAPPED_PAGE=10']);
     } finally {
@@ -150,12 +154,14 @@ test('reveal uses the existing scroll planner but never taps the row', () => {
     const result = spawnSync('bash', ['-euc', `
 ${shellFunction('session_name')}
 ${shellFunction('tap_node')}
-dump_ui() { :; }
+dump_ui() { printf '%s\\n' "$state" > "$EVIDENCE/current.xml"; }
 python3() { if [[ -f "$EVIDENCE/scrolled" ]]; then echo 'tap 10 20'; else echo 'swipe 10 80 10 20'; fi; }
-adb() { printf '%s\\n' "$*"; touch "$EVIDENCE/scrolled"; }
+adb() { printf '%s\\n' "$*"; touch "$EVIDENCE/scrolled"; state=changed; }
 scripts=unused
 EVIDENCE=${JSON.stringify(directory)}
+state=before
 tap_node text verify-session reveal
+state=before
 tap_node text verify-session
 `], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
@@ -183,5 +189,97 @@ ${setup}
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  }
+});
+
+for (const landsOn of [1, 2, 4, 99]) {
+  test(`a tap is checked with a fresh dump and retried only until it lands (${landsOn})`, () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'tap-retry-'));
+    try {
+      const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
+${shellFunction('tap_node')}
+scripts=unused
+EVIDENCE=${JSON.stringify(directory)}
+landed_taps=0
+dump_ui() { if (( landed_taps >= ${landsOn} )); then echo reader; else echo inbox; fi > "$EVIDENCE/current.xml"; }
+python3() { printf 'tap %s 20\\n' "$((10 + landed_taps))"; }
+adb() { landed_taps=$((landed_taps + 1)); printf '%s\\n' "$*"; }
+tap_node text Settings
+printf 'DUMP=%s\\n' "$(cat "$EVIDENCE/current.xml")"
+`], { encoding: 'utf8', timeout: 10000 });
+      assert.equal(result.status, 0, result.stderr);
+      const lines = result.stdout.trim().split('\n');
+      const taps = Math.min(landsOn, 4);
+      assert.deepEqual(lines.slice(0, taps), Array.from({ length: taps }, (_, i) => `shell input tap ${10 + i} 20`));
+      assert.equal(lines[taps], `DUMP=${landsOn <= 4 ? 'reader' : 'inbox'}`);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test('a late toast cannot confirm that the requested destination opened', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'tap-expected-'));
+  try {
+    const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
+${shellFunction('tap_node')}
+scripts=unused
+EVIDENCE=${JSON.stringify(directory)}
+landed_taps=0
+dump_ui() { printf 'Attach toast-%s' "$landed_taps" > "$EVIDENCE/current.xml"; if (( landed_taps >= 2 )); then echo Low >> "$EVIDENCE/current.xml"; fi; }
+python3() { if [[ "$3" == text ]]; then grep -q "$4" "$EVIDENCE/current.xml"; else echo 'tap 10 20'; fi; }
+adb() { landed_taps=$((landed_taps + 1)); }
+tap_node text Effort tap Low
+printf 'CALLS=%s\\n' "$landed_taps"
+`], { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), 'CALLS=2');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('terminal key input is single-shot when its canvas leaves the UI dump unchanged', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'tap-key-'));
+  try {
+    const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
+${shellFunction('tap_node')}
+scripts=unused
+EVIDENCE=${JSON.stringify(directory)}
+key_presses=0
+dump_ui() { echo canvas > "$EVIDENCE/current.xml"; }
+python3() { echo 'tap 10 20'; }
+adb() { key_presses=$((key_presses + 1)); }
+tap_node desc 'Tab key' once
+printf 'KEYS=%s\\n' "$key_presses"
+`], { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), 'KEYS=1');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the selected Medium summary is not the exact Medium submenu option', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'tap-exact-option-'));
+  try {
+    const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
+${shellFunction('tap_node')}
+scripts=${JSON.stringify(scripts)}
+EVIDENCE=${JSON.stringify(directory)}
+landed_taps=0
+dump_ui() { if (( landed_taps == 0 )); then value='Medium ›'; else value=Medium; fi; printf '<hierarchy><node text="%s" clickable="true" enabled="true" bounds="[0,0][100,100]"/></hierarchy>' "$value" > "$EVIDENCE/current.xml"; }
+adb() { landed_taps=$((landed_taps + 1)); }
+tap_node text 'Medium ›' tap Medium
+printf 'CALLS=%s\\n' "$landed_taps"
+`], { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), 'CALLS=1');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
 });
