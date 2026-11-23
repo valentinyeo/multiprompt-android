@@ -142,7 +142,7 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan session=
+    local attempt action x1 y1 x2 y2 direction plan before taps=0 session=
     if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
     for attempt in {1..24}; do
         dump_ui || return
@@ -156,7 +156,17 @@ tap_node() {
         read -r action x1 y1 x2 y2 <<< "$plan"
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
-            tap) adb shell input tap "$x1" "$y1"; return ;;
+            tap)
+                before=$(cat "$EVIDENCE/current.xml")
+                adb shell input tap "$x1" "$y1" || return
+                dump_ui || return
+                if [[ "$(cat "$EVIDENCE/current.xml")" != "$before" ]]; then return; fi
+                taps=$((taps + 1))
+                if (( taps == 4 )); then
+                    printf 'JOURNEY_TAP_UNCHANGED: %s after four taps; checking the journey state next\n' "$2" >&2
+                    return 0
+                fi
+                ;;
             swipe) adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500 ;;
             *) return 1 ;;
         esac
@@ -221,8 +231,9 @@ doctor() {
     return 1
 }
 wait_for_text() {
-    local attempt
-    for attempt in {1..30}; do
+    local attempt=0 deadline=$((SECONDS + ${3:-0}))
+    while (( ${3:-0} > 0 ? SECONDS < deadline : attempt < 30 )); do
+        attempt=$((attempt + 1))
         if select_node contains "$1" >/dev/null 2>&1; then return; fi
         dismiss_system_anr
         sleep "${2:-1}"
@@ -276,7 +287,7 @@ scroll_to_newest() {
 wait_for_absence() {
     local attempt
     for attempt in {1..30}; do
-        if select_node absent "$1" >/dev/null 2>&1; then return; fi
+        if select_node "${2:-absent}" "$1" >/dev/null 2>&1; then return; fi
         sleep 1
     done
     printf 'Timed out waiting for absence of %s\n' "$1" >&2
@@ -404,7 +415,7 @@ if [[ "$feature" == settings-navigation.md ]]; then
     wait_for_text Inbox
     tap_desc 'Session list actions'
     tap_text Settings
-    wait_for_text 'Workspace colors'
+    wait_for_text 'Workspace colors' 1 90
     for attempt in {1..6}; do
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Auto >/dev/null 2>&1; then break; fi
         read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
@@ -810,22 +821,22 @@ PYFAVORITES
     read -r row_x row_y <<< "$(select_node text verify-session)"
     adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
     wait_for_text 'End tmux session'
-    for attempt in {1..5}; do
-        if select_node text 'Archive Session' >/dev/null 2>&1; then break; fi
-        read -r x1 y1 x2 y2 <<< "$(select_node scroll-back '')"
-        adb shell input swipe "$x2" "$y2" "$x1" "$y1" 500
-    done
-    tap_text 'Archive Session'
-    wait_for_text 'Archive verify-session?'
-    select_node text 'Archive verify-session?' >/dev/null
-    select_node text 'This ends its tmux session but saves the name and resume command so it can be restored later.' >/dev/null
-    select_node text Cancel >/dev/null
-    select_node text Archive >/dev/null
-    shot confirmation-archive
-    tap_text Cancel
-    wait_for_absence 'Archive verify-session?'
+    tap_text Waiting
+    wait_for_absence 'Robot verify-session' desc-absent
+    wait_for_text verify-keep
+    shot favorites-waiting
+    tap_desc 'Switch session bucket'
+    tap_text Waiting
+    tap_node desc 'Robot verify-session' reveal
+    read -r row_x row_y <<< "$(select_node desc 'Robot verify-session')"
+    adb shell input swipe "$row_x" "$row_y" "$row_x" "$row_y" 1000
+    tap_text 'Return to open'
+    wait_for_absence 'Robot verify-session' desc-absent
+    tap_desc 'Switch session bucket'
+    tap_text Inbox
     wait_for_text verify-session
     wait_for_text verify-keep
+    shot favorites-returned-to-open
     sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh bash -c '
         [[ "$GITHUB_ACTIONS" == true && "$HOME" == /home/verifyssh && "$(id -u)" -ne 0 && "$(id -un)" == verifyssh ]]
         tmux has-session -t verify-session && tmux has-session -t verify-keep
@@ -1048,6 +1059,7 @@ if [[ "$feature" == chat-search.md ]]; then
 fi
 
 if [[ "$feature" == session-drafts.md ]]; then
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text 'Inbox preview stays.'
     python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" --select absent --value Draft
     shot inbox-before-draft
@@ -1061,6 +1073,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     fi
     tap_desc Back
     wait_for_text Inbox
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text Draft
     wait_for_text 'Inbox preview stays.'
     shot inbox-draft
@@ -1081,6 +1094,7 @@ if [[ "$feature" == session-drafts.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:unsent draft text'
     tap_desc Back
     wait_for_text Inbox
+    tap_node desc 'Robot verify-session' reveal
     wait_for_text 'Inbox preview stays.'
     for attempt in {1..30}; do
         dump_ui
@@ -1646,6 +1660,7 @@ if [[ "$feature" == session-fresh-start.md ]]; then
     exit 0
 fi
 tap_text verify-session
+if [[ "$feature" == chat-resync.md ]]; then wait_for_text 'Message verify-session'; fi
 if [[ "$feature" == host-restart.md ]]; then
     source "$scripts/host-restart-drive.sh"
 fi

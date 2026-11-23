@@ -26,17 +26,32 @@ open_model_menu() {
     tap_text 'Change ›'
     wait_for_text 'Open model picker (/model)'
 }
-menu_command() {
-    local label=$1 command=$2 model=$3 effort=$4 phase=$5 before after attempt
-    open_model_menu
+tap_menu_receipt() {
+    local label=$1 command=$2 before after attempt retry
     before=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
-    tap_text "$label"
-    for attempt in {1..30}; do
-        after=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
-        if (( after > before )); then break; fi
-        sleep 1
+    for retry in 1 2; do
+        tap_text "$label"
+        for attempt in {1..30}; do
+            after=$(sudo grep -Fxc "VERIFY_RECEIVED:$command" /home/verifyssh/receipts.txt || true)
+            if (( after > before )); then
+                (( after == before + 1 ))
+                return
+            fi
+            sleep 1
+        done
+        if [[ "$retry" == 1 ]] && select_node text "$label" >/dev/null 2>&1; then
+            printf 'Native menu tap did not send %s; retrying the visible row once\n' "$command" >&2
+        else
+            break
+        fi
     done
-    (( after == before + 1 ))
+    printf 'NATIVE_MENU_RECEIPT_MISSING: VERIFY_RECEIVED:%s\n' "$command" >&2
+    return 1
+}
+menu_command() {
+    local label=$1 command=$2 model=$3 effort=$4 phase=$5
+    open_model_menu
+    tap_menu_receipt "$label" "$command"
     printf 'VERIFY_RECEIVED:%s\n' "$command" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received $command. Claude $model 5.5 $effort"
@@ -67,8 +82,7 @@ menu_scroll() {
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
     tap_text Model
-    tap_text "$model"
-    wait_receipt "VERIFY_RECEIVED:/model ${model,,}"
+    tap_menu_receipt "$model" "/model ${model,,}"
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received /model ${model,,}. Claude $model 5.5 high"
@@ -80,8 +94,7 @@ for model in Opus Haiku Fable; do
 done
 for effort in Low Medium; do
     tap_text Effort
-    tap_text "$effort"
-    wait_receipt "VERIFY_RECEIVED:/effort ${effort,,}"
+    tap_menu_receipt "$effort" "/effort ${effort,,}"
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
     wait_for_text "Received /effort ${effort,,}. Claude Fable 5.5 ${effort,,}"

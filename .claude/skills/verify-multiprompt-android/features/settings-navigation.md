@@ -8,6 +8,8 @@ For the Android 301 negative control, use its exact published commit and `expect
 
 The journey checks sessions and settings, explicit host-key trust, mapping and Automatic across restart, renewal browser handoff and signout. The artifact contains screenshots, XML, transcript, SSH evidence, APK digest and certificates. Browser handoff is not completed authentication.
 
+After tapping **Settings**, require **Workspace colors** within 90 seconds. The shared tap helper takes a fresh dump and retries an unchanged screen up to three times.
+
 ## M3 dispatch
 
 Run these only after the branch is published. The baseline requires the M3 manifest to still identify Android 301. The published check requires the exact new manifest commit.

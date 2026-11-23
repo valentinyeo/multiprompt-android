@@ -17,7 +17,7 @@ Use [shared chat store](chat-shared.md) instead.
 
 ## How to get to it
 
-Open chat, then its three-dot menu.
+Open `verify-session` and require **Message verify-session** before checking queue rows. Then open its three-dot menu.
 Tap Resync chat.
 
 ## Hosted fixture

@@ -25,6 +25,8 @@ The legacy chat-title model menu is not exposed by the current reader style. Its
 
 No upload request is made. Live upload-service authentication and uploading a selected image are not exercised. The unchanged image upload pipeline retains its unit coverage.
 
+Model and effort selections require a new host receipt. If none arrives within 30 seconds and the same menu row remains visible, tap it once more. A missing or duplicate receipt still fails.
+
 ## Evidence
 
 Inspect all `native-*.png/xml` pairs, `native-result.json`, `native-receipts.txt`, `native-tmux-final.txt` and `native-transcript.jsonl` in the uploaded artifact.
