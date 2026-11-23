@@ -8237,10 +8237,22 @@ if __name__ == '__main__':
                         pass
                     _os.symlink(target, path)
 
-                def publish_named_tool(name, payload):
-                    digest = _hashlib.sha256(payload).hexdigest()
-                    stem = digest + '-' + name
-                    publish(stem, payload)
+                def publish_named_tool(name, suffix, payload):
+                    stem = _hashlib.sha256(payload).hexdigest() + '-' + suffix
+                    fd, path = _tempfile.mkstemp(prefix='.tmp-', dir=runtime_root)
+                    try:
+                        with _os.fdopen(fd, 'wb') as stream:
+                            _os.fchmod(stream.fileno(), 0o700)
+                            stream.write(payload)
+                            stream.flush()
+                            _os.fsync(stream.fileno())
+                        _os.replace(path, stem, dst_dir_fd=directory)
+                        _os.fsync(directory)
+                    finally:
+                        try:
+                            _os.unlink(path)
+                        except FileNotFoundError:
+                            pass
                     relink(name, stem)
                     return stem
 
@@ -8254,29 +8266,25 @@ if __name__ == '__main__':
                     mp_send_source = globals().get('MP_SEND_SOURCE')
                     if isinstance(mp_send_source, str) and mp_send_source:
                         try:
-                            published = publish_named_tool('mp-send', _base64.b64decode(mp_send_source))
-                            _os.chmod(published, 0o600, dir_fd=directory)
+                            publish_named_tool('mp-send', 'mp-send', _base64.b64decode(mp_send_source))
                         except (ValueError, OSError):
                             pass
                     feedback_source = globals().get('FEEDBACK_SOURCE')
                     if isinstance(feedback_source, str) and feedback_source:
                         try:
-                            publish_named_tool('multibot-feedback', _base64.b64decode(feedback_source))
-                            _os.chmod('multibot-feedback', 0o700, dir_fd=directory)
+                            publish_named_tool('multibot-feedback', 'multibot-feedback', _base64.b64decode(feedback_source))
                         except (ValueError, OSError, NotImplementedError):
                             pass
                     helper_source = globals().get('MP_HELPER_SOURCE')
                     if isinstance(helper_source, str) and helper_source:
                         try:
-                            publish_named_tool('mp-helper', _base64.b64decode(helper_source))
-                            _os.chmod('mp-helper', 0o700, dir_fd=directory)
+                            publish_named_tool('mp-helper', 'mp-helper', _base64.b64decode(helper_source))
                         except (ValueError, OSError, NotImplementedError):
                             pass
                     zsb_source = globals().get('ZSB_SOURCE')
                     if isinstance(zsb_source, str) and zsb_source:
                         try:
-                            publish_named_tool('mp-zsb', _base64.b64decode(zsb_source))
-                            _os.chmod('mp-zsb', 0o700, dir_fd=directory)
+                            publish_named_tool('mp-zsb', 'mp-zsb', _base64.b64decode(zsb_source))
                         except (ValueError, OSError, NotImplementedError):
                             pass
                 missing = object()
@@ -8294,18 +8302,17 @@ if __name__ == '__main__':
                     installed = read(active['sha256'] + '.py', 4 * 1024 * 1024)
                     if _hashlib.sha256(installed).hexdigest() != active['sha256']:
                         raise ValueError('corrupt runtime')
+                    if active['sha256'] == digest:
+                        publish_tools(installed)
+                        return installed, active
                     if active['generation'] > generation:
-                        publish_tools(installed)
                         return installed, active
-                    if active['generation'] == generation:
-                        if active['sha256'] != digest:
-                            publish(digest + '.py', source)
-                            active = dict(protocol=1, generation=generation, sha256=digest)
-                            publish('active.json', _json.dumps(active, separators=(',', ':')).encode())
-                            publish_tools(source)
-                            return source, active
-                        publish_tools(installed)
-                        return installed, active
+                    if active['generation'] == generation and active['sha256'] != digest:
+                        publish(digest + '.py', source)
+                        active = dict(protocol=1, generation=generation, sha256=digest)
+                        publish('active.json', _json.dumps(active, separators=(',', ':')).encode())
+                        publish_tools(source)
+                        return source, active
                 try:
                     installed = read(digest + '.py', 4 * 1024 * 1024)
                 except FileNotFoundError:
