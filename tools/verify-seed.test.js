@@ -256,7 +256,7 @@ scripts=unused
 EVIDENCE=${JSON.stringify(directory)}
 landed_taps=0
 dump_ui() { printf 'Attach toast-%s' "$landed_taps" > "$EVIDENCE/current.xml"; if (( landed_taps >= 2 )); then echo Low >> "$EVIDENCE/current.xml"; fi; }
-python3() { if [[ "$3" == contains ]]; then grep -q "$4" "$EVIDENCE/current.xml"; else echo 'tap 10 20'; fi; }
+python3() { if [[ "$3" == text ]]; then grep -q "$4" "$EVIDENCE/current.xml"; else echo 'tap 10 20'; fi; }
 adb() { landed_taps=$((landed_taps + 1)); }
 tap_node text Effort tap Low
 printf 'CALLS=%s\\n' "$landed_taps"
@@ -285,6 +285,27 @@ printf 'KEYS=%s\\n' "$key_presses"
 `], { encoding: 'utf8', timeout: 10000 });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.trim(), 'KEYS=1');
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the selected Medium summary is not the exact Medium submenu option', () => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'tap-exact-option-'));
+  try {
+    const result = spawnSync('bash', ['-euc', `
+${shellFunction('session_name')}
+${shellFunction('tap_node')}
+scripts=${JSON.stringify(scripts)}
+EVIDENCE=${JSON.stringify(directory)}
+landed_taps=0
+dump_ui() { if (( landed_taps == 0 )); then value='Medium ›'; else value=Medium; fi; printf '<hierarchy><node text="%s" clickable="true" enabled="true" bounds="[0,0][100,100]"/></hierarchy>' "$value" > "$EVIDENCE/current.xml"; }
+adb() { landed_taps=$((landed_taps + 1)); }
+tap_node text 'Medium ›' tap Medium
+printf 'CALLS=%s\\n' "$landed_taps"
+`], { encoding: 'utf8', timeout: 10000 });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), 'CALLS=1');
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

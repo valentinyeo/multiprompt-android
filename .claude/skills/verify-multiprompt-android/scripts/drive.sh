@@ -146,7 +146,7 @@ tap_node() {
     if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
     for attempt in {1..24}; do
         dump_ui || return
-        if [[ -n "$expected" ]] && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$expected" >/dev/null 2>&1; then return 0; fi
+        if [[ -n "$expected" ]] && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
         if [[ -n "$session" ]] &&
             python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
             set -- desc "Robot $session" "${3:-tap}"
@@ -163,7 +163,7 @@ tap_node() {
                 dump_ui || return
                 if [[ "${3:-tap}" == once ]]; then return 0; fi
                 if [[ -n "$expected" ]]; then
-                    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$expected" >/dev/null 2>&1; then return 0; fi
+                    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
                 elif [[ "$(sha256sum "$EVIDENCE/current.xml")" != "$before" ]]; then
                     return 0
                 fi
