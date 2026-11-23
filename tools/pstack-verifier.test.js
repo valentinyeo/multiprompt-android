@@ -468,7 +468,7 @@ test('signed candidate preparation builds and records each pinned revision with 
       git(['checkout', '--detach', '-q', ref]);
       const run = spawnSync('bash', ['-euc', `work="$WORK"; app_apk="$EVIDENCE/app.apk"; task=assembleRelease; apk=app/build/outputs/apk/release/app-release.apk; suffix=\n${block}`], {
         encoding: 'utf8', env: {
-          PATH: `${bin}:${process.env.PATH}`, GITHUB_WORKSPACE: directory, GITHUB_SHA: sha, APP_REF: ref,
+          PATH: `${bin}:${process.env.PATH}`, HOME: process.env.HOME, GITHUB_WORKSPACE: directory, GITHUB_SHA: sha, APP_REF: ref,
           EVIDENCE: evidence, WORK: work, VERIFY_FEATURE: 'settings-navigation.md', EXPECTED_COMMIT: '',
           ANDROID_KEYSTORE_PASSWORD: 'fixture', ANDROID_KEY_ALIAS: 'fixture', ANDROID_KEY_PASSWORD: 'fixture',
         },

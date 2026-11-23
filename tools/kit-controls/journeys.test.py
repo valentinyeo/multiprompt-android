@@ -184,6 +184,46 @@ sudo() {
             self.assertEqual((Path(directory) / "killed.txt").read_text().splitlines(), ["123", "111", "222"])
             self.assertEqual((Path(directory) / "sshd-children-before-rotation.txt").read_text().splitlines(), ["111", "222"])
 
+    def test_a_pin_hidden_behind_the_tab_bar_is_not_tappable(self):
+        package = 'dev.multiprompt.companion'
+        def node(bounds, **attributes):
+            written = {'package': package, 'bounds': bounds, **attributes}
+            return '<node ' + ' '.join(f'{key}="{value}"' for key, value in written.items()) + ' />'
+        def labelled(text, bounds, **attributes):
+            return node(bounds, text=text, **attributes)
+        def clickable(child, bounds, text_bounds):
+            return ('<node package="' + package + '" clickable="true" bounds="' + bounds + '">'
+                    + labelled(child, text_bounds) + '</node>')
+        hierarchy = (
+            '<hierarchy><node package="' + package + '" bounds="[0,0][1080,1920]">'
+            + labelled('Inbox', '[74,118][178,167]')
+            + labelled('Search sessions', '[696,116][749,169]')
+            + labelled('New session', '[833,116][886,169]')
+            + labelled('Session list actions', '[970,116][1023,169]')
+            + clickable('Frequent', '[828,1647][1080,1773]', '[891,1686][1059,1735]')
+            + clickable('All', '[309,1647][485,1773]', '[372,1686][422,1735]')
+            + clickable('Favorites', '[506,1647][807,1773]', '[569,1686][744,1735]')
+            + clickable('pin-00', '[0,1400][1080,1550]', '[200,1420][328,1473]')
+            + clickable('pin-01', '[0,1700][1080,1750]', '[200,1720][328,1773]')
+            + '</node></hierarchy>')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'pins.xml'
+            path.write_text(hierarchy)
+            oracle = str(SCRIPTS / 'pins-oracle.py')
+            def bound(pin):
+                return subprocess.run(['python3', oracle, 'pin-bounds', str(path), package, pin],
+                                      capture_output=True, text=True)
+            inside = bound('pin-00')
+            self.assertEqual(inside.returncode, 0, inside.stderr)
+            self.assertEqual(inside.stdout.split(), ['135', '1475', '945', '1475'])
+            hidden = bound('pin-01')
+            self.assertNotEqual(hidden.returncode, 0)
+            self.assertIn('pin-01 is not fully inside content viewport', hidden.stderr)
+            any_pin = subprocess.run(['python3', oracle, 'pin-bounds', str(path), package, 'any'],
+                                     capture_output=True, text=True)
+            self.assertEqual(any_pin.returncode, 0, any_pin.stderr)
+            self.assertEqual(any_pin.stdout.split(), ['135', '1475', '945', '1475'])
+
 
 if __name__ == "__main__":
     unittest.main()

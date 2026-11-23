@@ -85,11 +85,17 @@ for reverse in false true; do
     python3 "$scripts/pins-oracle.py" header "$EVIDENCE/pins-$reverse-top.xml" "$package" > "$EVIDENCE/pins-$reverse-header.json"
     for attempt in {1..15}; do
         dump_ui
-        if python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-11 >/dev/null 2>&1; then break; fi
+        if python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-11 \
+            > "$EVIDENCE/pins-$reverse-pin-wait.txt" 2>&1; then break; fi
+        if [[ "$attempt" == 15 ]]; then
+            cat "$EVIDENCE/pins-$reverse-pin-wait.txt" >&2
+            printf '%s\n' PINS_PIN11_NOT_TAPPABLE_AFTER_SCROLL > "$EVIDENCE/pins-failure.txt"
+            exit 1
+        fi
         pins_swipe end
     done
-    pins_capture "pins-$reverse-horizontal"
-    python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/current.xml" "$package" pin-11
+    pins_capture "pins-$reverse-pinned"
+    python3 "$scripts/pins-oracle.py" pin-bounds "$EVIDENCE/pins-$reverse-pinned.xml" "$package" pin-11
     tap_text pin-11
     wait_for_text 'Message pin-11'
     pins_capture "pins-$reverse-opened"

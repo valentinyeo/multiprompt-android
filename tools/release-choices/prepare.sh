@@ -53,7 +53,7 @@ storePassword=$ANDROID_KEYSTORE_PASSWORD
 keyAlias=$ANDROID_KEY_ALIAS
 keyPassword=$ANDROID_KEY_PASSWORD
 EOF
-    gradle -p "$app_source" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -PversionCode=1000000000 -PversionName=0.1.2-candidate "$task"
+    tools/ci/gradle-retry.sh -p "$app_source" --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx2g -PversionCode=1000000000 -PversionName=0.1.2-candidate "$task"
     cp "$app_source/$apk" "$app_apk"
     printf '%s\n' "$source_sha" > "$EVIDENCE/app-source-sha.txt"
     printf '%s\n' "0.1.2-candidate$suffix" > "$EVIDENCE/version.txt"
