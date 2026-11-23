@@ -25,6 +25,8 @@ The hosted fixture enables a supervised Claude chat on `live-fresh-start-3000` w
 
 `tools/session-fresh-start/fixture.py` seeds the pre-fresh Claude transcript on `NATIVE_BEFORE`, a neighbour ghost transcript on the stable host sid, and host config/state on the real bundled reader. `apply-fresh-start` archives the old conversation, writes the handover file, rotates to `NATIVE_AFTER`, appends a fresh `init` event, and leaves all three jsonl files in the project folder so duplicate-row regressions stay visible.
 
+The seed check requires the manifest's tmux session and matching `@mp_host_sid`. Its recorded count covers that fixture session, not unrelated break-it sessions. Missing sessions and wrong identities still fail. The phone still requires exactly one target row and rejects ghost rows. Only the stressed replay passes `--allow-session live-pi_verify-breakit-probe --allow-session verify-breakit-other` to the inbox checker, allowing the two known stress-fixture rows.
+
 `session-fresh-start-fixture.py check` replays seed and fresh-start without the phone. `tools/session-fresh-start/fresh-start.test.py` runs in `tools/check.sh source`.
 
 ## Gotchas

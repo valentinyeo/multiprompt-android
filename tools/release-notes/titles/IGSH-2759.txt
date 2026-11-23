@@ -1,0 +1,1 @@
+Android emulator setup fails on apt unmet dependencies before any journey
