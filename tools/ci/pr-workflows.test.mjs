@@ -42,7 +42,7 @@ test('all six phone jobs and historical replays run periodically, never on PRs',
   assert.match(periodic, /bash tools\/kit-controls\/replay\.sh/);
   assert.doesNotMatch(periodic, /  pull_request:|phone-routing|needs: build/);
   for (const job of [...phones, 'baseline-profile', 'message-projection-replays', 'historical-controls']) assert.ok(jobs(periodic).includes(job), job);
-  for (const name of ['account-journey', 'app-name', 'reply-notifications', 'top-fade', 'multiprompt-parity', 'pstack-verifier-eval']) {
+  for (const name of ['account-journey', 'app-name', 'reply-notifications', 'top-fade', 'multiprompt-parity']) {
     const workflow = read(`.github/workflows/${name}.yml`);
     assert.doesNotMatch(workflow, /^  pull_request:/m, name);
     assert.match(workflow, /^  schedule:/m, name);
@@ -57,7 +57,7 @@ test('all six phone jobs and historical replays run periodically, never on PRs',
   assert.match(weekly, /matrix: \$\{\{ fromJSON\(needs\.map\.outputs\.matrix\) \}\}/);
 });
 
-test('PR journeys come only from touched registry outcomes; even tooling receives the independent verdict', () => {
+test('PR journeys come only from touched registry outcomes; even tooling receives the journey verdict', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.equal((workflow.match(/run: node \.github\/scripts\/pstack-verifier\/verifier\.cjs judge/g) ?? []).length, 1);
   assert.doesNotMatch(workflow, /if:.*no_product_change/);
@@ -65,6 +65,7 @@ test('PR journeys come only from touched registry outcomes; even tooling receive
   const verifier = read('.github/scripts/pstack-verifier/verifier.cjs');
   assert.doesNotMatch(verifier, /features: \[SMOKE_JOURNEY\]/);
   assert.match(verifier, /validateFeatures\(required\)/);
+  assert.match(verifier, /capPrJourneys\(requiredFeatures/);
   assert.doesNotMatch(verifier, /\.\.\.\(picked\.smoke \? \[\] : picked\.features\)/);
   assert.doesNotMatch(workflow, /PARENT_WORKFLOW_EXIT|verifier-tooling-proof|reuse\.cjs/);
 });

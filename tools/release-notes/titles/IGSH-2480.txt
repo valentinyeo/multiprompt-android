@@ -1,0 +1,1 @@
+Android: tap a session name in a chat to open it

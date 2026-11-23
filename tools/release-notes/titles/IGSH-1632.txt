@@ -1,0 +1,1 @@
+Android: hidden agent steps open from one grey line

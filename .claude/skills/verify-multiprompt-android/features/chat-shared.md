@@ -53,6 +53,8 @@ The driver restores traffic without another Send or Retry tap.
 Exactly one host row must appear, the waiting label and error must disappear, and the draft must clear only after admission.
 
 Inspect `shared-link-down-host.json`, `shared-phone.json`, the `shared-link-*` XML and PNG captures, firewall counters, and `driver-transcript.txt`.
+
+The registry supplies exact action, result and host-row citation hints to the independent verifier: the single Send from `driver-transcript.txt`, the recovered screen in `shared-link-recovered.xml`, and the admitted row in `shared-phone.json`.
 The EXIT trap restores the fixture traffic even on failure.
 The historical missing-shared-store negative control skips this new probe.
 This proves a dropped SSH link, not physical mobile data, process-death recovery, or background sending.

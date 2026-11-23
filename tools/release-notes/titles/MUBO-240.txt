@@ -1,0 +1,1 @@
+Android: check a chat reply never shows twice

@@ -161,7 +161,7 @@
     },
     "chat-resync.md": {
       "name": "Legacy resync",
-      "description": "historical held-queue proof; not host Reset proof.",
+      "description": "legacy held-queue proof: Reset retires unsent copies with no receipt claim and no send; the phone shows its reader transcript across Reset and never claims legacy rows, which this app version does not request.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -192,10 +192,10 @@
         "shared-after-reset.json": 1000,
         "shared-codex-before-restart.json": 1000,
         "shared-codex-after-reset.json": 1000,
-        "05-shared-after-reset.xml": 3000,
-        "07-shared-codex-after-reset.xml": 3000,
-        "shared-terminal.txt": 1000,
-        "shared-result.txt": 500
+        "shared-link-recovered.xml": 2500,
+        "shared-phone.json": 1000,
+        "shared-link-recovery.txt": 500,
+        "shared-terminal.txt": 1000
       }
     },
     "chat-working.md": {
@@ -393,7 +393,7 @@
     },
     "session-gestures.md": {
       "name": "Session gestures",
-      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "description": "no session swipes, a code drag that starts no reply, ten replies, back to inbox on the signed APK.",
       "runner": {
         "kind": "signed",
         "workflow": "verify.yml",
@@ -1088,6 +1088,33 @@
         "seed-counts.json": 3000
       }
     },
+    "session-fresh-start.md": {
+      "name": "Fresh start keeps one inbox row and the new conversation",
+      "description": "Desktop Fresh start keeps one tmux-named inbox row and shows the handover-led new transcript without stale cache after relaunch and resync. SOFT-3000.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/session-fresh-start-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/session-fresh-start-setup.sh",
+          "tools/session-fresh-start/fixture.py"
+        ]
+      },
+      "outcomes": [
+        "session.fresh-start"
+      ],
+      "evidence": {
+        "fresh-start-state.json": 1200,
+        "fresh-start-host.json": 4000,
+        "fresh-start-open-proof.txt": 700,
+        "fresh-start-applied.json": 1000,
+        "fresh-start-inbox-inbox-after-fresh-start.json": 400,
+        "session-fresh-start-seed.json": 1000
+      }
+    },
     "crash-report.md": {
       "name": "Crash report for every app exit",
       "description": "signs in through the local account fixture, plants uncaught exception, native crash, system kill and ANR exits, relaunches and requires one uploaded crash report per exit with a summary naming it.",
@@ -1108,6 +1135,28 @@
         "crash-reports-received.txt": 3200,
         "crash-exit-summaries.json": 900,
         "crash-exits.txt": 1600
+      }
+    },
+    "chat-clear.md": {
+      "name": "Cleared chat",
+      "description": "A transcribed chat that starts fresh after /clear shows only what came after the clear, keeps a message typed after it, and never shows or sends an unsent or failed message from before it.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat-clear.journey"
+      ],
+      "evidence": {
+        "00-clear-before-unsent.xml": 1500,
+        "00-clear-after.xml": 1500,
+        "00-clear-reopened.xml": 1500,
+        "00-clear-state.json": 1500,
+        "clear-store-after.json": 1500,
+        "clear-store-final.json": 1500
       }
     }
   },
@@ -1248,7 +1297,7 @@
       "match": []
     },
     "session-gestures.journey": {
-      "description": "no session swipes, bidirectional code scroll, ten replies, back to inbox on the signed APK.",
+      "description": "no session swipes, a code drag that starts no reply, ten replies, back to inbox on the signed APK.",
       "journey": "session-gestures.md",
       "sideEffect": false,
       "match": []
@@ -1507,7 +1556,7 @@
       "match": []
     },
     "legacy.igsh-422": {
-      "description": "first-screen entry is automated. Sync needs OTP, account servers and host-sync capability. Complete **Sign in**, inspect **Session list actions \u2192 Hosts** and compare another device; offline hosts do not prove sync.",
+      "description": "first-screen entry is automated. Sync needs OTP, account servers and host-sync capability. Complete **Sign in**, inspect **Session list actions → Hosts** and compare another device; offline hosts do not prove sync.",
       "journey": null,
       "sideEffect": true,
       "match": []
@@ -1519,19 +1568,19 @@
       "match": []
     },
     "legacy.igsh-434": {
-      "description": "Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions \u2192 More \u2192 Dictation API key**, **API key \u2192 Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates.",
+      "description": "Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions → More → Dictation API key**, **API key → Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates.",
       "journey": null,
       "sideEffect": true,
       "match": []
     },
     "legacy.igsh-423": {
-      "description": "saving needs OTP and a pulled account layout. **Session list actions \u2192 Settings \u2192 Show Frequent split**, Back, check **Frequent**; repeat off and compare another device. Not dispatchable in CI.",
+      "description": "saving needs OTP and a pulled account layout. **Session list actions → Settings → Show Frequent split**, Back, check **Frequent**; repeat off and compare another device. Not dispatchable in CI.",
       "journey": null,
       "sideEffect": true,
       "match": []
     },
     "legacy.igsh-415": {
-      "description": "account-mapped sessions with input in 24 h, or three watch visits of at least 10 s in 6 h. Send input, return to **Frequent**, compare ordering; check watch-only fallback and **Settings \u2192 Newest sessions at bottom** separately.",
+      "description": "account-mapped sessions with input in 24 h, or three watch visits of at least 10 s in 6 h. Send input, return to **Frequent**, compare ordering; check watch-only fallback and **Settings → Newest sessions at bottom** separately.",
       "journey": null,
       "sideEffect": true,
       "match": []
@@ -1555,7 +1604,7 @@
       }
     },
     "legacy.igsh-424": {
-      "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions \u2192 Session history** opens alternate-screen history. Console output proves none of this.",
+      "description": "a supported agent (Claude) transcript on the SSH host, including tables/nested lists and model/effort state. Open from Inbox, scroll the complete transcript, inspect tables horizontally and top-bar subtitle; no **Conversation** header/status row. **Session actions → Session history** opens alternate-screen history. Console output proves none of this.",
       "journey": null,
       "sideEffect": true,
       "match": []
@@ -1605,7 +1654,7 @@
       }
     },
     "legacy.igsh-425": {
-      "description": "multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8\u201328 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.",
+      "description": "multi-touch and long/wide tmux output, no extra credential. **Open live terminal**, pinch (8–28 sp, retained on reopen), pan, swipe down or **Open shell history**, then **Jump to live** / **Back to the live view**. Terminal.md proves attachment only.",
       "journey": null,
       "sideEffect": true,
       "match": []
@@ -1650,6 +1699,20 @@
       "description": "A dropped SSH link shows a host error and Retry; a waiting prompt enters the host store exactly once after the link returns without another Send tap.",
       "journey": "chat-shared.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message verify-session' SHARED_PHONE_SYNTHETIC"
+        },
+        "result": {
+          "file": "shared-link-recovered.xml",
+          "quote": "text=\"SHARED_PHONE_SYNTHETIC\""
+        },
+        "sideEffect": {
+          "file": "shared-phone.json",
+          "quote": "\"state\": \"queued\", \"epoch\": 0, \"body\": \"SHARED_PHONE_SYNTHETIC\""
+        }
+      },
       "match": [
         "ConversationLoad|PendingPrompts|ChatHistoryConnection|WaitingForConnection"
       ]
@@ -1658,6 +1721,20 @@
       "description": "Each canonical phone message appears once and keeps its reply across transcript catchup, Fresh start and reconnect.",
       "journey": "chat-identity.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message verify-session' PHONE_AFTER_2532"
+        },
+        "result": {
+          "file": "projection-state-reconnect.json",
+          "quote": "\"visible\": [\"PHONE_BEFORE_2532\", \"REPLY_BEFORE_2532\", \"Fresh start\", \"PHONE_AFTER_2532\", \"REPLY_AFTER_2532\"]"
+        },
+        "sideEffect": {
+          "file": "projection-proof.txt",
+          "quote": "MESSAGE_PROJECTION_RECEIPTS_AND_ROWS_OK phases=before,fresh,catchup,reconnect receipts=1,2,2,2"
+        }
+      },
       "match": [
         "ChatHistory\\.kt|HostStream\\.kt|MessageProtocol\\.kt|projectMessages|LegacyMessageIdentity"
       ]
@@ -1718,6 +1795,33 @@
       "match": [
         "ScreencastAccountKey|ScreencastUploader|screencastKey|screencast\\.prepare"
       ]
+    },
+    "session.fresh-start": {
+      "description": "After desktop Fresh start the inbox keeps exactly one row for the tmux chat, opens on the handover-led new transcript, and stays correct across relaunch and resync.",
+      "journey": "session-fresh-start.md",
+      "sideEffect": true,
+      "match": [
+        "FreshStart|fresh_start|FRESH_START_STALE|FRESH_START_ONE_ROW|live-fresh-start-3000",
+        "session-fresh-start|session\\.fresh-start"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/FreshStart\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/reader/ChatHistory\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "apply-fresh-start"
+        },
+        "result": {
+          "file": "fresh-start-state.json",
+          "quote": "HANDOVER_3000"
+        },
+        "sideEffect": {
+          "file": "fresh-start-host.json",
+          "quote": "\"sid\": \"c0030000-3000-4000-8000-000000003000\""
+        }
+      }
     },
     "reader.host-restart": {
       "description": "A desktop-hosted chat catches up and keeps showing replies after its agent host process restarts, without reopening the phone reader.",
@@ -1809,6 +1913,28 @@
         "^app/src/main/java/dev/multiprompt/companion/data/(CrashReportStore|ExitReasons|CrashTrace|CrashPayload|AndroidExitReasonSource)\\.kt$",
         "^app/src/main/java/dev/multiprompt/companion/account/CrashReportUpload\\.kt$"
       ]
+    },
+    "chat-clear.journey": {
+      "description": "A failed phone message from before /clear is gone from the screen and the store invites no another send. A message typed after the clear stays, also after reopening the chat.",
+      "journey": "chat-clear.md",
+      "sideEffect": true,
+      "match": [
+        "clearedAt|clearedMessage|sweepCleared"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message verify-session' AFTER_CLEAR_2474"
+        },
+        "result": {
+          "file": "00-clear-reopened.xml",
+          "quote": "AFTER_CLEAR_2474"
+        },
+        "sideEffect": {
+          "file": "clear-store-after.json",
+          "quote": "\"CLEARED_BEFORE_2474\": \"cancelled\""
+        }
+      }
     }
   }
 }

@@ -54,7 +54,8 @@ class SkillPillsUiTest(unittest.TestCase):
         self.editor.set('text', 'Message verify-session')
         message = self.node(text='Please /review-native this', bounds='[20,40][380,120]')
         pill = self.node(parent=message, text='/review-native', bounds='[120,50][281,90]')
-        with self.assertRaisesRegex(AssertionError, 'outline'):
+        ImageDraw.Draw(self.image).rectangle((20, 40, 379, 119), fill=(233, 233, 233))
+        with self.assertRaisesRegex(AssertionError, 'pill'):
             self.check('sent')
         self.pill((120, 50, 280, 89))
         self.assertEqual(self.check('sent')['sent_pill'], '/review-native')
@@ -63,19 +64,24 @@ class SkillPillsUiTest(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'inline skill pill'):
             self.check('sent')
 
-    def test_real_sent_pill_extends_beyond_its_accessibility_text_bounds(self):
-        fixture = Path(__file__).with_name('fixtures') / 'a4470175-sent.xml'
-        result = ui.check(fixture, fixture.with_suffix('.png'), 'sent', 'Please /review-native this')
-        self.assertEqual(result['sent_pill'], '/review-native')
-        image = Image.open(fixture.with_suffix('.png')).convert('RGB')
-        x1, y1, x2, y2 = result['sent_pill_bounds']
-        for y in range(y1, y2):
-            for x in range(x1, x2):
-                if all(abs(channel - 46) <= 2 for channel in image.getpixel((x, y))):
-                    image.putpixel((x, y), (31, 31, 31))
-        image.save(self.png)
-        with self.assertRaisesRegex(AssertionError, 'outline'):
-            ui.check(fixture, self.png, 'sent', 'Please /review-native this')
+    def test_real_sent_pill_fill_survives_outline_colors_but_not_unpainted_slash_text(self):
+        for name in ('a4470175', '4600e0e1'):
+            with self.subTest(commit=name):
+                fixture = Path(__file__).with_name('fixtures') / f'{name}-sent.xml'
+                result = ui.check(fixture, fixture.with_suffix('.png'), 'sent', 'Please /review-native this')
+                self.assertEqual(result['sent_pill'], '/review-native')
+                image = Image.open(fixture.with_suffix('.png')).convert('RGB')
+                x1, y1, x2, y2 = result['sent_pill_bounds']
+                ImageDraw.Draw(image).rectangle((x1, y1, x2 - 1, y2 - 1), fill=tuple(result['sent_bubble_fill']))
+                ImageDraw.Draw(image).text((x1 + 20, y1 + 5), '/review-native', fill=(20, 20, 20))
+                image.save(self.png)
+                with self.assertRaisesRegex(AssertionError, 'pill'):
+                    ui.check(fixture, self.png, 'sent', 'Please /review-native this')
+
+    def test_real_draft_with_dictation_button_has_no_composer_pill(self):
+        fixture = Path(__file__).with_name('fixtures') / 'soft3030-composer-draft.xml'
+        result = ui.check(fixture, fixture.with_suffix('.png'), 'draft', 'Please this')
+        self.assertFalse(result['composer_pill'])
 
     def test_scroll_uses_the_skill_picker_when_the_chat_also_scrolls(self):
         window = self.node(bounds='[0,0][400,400]')

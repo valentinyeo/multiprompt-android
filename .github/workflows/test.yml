@@ -8,15 +8,21 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: android-tests-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: robolectric-warm-v1 # gitleaks:allow
+
 jobs:
   build:
     name: build
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,15 +31,19 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: ${{ github.event_name == 'pull_request' }}
+      - name: Warm the Robolectric test jars for the read only jobs
+        run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:syncRobolectricAndroidAll :app:generateDebugUnitTestLintModel
       - name: Build the app
-        run: gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug
+        run: tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g assembleDebug
 
   test:
     name: test
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -49,14 +59,17 @@ jobs:
       - name: No code comments
         run: node tools/strip-comments.mjs --check
 
+      - name: No direct model calls in CI scripts
+        uses: valentinyeo/token-ladder/.github/actions/lint-direct-model-calls@main
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
 
       - name: Install screenshot text reader
         run: |
@@ -71,7 +84,7 @@ jobs:
 
       - name: Source files, comments and tool checks
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh source
 
       - name: Upload chat screenshots and JVM results
@@ -93,6 +106,8 @@ jobs:
   unit-tests:
     name: unit-tests
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -101,12 +116,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
       - name: Debug unit tests
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh unit
       - uses: actions/upload-artifact@v4
         if: always()
@@ -128,6 +143,8 @@ jobs:
   m3-unit-tests:
     name: m3-unit-tests
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -136,12 +153,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
       - name: Material 3 unit tests
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh m3
       - uses: actions/upload-artifact@v4
         if: always()
@@ -155,6 +172,8 @@ jobs:
   lint:
     name: lint
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -163,12 +182,12 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         with:
-          gradle-version: "9.5.1"
+          read-only: true
       - name: Android lint
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh lint
       - uses: actions/upload-artifact@v4
         if: always()

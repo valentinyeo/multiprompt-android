@@ -24,7 +24,7 @@ const repositoryLines = body =>
     .map(line => line.trim())
     .filter(line => line.length > 0 && !line.startsWith('//'));
 
-test('settings.gradle.kts lists the Maven Central mirror after mavenCentral()', () => {
+test('settings.gradle.kts resolves Maven Central through the Google mirror before repo.maven.apache.org', () => {
   for (const label of ['pluginManagement', 'dependencyResolutionManagement']) {
     const lines = repositoryLines(block(label));
     const central = lines.indexOf('mavenCentral()');
@@ -33,10 +33,28 @@ test('settings.gradle.kts lists the Maven Central mirror after mavenCentral()', 
     assert.ok(central >= 0, `${label} must call mavenCentral()`);
     assert.ok(mirrorIndex >= 0, `${label} must add the Google Maven Central mirror`);
     assert.ok(
-      mirrorIndex === central + 1,
-      `${label} must list the mirror immediately after mavenCentral()`
+      mirrorIndex === central - 1,
+      `${label} must list the mirror immediately before mavenCentral() so CI hits the mirror first`
     );
   }
+});
+
+test('unit tests point Robolectric runtime fetches at the same Maven Central mirror', () => {
+  const buildGradle = readFileSync(
+    new URL('../../build.gradle.kts', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    buildGradle,
+  /systemProperty\("robolectric\.dependency\.repo\.url",\s*mavenCentralMirror\)/,
+    'Robolectric must download through the Google Maven Central mirror when offline jars are missing',
+  );
+  assert.match(buildGradle, new RegExp(`"${mirror.replaceAll('/', '\\/')}"`));
+  assert.match(
+    buildGradle,
+    /systemProperty\("robolectric\.dependency\.repo\.id",\s*"google-maven-central-mirror"\)/,
+    'Robolectric mirror repo must keep a stable id',
+  );
 });
 
 test('Google Maven serves only Google groups so one Google timeout cannot fail other libraries', () => {

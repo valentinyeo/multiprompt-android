@@ -1,0 +1,1 @@
+Android: the bot's last reply vanishes when you send again

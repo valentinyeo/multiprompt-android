@@ -1,0 +1,1 @@
+Failed release cannot poison later releases

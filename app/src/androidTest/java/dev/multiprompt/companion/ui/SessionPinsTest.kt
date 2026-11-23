@@ -12,6 +12,7 @@ import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeUp
@@ -159,6 +160,8 @@ class SessionPinsTest {
             compose.onAllNodes(strip, useUnmergedTree = true).fetchSemanticsNodes().size,
         )
         reachEdge(bottom = reversed)
+        verticalNode().performScrollToNode(hasText("pin-01"))
+        verticalNode().performScrollToNode(hasText("pin-00"))
         capture(case, "newest")
         assertEquals(0, compose.onAllNodes(strip, useUnmergedTree = true).fetchSemanticsNodes().size)
         assertUnreadDisplayed()

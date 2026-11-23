@@ -22,6 +22,9 @@ jobs:
     timeout-minutes: 55
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
+      GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: robolectric-warm-v1 # gitleaks:allow
     steps:
       - uses: actions/checkout@v4
         timeout-minutes: 5
@@ -40,11 +43,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: ./.github/actions/gradle-ci
         timeout-minutes: 10
         with:
-          gradle-version: "9.5.1"
-          cache-read-only: true
+          read-only: true
 
       - name: Resolve version
         timeout-minutes: 2
@@ -92,7 +94,7 @@ jobs:
       - name: Build signed APKs
         timeout-minutes: 15
         run: >-
-          gradle --no-daemon assembleRelease assembleM3
+          tools/ci/gradle-retry.sh --no-daemon assembleRelease assembleM3
           -PversionCode="$VERSION_CODE"
           -PversionName="$VERSION_NAME"
 

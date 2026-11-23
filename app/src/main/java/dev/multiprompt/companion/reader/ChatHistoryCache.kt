@@ -33,7 +33,8 @@ class ChatHistoryCache(
                     require(rows.zipWithNext().all { (a, b) -> a.offset <= b.offset })
                     ChatHistory(header.getString("sid"), header.getLong("inode"), header.getLong("offset"),
                         header.getLong("start"), header.getLong("mtime"), header.getString("probe"),
-                        header.getBoolean("more"), rows).also { history ->
+                        header.getBoolean("more"), rows,
+                        clearedAt = header.optDouble("cleared_at", 0.0)).also { history ->
                         require(history.sid.isNotEmpty() && history.start <= history.offset)
                         require(rows.all { it.offset >= history.start && it.end <= history.offset })
                     }
@@ -65,7 +66,7 @@ class ChatHistoryCache(
         }
         val header = JSONObject().put("version", 6).put("sid", history.sid).put("inode", history.inode)
             .put("offset", history.offset).put("start", start).put("mtime", history.mtime)
-            .put("probe", history.probe).put("more", history.more)
+            .put("probe", history.probe).put("more", history.more).put("cleared_at", history.clearedAt)
         val name = digest(sessionKey) + "-" + digest(history.sid) + ".jsonl"
         val target = File(directory, name)
         val temporary = File(directory, "$name.tmp")
@@ -77,7 +78,7 @@ class ChatHistoryCache(
             check(temporary.length() <= sessionBytes)
             check(temporary.renameTo(target))
             memory[sessionKey] = ChatHistory(history.sid, history.inode, history.offset, start, history.mtime,
-                history.probe, history.more, history.rows.takeLast(lines.size))
+                history.probe, history.more, history.rows.takeLast(lines.size), clearedAt = history.clearedAt)
         } finally {
             temporary.delete()
         }
