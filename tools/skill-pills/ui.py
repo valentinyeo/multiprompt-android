@@ -36,6 +36,17 @@ def outlines(image, box, inset):
     return pairs
 
 
+def composer_bounds(editor):
+    x1, y1, x2, y2 = bounds(editor)
+    actions = [bounds(child) for child in editor.iter('node')
+               if child.get('class') == 'android.widget.Button'
+               or child.get('content-desc') in ('Start dictation', 'Send prompt')]
+    if actions:
+        x2 = min(min(actions)[0] - 1, x2)
+    assert x1 < x2, 'Composer text area is missing'
+    return [x1, y1, x2, y2]
+
+
 def picker_swipe(xml):
     root = ET.parse(xml).getroot()
     parents = {child: parent for parent in root.iter() for child in parent}
@@ -91,7 +102,7 @@ def check(xml, screenshot, phase, text):
             label = '/pill-guide-01' if phase == 'picker' else '/review-native'
             assert any(node.get('text') == label for node in nodes), 'Skill picker is missing'
         else:
-            pairs = outlines(image, bounds(editor), True)
+            pairs = outlines(image, composer_bounds(editor), True)
             expected = phase in ('inserted', 'removable')
             assert bool(pairs) == expected, 'Composer skill pill outline is missing or survived removal'
             result['composer_pill'] = expected

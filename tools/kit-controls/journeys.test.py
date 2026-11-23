@@ -225,5 +225,89 @@ sudo() {
             self.assertEqual(any_pin.stdout.split(), ['135', '1475', '945', '1475'])
 
 
+    def test_scroll_to_newest_taps_the_control_whose_label_carries_a_count(self):
+        source = (SCRIPTS / 'drive.sh').read_text()
+        helpers = ''
+        for name in ('select_node() {', 'tap_node() {', 'scroll_to_newest() {'):
+            start = source.index(name)
+            helpers += source[start:source.index('\n}', start) + 2] + '\n'
+        newest = Path(__file__).parent / 'fixtures/soft3030-jump-to-newest-counted.xml'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'after.xml').write_text(
+                '<hierarchy rotation="0"><node class="android.widget.FrameLayout" package="dev.multiprompt.companion.debug" visible-to-user="true" bounds="[0,0][1080,1920]">'
+                '<node text="Received /model fable. Claude Fable 5.5 high" package="dev.multiprompt.companion.debug" bounds="[32,1640][1048,1790]" class="android.view.View" />'
+                '</node></hierarchy>'
+            )
+            script = """set -euo pipefail
+EVIDENCE="$1"
+snapshot="$2"
+scripts="$3"
+after="$4"
+session_name() { return 1; }
+sleep() { :; }
+dump_ui() { cp "$snapshot" "$EVIDENCE/current.xml"; }
+adb() { printf '%s\\n' "$*" >> "$EVIDENCE/actions"; snapshot="$after"; }
+""" + helpers + '\nscroll_to_newest\n'
+            result = subprocess.run(
+                ['bash', '-c', script, 'scroll-newest', directory, str(newest), str(SCRIPTS), str(root / 'after.xml')],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            actions = (root / 'actions').read_text().splitlines()
+            self.assertEqual(actions, ['shell input tap 540 745'])
+
+
+    def test_terminal_history_reopens_the_live_terminal_instead_of_scrolling_the_reader(self):
+        source = (SCRIPTS / 'drive.sh').read_text()
+        helpers = ''
+        for name in ('terminal_screen() {', 'open_shell_history() {', 'reopen_terminal_history() {'):
+            start = source.index(name)
+            helpers += source[start:source.index('\n    }\n', start) + len('\n    }\n')] + '\n'
+        fixtures = Path(__file__).parent / 'fixtures'
+        reader = fixtures / 'soft3030-reader-without-terminal.xml'
+        terminal = fixtures / 'soft3030-terminal-attached.xml'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for case, expected, returncode in (
+                ('reuse', [], 0),
+                ('reopen', ['Session actions', 'Open live terminal', 'Show keyboard'], 0),
+                ('lost', ['Session actions', 'Open live terminal', 'Show keyboard'] * 3, 1),
+            ):
+                with self.subTest(case=case):
+                    (root / 'actions').write_text('')
+                    script = """set -euo pipefail
+EVIDENCE="$1"
+scripts="$2"
+keyboard_state=open
+snapshot="$3"
+terminal="$4"
+case="$5"
+dump_ui() { cp "$snapshot" "$EVIDENCE/current.xml"; }
+wait_for_text() { dump_ui; }
+select_node() { dump_ui; }
+tap_text() { printf 'tap:%s\\n' "$1" >> "$EVIDENCE/actions"; if [[ "$1" == 'Open live terminal' && "$case" != lost ]]; then snapshot="$terminal"; fi; }
+tap_desc() { printf 'tap:%s\\n' "$1" >> "$EVIDENCE/actions"; }
+adb() { printf '%s\\n' "$*" >> "$EVIDENCE/actions"; }
+""" + helpers + '\nreopen_terminal_history\n'
+                    start = terminal if case == 'reuse' else reader
+                    result = subprocess.run(
+                        ['bash', '-c', script, 'terminal-history', directory, str(SCRIPTS), str(start), str(terminal), case],
+                        capture_output=True, text=True, timeout=30,
+                    )
+                    self.assertEqual(result.returncode, returncode, result.stderr)
+                    actions = [row for row in (root / 'actions').read_text().splitlines() if row.startswith('tap:')]
+                    self.assertEqual(actions, [f'tap:{label}' for label in expected], result.stderr)
+                    if returncode:
+                        self.assertIn('TERMINAL_SCREEN_LOST', result.stderr)
+                    else:
+                        self.assertEqual(result.stderr, '')
+        block = source[source.index("if [[ \"$feature\" == terminal.md ]]") : source.index("send_timing() {")]
+        scroll_loop = block[block.index('for attempt in {1..100}; do'):block.index('wait_for_text SHELL_HISTORY_0001')]
+        self.assertIn('if ! terminal_screen "$EVIDENCE/current.xml"; then\n                reopen_terminal_history\n                continue', scroll_loop)
+        self.assertNotIn('120\n', scroll_loop)
+        self.assertIn('sleep 1', scroll_loop)
+
+
 if __name__ == "__main__":
     unittest.main()

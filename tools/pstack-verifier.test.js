@@ -103,6 +103,29 @@ test('an empty red list and a missing one behave as before', () => {
   assert.match(noted.notes.join(' '), /No journey counts as red on main/);
 });
 
+test('a journey this PR changes blocks even while it is red on main', () => {
+  const ruled = verifier.applyRules({
+    modelVerdict: 'PASS', features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' },
+    redOnMain: ['session-pins.md'], redOnMainUrl: runUrl, direct: ['session-pins.md'],
+  });
+  assert.equal(ruled.verdict, 'FAIL');
+  assert.equal(ruled.journeys[0].direct, true);
+  assert.match(ruled.notes.join(' '), /Journey not passed: session-pins\.md \(failure\)\./);
+  assert.match(ruled.notes.join(' '), /This PR changes session-pins\.md, so being red on main \(nightly \S+\) does not exempt it/);
+  assert.doesNotMatch(ruled.notes.join(' '), /tracked as a ticket, not a PR block/);
+});
+
+test('a red-on-main journey the PR does not change stays a note', () => {
+  const ruled = verifier.applyRules({
+    modelVerdict: 'PASS', features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' },
+    redOnMain: ['session-pins.md'], redOnMainUrl: runUrl, direct: ['terminal.md'],
+  });
+  assert.equal(ruled.verdict, 'PASS+NOTES');
+  assert.equal(ruled.journeys[0].direct, false);
+  assert.match(ruled.notes.join(' '), /Already red on main .*session-pins\.md; tracked as a ticket, not a PR block\./);
+  assert.equal(verifier.applyRules({ features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' }, redOnMain: ['session-pins.md'], direct: [] }).verdict, 'PASS+NOTES');
+});
+
 test('only journeys that did not pass are written for the verify chat', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'red-journeys-'));
   try {
@@ -679,6 +702,42 @@ else console.log(JSON.stringify({ number: 1, title: 'Tidy the checks', body: 'to
     assert.equal(run.status, 0, run.stderr);
     assert.match(run.stdout, /^pstack-verifier: PASS\+NOTES @ /m);
     assert.match(run.stdout, /Head journey results decide this check\./);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('the judge blocks a changed journey that is red on main', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'pstack-judge-direct-'));
+  try {
+    const recipe = '.claude/skills/verify-multiprompt-android/features/session-pins.md';
+    fs.writeFileSync(path.join(directory, 'change.diff'), `diff --git a/${recipe} b/${recipe}\n+Pin the row.\n`);
+    fs.writeFileSync(path.join(directory, 'gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+if (args[0] === 'run' && args[1] === 'list') console.log(JSON.stringify([{ databaseId: '42', url: '${runUrl}' }]));
+else if (args[0] === 'run' && args[1] === 'download') {
+  const out = args[args.indexOf('-D') + 1];
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(path.join(out, 'red-journeys.json'), JSON.stringify(['session-pins.md']));
+}
+else if (args.includes('Accept: application/vnd.github.diff')) process.stdout.write(fs.readFileSync('${path.join(directory, 'change.diff').replace(/\\/g, '\\\\')}', 'utf8'));
+else if (args.some(arg => String(arg).includes('/jobs?'))) console.log(JSON.stringify([{ jobs: [{ name: 'journey session-pins.md / verify', status: 'completed', conclusion: 'failure' }] }]));
+else console.log(JSON.stringify({ number: 1, title: 'IGSH-3028: Session phone tests read the screen correctly again', body: 'Fixes the session pins journey.', head: { sha: '${sha}' } }));
+`, { mode: 0o755 });
+    const run = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], {
+      cwd: directory,
+      encoding: 'utf8',
+      env: {
+        PATH: `${directory}:${process.env.PATH}`, PICK_RESULT: 'success', REPO: 'a/b', PR_NUMBER: '1',
+        HEAD_SHA: sha, RUN_ID: '1', RUN_URL: runUrl, FEATURES: '["session-pins.md"]', CHANGED_OUTCOMES: '[]', VERIFIER_DRY: '1',
+        COVERAGE_REPORT: path.join(directory, 'coverage.json'),
+      },
+    });
+    assert.equal(run.status, 1, run.stderr);
+    assert.match(run.stdout, /^pstack-verifier: FAIL @ /m);
+    assert.match(run.stdout, /This PR changes session-pins\.md, so being red on main/);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

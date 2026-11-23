@@ -253,20 +253,25 @@ function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {})
   return ids.some(id => saysBug(tickets[id]));
 }
 
-function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '' }) {
+function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '', direct = [] }) {
   const notes = [];
   let verdict = 'PASS';
   const knownRed = Array.isArray(redOnMain) ? redOnMain : [];
+  const changedDirect = new Set(Array.isArray(direct) ? direct : []);
   const journeys = features.map(feature => {
     const conclusion = conclusions?.[feature] ?? null;
     const passed = conclusion === 'success';
-    return { feature, conclusion, passed, redOnMain: !passed && knownRed.includes(feature) };
+    return { feature, conclusion, passed, redOnMain: !passed && knownRed.includes(feature), direct: changedDirect.has(feature) };
   });
-  const alreadyRed = journeys.filter(journey => journey.redOnMain);
-  const failed = journeys.filter(journey => !journey.passed && !journey.redOnMain);
+  const alreadyRed = journeys.filter(journey => journey.redOnMain && !journey.direct);
+  const failed = journeys.filter(journey => !journey.passed && (!journey.redOnMain || journey.direct));
   if (failed.length) {
     verdict = 'FAIL';
     notes.push(`Journey not passed: ${failed.map(journey => `${journey.feature} (${journey.conclusion ?? 'no result'})`).join(', ')}.`);
+  }
+  const blockedRed = failed.filter(journey => journey.redOnMain);
+  if (blockedRed.length) {
+    notes.push(`This PR changes ${blockedRed.map(journey => journey.feature).join(', ')}, so being red on main (${redOnMainUrl ? `nightly ${redOnMainUrl}` : 'nightly run link unavailable'}) does not exempt it: fix its own journey before merge.`);
   }
   for (const journey of alreadyRed) {
     notes.push(`Already red on main (${redOnMainUrl ? `nightly ${redOnMainUrl}` : 'nightly run link unavailable'}): ${journey.feature}; tracked as a ticket, not a PR block.`);
@@ -707,6 +712,7 @@ async function judge(env) {
   const ruled = applyRules({
     features, conclusions, notDrivenReason: env.PICK_REASON, smoke, featureProof,
     redOnMain: red.journeys, redOnMainUrl: red.url, redOnMainNote: red.note,
+    direct: coverageGate.selectionForChange(diff).direct,
   });
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {
