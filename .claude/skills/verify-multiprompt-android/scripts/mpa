@@ -22,7 +22,7 @@ REMOTE_DUMP = "/sdcard/verify-ui.xml"
 DEFAULT_PACKAGE = "dev.multiprompt.companion.debug"
 ACTIVITY = "dev.multiprompt.companion.MainActivity"
 KEYS = {"back": "KEYCODE_BACK", "home": "KEYCODE_HOME", "enter": "KEYCODE_ENTER", "delete": "KEYCODE_DEL", "wakeup": "KEYCODE_WAKEUP"}
-SELECTOR_MODES = ["text", "desc", "contains", "absent", "lacks", "text-containing", "version", "field", "focused-field", "editor", "editor-value", "field-value", "checked", "unchecked", "visible", "current", "draft", "desc-absent", "key-row", "scroll-back", "terminal"]
+SELECTOR_MODES = ["text", "desc", "desc-prefix", "contains", "absent", "lacks", "text-containing", "version", "field", "focused-field", "editor", "editor-value", "field-value", "checked", "unchecked", "visible", "current", "draft", "desc-absent", "key-row", "scroll-back", "terminal"]
 EVIDENCE_HINT = "Set EVIDENCE to the run's evidence directory, for example: export EVIDENCE=$PWD/verification-evidence"
 RUNNER_HINT = "Run it on a GitHub runner through verify.yml or pstack-verifier.yml. This server never boots the emulator."
 
@@ -168,6 +168,8 @@ def resolve(root, mode, value, extra=(), inside=None):
             matches.append(node)
         elif mode in ("desc", "checked", "unchecked", "key-row") and value == node.get("content-desc"):
             matches.append(node)
+        elif mode == "desc-prefix" and (node.get("content-desc") or "").startswith(value):
+            matches.append(node)
         elif mode in ("editor", "editor-value") and node.get("class") == "android.widget.EditText" and node.get("package") == application:
             matches.append(node)
         elif mode == "field-value" and node.get("class") == "android.widget.EditText" and node.get("focused") == "true":
@@ -264,7 +266,7 @@ def resolve(root, mode, value, extra=(), inside=None):
     else:
         stdout = f"{(numbers[0] + numbers[2]) // 2} {(numbers[1] + numbers[3]) // 2}"
     payload = {"mode": mode, "value": value, "matches": 1, "node": node_payload(node), "stdout": stdout, "message": stdout}
-    if mode in ("text", "desc", "field"):
+    if mode in ("text", "desc", "desc-prefix", "field"):
         payload["point"] = point(node.get("bounds"))
     return payload
 

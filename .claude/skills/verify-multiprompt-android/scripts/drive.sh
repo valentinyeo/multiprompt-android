@@ -265,8 +265,8 @@ source "$scripts/real-chat-screen.sh"
 scroll_to_newest() {
     local attempt
     for attempt in {1..8}; do
-        if select_node desc 'Jump to newest' >/dev/null 2>&1; then
-            tap_desc 'Jump to newest'
+        if select_node desc-prefix 'Jump to newest' >/dev/null 2>&1; then
+            tap_node desc-prefix 'Jump to newest'
             sleep 1
         else
             return 0
@@ -2585,6 +2585,36 @@ if [[ "$feature" == session-reader.md ]]; then
 fi
 if [[ "$feature" == terminal.md ]]; then
     adb shell settings put secure show_ime_with_hard_keyboard 1
+    terminal_screen() {
+        local path=${1:-}
+        if [[ -z "$path" ]]; then
+            dump_ui || return 1
+            path="$EVIDENCE/current.xml"
+        fi
+        python3 "$scripts/ui.py" "$path" desc 'Back to the live view' >/dev/null 2>&1
+    }
+    open_shell_history() {
+        adb shell input swipe 200 800 200 400 600
+        wait_for_text 'SHELL_HISTORY_'
+        select_node desc 'Jump to live'
+    }
+    reopen_terminal_history() {
+        local attempt
+        for attempt in {1..3}; do
+            if terminal_screen; then return 0; fi
+            tap_desc 'Session actions'
+            tap_text 'Open live terminal'
+            wait_for_text 'SSH · tmux attached' || continue
+            if [[ "${keyboard_state:-closed}" == open ]]; then tap_desc 'Show keyboard'; fi
+            open_shell_history
+            if terminal_screen; then
+                printf 'TERMINAL_HISTORY_REOPENED:%s\n' "$attempt" >> "$EVIDENCE/terminal-history-reopened.txt"
+                return 0
+            fi
+        done
+        printf 'TERMINAL_SCREEN_LOST: the live terminal is gone and could not be reopened; the scrollback proof never ran on the terminal\n' >&2
+        return 1
+    }
     tap_desc 'Session actions'
     tap_text 'Open live terminal'
     wait_for_text 'SSH · tmux attached'
@@ -2609,19 +2639,22 @@ if [[ "$feature" == terminal.md ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-before.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-before.txt"
         fi
-        adb shell input swipe 200 800 200 400 600
-        wait_for_text 'SHELL_HISTORY_'
-        select_node desc 'Jump to live'
+        open_shell_history
         if [[ "$keyboard_state" == open ]]; then
             adb shell dumpsys input_method > "$EVIDENCE/keyboard-history.txt"
             grep -F 'mInputShown=true' "$EVIDENCE/keyboard-history.txt"
         fi
         for attempt in {1..100}; do
             dump_ui
+            if ! terminal_screen "$EVIDENCE/current.xml"; then
+                reopen_terminal_history
+                continue
+            fi
             if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains SHELL_HISTORY_0001 >/dev/null 2>&1; then break; fi
             read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
             for swipe in 1 2 3; do
-                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 120
+                adb shell input swipe "$x1" "$y1" "$x2" "$y2" 400
+                sleep 1
             done
         done
         wait_for_text SHELL_HISTORY_0001
