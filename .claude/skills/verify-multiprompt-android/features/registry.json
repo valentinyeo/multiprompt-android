@@ -11,15 +11,18 @@
         "prerequisites": [],
         "driver": true,
         "scripts": [
-          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-fixture.py"
         ]
       },
       "outcomes": [
-        "ai.switch"
+        "ai.switch",
+        "chat.pi-login"
       ],
       "evidence": {
         "ai-switch-state.json": 3500,
-        "ai-switch-host.json": 3000
+        "ai-switch-host.json": 3000,
+        "ai-switch-pi-login.json": 2000
       }
     },
     "app-name.md": {
@@ -1414,6 +1417,14 @@
       "sideEffect": true,
       "match": [
         "switchAi|SwitchAi|Switch AI|switchAgent|SwitchAgent|host_switch_|HOST_SWITCH_|switch_ai"
+      ]
+    },
+    "chat.pi-login": {
+      "description": "A logged-out Pi chat shows Pi's sign-in prompt and link on the phone, the prompt goes stale once Pi logs in, and later replies arrive.",
+      "journey": "ai-switch.md",
+      "sideEffect": false,
+      "match": [
+        "PiLoginPrompt"
       ]
     },
     "pi.model-switch": {

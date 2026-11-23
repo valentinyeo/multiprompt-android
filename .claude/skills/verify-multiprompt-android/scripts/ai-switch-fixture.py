@@ -78,6 +78,24 @@ def pi():
         if request.get('type') != 'prompt':
             continue
         text = request['message']
+        if text == 'PI_LOGIN_PROMPT_2276':
+            emit(dict(type='response', command='prompt', id=request['id'], success=True))
+            emit(dict(type='extension_ui_request', id='pi-login-2276', method='open_url',
+                url='https://pi.example/verify-device', instructions='Sign in to Pi to continue'))
+            continue
+        if text == 'PI_LOGIN_DONE_2276':
+            emit(dict(type='response', command='prompt', id=request['id'], success=True))
+            emit(dict(type='response', command='login', success=True, data=dict(providerId='anthropic')))
+            continue
+        if text == 'PI_LOGIN_AFTER_2276':
+            reply = 'PI_REPLY_PI_LOGIN_AFTER_2276'
+            emit(dict(type='response', command='prompt', id=request['id'], success=True))
+            emit(dict(type='agent_start'))
+            emit(dict(type='message_start'))
+            emit(dict(type='message_update', assistantMessageEvent=dict(type='text_end', contentIndex=0, content=reply)))
+            emit(dict(type='message_end', message=dict(role='assistant', stopReason='stop')))
+            emit(dict(type='agent_settled'))
+            continue
         with (HOME / 'ai-switch-provider-receipts.jsonl').open('a') as output:
             output.write(json.dumps(dict(provider='pi', sid=sid, id=request['id'], text=text)) + '\n')
         handover = 'This chat ran on Claude until now and continues on Pi.' in text
