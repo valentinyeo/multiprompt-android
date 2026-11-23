@@ -139,11 +139,11 @@ class BoardFeedbackTest(unittest.TestCase):
             images.append((path, data))
         self.assertEqual(len(images[3][1]), 8 * 1024 * 1024)
         args = [part for path, _ in images for part in ('--attach', str(path))]
-        self.assertIn('Feedback submitted:', self.run_cli('four screenshots', *args[:4]).stdout)
-        self.assertIn('Feedback voted:', self.run_cli('four screenshots', *args[:4]).stdout)
+        self.assertIn('filed ', self.run_cli('four screenshots', *args[:4]).stdout)
+        self.assertIn('filed ', self.run_cli('four screenshots', *args[:4]).stdout)
         self.assertEqual(len(self.read_board()['tasks'][0]['attachments']), 2)
-        self.assertIn('Feedback voted:', self.run_cli('four screenshots', *args).stdout)
-        self.assertIn('Feedback voted:', self.run_cli('four screenshots', *args).stdout)
+        self.assertIn('filed ', self.run_cli('four screenshots', *args).stdout)
+        self.assertIn('filed ', self.run_cli('four screenshots', *args).stdout)
         attachments = self.read_board()['tasks'][0]['attachments']
         self.assertEqual(len(attachments), 4)
         self.assertEqual({item['fileName'] for item in attachments},
@@ -157,11 +157,11 @@ class BoardFeedbackTest(unittest.TestCase):
         image.write_bytes(data)
         digest = hashlib.sha256(data).hexdigest()
         first = self.run_cli('screenshots', '--attach', str(image), FAKE_LOST_UPLOAD_RESPONSE='1')
-        self.assertIn('Board submission not confirmed', first.stdout)
-        self.assertNotIn('Feedback submitted:', first.stdout)
+        self.assertIn('queued, will be filed', first.stdout)
+        self.assertNotIn('filed https://', first.stdout)
         for _ in range(2):
             result = self.run_cli('screenshots', '--attach', str(image), '--attach', str(image))
-            self.assertIn('Feedback voted:', result.stdout)
+            self.assertIn('filed ', result.stdout)
         board = self.read_board()
         self.assertEqual(len(board['tasks']), 1)
         self.assertEqual(len(board['tasks'][0]['attachments']), 1)
@@ -178,17 +178,17 @@ class BoardFeedbackTest(unittest.TestCase):
         image = self.work / 'image.png'
         image.write_bytes(self.png())
         result = self.run_cli('new attachment', '--attach', str(image))
-        self.assertIn('Feedback submitted:', result.stdout)
-        self.assertIn('Feedback submitted:', self.run_cli('existing attachment').stdout)
+        self.assertIn('filed ', result.stdout)
+        self.assertIn('filed ', self.run_cli('existing attachment').stdout)
         failed = self.run_cli('existing attachment', '--attach', str(image), FAKE_FAIL_UPLOAD='1')
-        self.assertIn('Board submission not confirmed', failed.stdout)
-        self.assertNotIn('Feedback voted:', failed.stdout)
+        self.assertIn('queued, will be filed', failed.stdout)
+        self.assertNotIn('filed https://', failed.stdout)
         failed = self.run_cli('existing attachment', '--attach', str(image), FAKE_FAIL_READBACK='1')
-        self.assertIn('Board submission not confirmed', failed.stdout)
+        self.assertIn('queued, will be filed', failed.stdout)
         failed = self.run_cli('existing attachment', '--attach', str(image), FAKE_FAIL_AFTER_UPLOAD='1')
-        self.assertIn('Board submission not confirmed', failed.stdout)
-        self.assertNotIn('Feedback voted:', failed.stdout)
-        self.assertIn('Feedback voted:', self.run_cli('existing attachment', '--attach', str(image)).stdout)
+        self.assertIn('queued, will be filed', failed.stdout)
+        self.assertNotIn('filed https://', failed.stdout)
+        self.assertIn('filed ', self.run_cli('existing attachment', '--attach', str(image)).stdout)
         self.assertEqual(len(self.read_board()['tasks'][1]['attachments']), 1)
 
     def test_invalid_attachments_rejected_before_board(self):
@@ -230,11 +230,11 @@ class BoardFeedbackTest(unittest.TestCase):
     def test_create_repeat_other_agent_and_safe_metadata(self):
         first = self.run_cli('Browser  screenshots', '--why', 'Capture is slow')
         self.assertEqual(first.returncode, 0, first.stderr)
-        self.assertIn('Feedback submitted:', first.stdout)
+        self.assertIn('filed ', first.stdout)
         second = self.run_cli(' browser screenshots ', token='credential-two')
         again = self.run_cli('BROWSER screenshots', token='credential-two')
-        self.assertIn('Feedback voted:', second.stdout)
-        self.assertIn('Feedback voted:', again.stdout)
+        self.assertIn('filed ', second.stdout)
+        self.assertIn('filed ', again.stdout)
         board = self.read_board()
         self.assertEqual(len(board['tasks']), 1)
         task = board['tasks'][0]
@@ -259,12 +259,12 @@ class BoardFeedbackTest(unittest.TestCase):
         state = dict(tasks=[self.task(1, 'Multibot wish: capture', ('Other', 'Agent Feedback')), self.task(2, 'Multibot wish: capture more'), self.task(3, 'Multibot wish: capture', status='Archive')], comments={})
         self.write_board(state)
         result = self.run_cli('capture')
-        self.assertEqual(result.stdout.strip(), 'Feedback voted: https://app.hypertask.ai/detail/project-2060/3')
+        self.assertEqual(result.stdout.strip(), 'filed https://app.hypertask.ai/detail/project-2060/3')
         self.assertEqual(len(self.read_board()['tasks']), 3)
         state['tasks'].append(self.task(4, 'Multibot wish: deleted', status='Deleted'))
         self.write_board(state)
         result = self.run_cli('deleted')
-        self.assertIn('Board submission not confirmed', result.stdout)
+        self.assertIn('queued, will be filed', result.stdout)
         self.assertEqual(len(self.read_board()['tasks']), 4)
 
     def test_weekly_rank_counts_distinct_agents_and_sorts_ties(self):
@@ -283,11 +283,11 @@ class BoardFeedbackTest(unittest.TestCase):
 
     def test_failed_vote_after_creation_is_not_reported_as_success_and_retry_converges(self):
         failed = self.run_cli('a safe feature', FAKE_FAIL_VOTE='1')
-        self.assertIn('Board submission not confirmed', failed.stdout)
-        self.assertNotIn('Feedback submitted:', failed.stdout)
+        self.assertIn('queued, will be filed', failed.stdout)
+        self.assertNotIn('filed https://', failed.stdout)
         self.assertEqual(len(self.read_board()['tasks']), 1)
         retry = self.run_cli('a safe feature')
-        self.assertIn('Feedback voted:', retry.stdout)
+        self.assertIn('filed ', retry.stdout)
         self.assertEqual(len(self.read_board()['tasks']), 1)
         comments = self.read_board()['comments']
         self.assertEqual(len(comments), 1)
@@ -297,7 +297,7 @@ class BoardFeedbackTest(unittest.TestCase):
         with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
             results = list(pool.map(lambda _: self.run_cli('concurrent capability'), range(3)))
         results.append(self.run_cli('concurrent capability'))
-        self.assertTrue(all('Feedback ' in result.stdout and 'Board submission not confirmed' not in result.stdout for result in results))
+        self.assertTrue(all(result.stdout.startswith('filed ') and 'queued, will be filed' not in result.stdout for result in results))
         board = self.read_board()
         self.assertEqual(len(board['tasks']), 1)
         self.assertIn(board['tasks'][0]['ticketNumber'], board['comments'])
@@ -326,16 +326,38 @@ class BoardFeedbackTest(unittest.TestCase):
 
     def test_missing_token_does_not_invoke_default_login(self):
         result = self.run_cli('a capability', token=None)
-        self.assertIn('Board submission not confirmed', result.stdout)
+        self.assertIn('queued, will be filed', result.stdout)
         self.assertFalse(self.calls.exists())
         self.assertTrue(self.log.exists())
+        queue = self.home / 'state/multibot/feedback-board-queue.jsonl'
+        self.assertTrue(queue.exists())
+
+    def test_no_token_queue_and_drain_files(self):
+        result = self.run_cli('drainable capability', token=None)
+        self.assertIn('queued, will be filed', result.stdout)
+        queue = self.home / 'state/multibot/feedback-board-queue.jsonl'
+        self.assertEqual(len(queue.read_text().splitlines()), 1)
+        drain = self.run_cli('--drain')
+        self.assertIn('filed ', drain.stdout)
+        self.assertEqual(len(self.read_board()['tasks']), 1)
+        self.assertFalse(queue.read_text().strip())
+
+    def test_board_error_keeps_queued_item(self):
+        result = self.run_cli('retry later', FAKE_FAIL='1')
+        self.assertIn('queued, will be filed', result.stdout)
+        queue = self.home / 'state/multibot/feedback-board-queue.jsonl'
+        self.assertEqual(len(queue.read_text().splitlines()), 1)
+        drain = self.run_cli('--drain', FAKE_FAIL='1')
+        self.assertNotIn('filed https://', drain.stdout)
+        self.assertEqual(len(queue.read_text().splitlines()), 1)
+        self.assertEqual(self.run_cli('--drain').stdout.count('filed '), 1)
 
     def test_missing_token_human_failure_malformed_and_private_text_stay_local(self):
         for token, extra, wish in [(None, {}, 'no token'), ('agent-one', {'FAKE_HUMAN': '1'}, 'human login'), ('agent-one', {'FAKE_FAIL': '1'}, 'failed call'), ('agent-one', {'FAKE_MALFORMED': '1'}, 'bad reply'), ('agent-one', {}, 'open /private/notes')]:
             with self.subTest(wish=wish):
                 result = self.run_cli(wish, token=token, **extra)
                 self.assertEqual(result.returncode, 0)
-                self.assertIn('Board submission not confirmed', result.stdout)
+                self.assertIn('queued, will be filed', result.stdout)
                 self.assertNotIn('agent-one', result.stdout + result.stderr)
         self.assertEqual(self.read_board()['tasks'], [])
         self.assertTrue(self.log.exists())
@@ -348,7 +370,7 @@ class BoardFeedbackTest(unittest.TestCase):
         for session, wish in [('k', 'keyboard shortcut'), ('browser', 'browser capture')]:
             with self.subTest(session=session):
                 result = self.run_cli(wish, MULTIBOT_SESSION=session)
-                self.assertIn('Feedback submitted:', result.stdout)
+                self.assertIn('filed ', result.stdout)
         board = self.read_board()
         self.assertEqual(len(board['tasks']), 2)
         for private in ('private-workspace', 'private-chat', str(self.home)):
@@ -358,7 +380,7 @@ class BoardFeedbackTest(unittest.TestCase):
 
     def test_description_escapes_deliberate_input(self):
         result = self.run_cli('capture <screen>', '--why', 'Less <work> & time')
-        self.assertIn('Feedback submitted:', result.stdout)
+        self.assertIn('filed ', result.stdout)
         tasks = self.read_board()['tasks']
         self.assertEqual(len(tasks), 1)
         self.assertIn('capture &lt;screen&gt;', tasks[0]['description'])

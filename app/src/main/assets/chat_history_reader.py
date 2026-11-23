@@ -1673,20 +1673,46 @@ def pin_hosted_claude(q, agent, as_owner=False):
     return q
 
 
+def hosted_claude_transcript_sid(sid, config):
+    native = config.get("native_session") if isinstance(config, dict) else None
+    if isinstance(native, str) and SESSION_ID.fullmatch(native):
+        return native
+    try:
+        with host_paths("claude", sid)["log"].open("rb") as source:
+            end = source.seek(0, os.SEEK_END)
+            pending = b""
+            while end:
+                count = min(end, 65536)
+                end -= count
+                source.seek(end)
+                lines = (source.read(count) + pending).split(b"\n")
+                pending = lines.pop(0) if end else b""
+                for raw in reversed(lines):
+                    event = load_line(raw)
+                    detail = event.get("detail") if isinstance(event, dict) and event.get("event") == "init" else None
+                    native = detail.get("session") if isinstance(detail, dict) else None
+                    if isinstance(native, str) and SESSION_ID.fullmatch(native):
+                        return native
+    except OSError:
+        pass
+    return sid
+
+
 def resolve_response_path(q, source=None, as_owner=False):
     rid = q["id"]
     agent = q.get("provider") if q.get("provider") in HOST_PROVIDERS else "codex" if q["codex"] else "claude"
     sid, tmux, cwd = q["sid"], q["tmux"], q["cwd"]
-    hosted = host_config(agent, sid) if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else None
-    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
-        cwd = q["cwd"] = hosted["cwd"]
     if (not isinstance(rid, int) or rid < 0 or
             sid and not SESSION_ID.fullmatch(sid) or
-            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux or
-            cwd and not Path(cwd).is_absolute()):
+            tmux and not TMUX_NAME.fullmatch(tmux) or not sid and not tmux):
         raise ValueError("invalid identity")
     if not sid and tmux and not as_owner:
         sid = q["sid"] = host_sid_for_tmux(agent, tmux) or ""
+    hosted = host_config(agent, sid) if sid else None
+    if isinstance(hosted, dict) and isinstance(hosted.get("cwd"), str) and Path(hosted["cwd"]).is_absolute():
+        cwd = q["cwd"] = hosted["cwd"]
+    if cwd and not Path(cwd).is_absolute():
+        raise ValueError("invalid identity")
     if hosted and host_session_state(agent, sid).get("display_history"):
         history = host_paths(agent, sid)["history"]
         if history.is_file():
@@ -1702,6 +1728,29 @@ def resolve_response_path(q, source=None, as_owner=False):
     pin_hosted_claude(q, agent, as_owner)
     sid = q["sid"]
     follow = bool(tmux and (q.get("follow") or agent == "codex"))
+    if agent == "claude" and sid and not as_owner and host_dispatch_switch(agent, sid):
+        native = hosted_claude_transcript_sid(sid, hosted)
+        if native != sid:
+            owner = conversation_owner(cwd)
+            denied = False
+            for home in ([None, owner[1]] if owner and owner[1] != HOME else [None]):
+                try:
+                    path = conversation_path(agent, native, cwd, home)
+                except PermissionError:
+                    path, denied = None, True
+                if path is not None:
+                    return agent, sid, path, None
+            if denied and owner and source is not None:
+                query = dict(q, sid=native, follow=False,
+                             cached_sid=native if q.get("cached_sid") == sid else q.get("cached_sid", ""))
+                wire = owner_response(query, owner, source)
+                operation = "search" if "search" in q else "history"
+                prefix = f"@mp\t{rid}\t{operation}\tok\t{native}\t"
+                if wire.startswith(prefix):
+                    wire = f"@mp\t{rid}\t{operation}\tok\t{sid}\t" + wire[len(prefix):]
+                return agent, sid, None, wire
+            wire = missing_response(q, "permission denied") if denied else empty_history_response(q, sid, tmux)
+            return agent, sid, None, wire
     denied = False
     delegated = None
     try:
@@ -1715,15 +1764,6 @@ def resolve_response_path(q, source=None, as_owner=False):
         except PermissionError:
             hosted = None
         return (agent, sid, hosted, None) if hosted is not None else (agent, sid, None, empty_history_response(q, sid, tmux, agent))
-    if agent == "claude" and path is not None and sid and not as_owner and host_dispatch_switch(agent, sid):
-        native = host_session_state(agent, sid).get("native_session")
-        if isinstance(native, str) and SESSION_ID.fullmatch(native) and native != sid:
-            try:
-                cleared = conversation_path(agent, native, cwd)
-            except PermissionError:
-                cleared = None
-            if cleared is not None:
-                path = cleared
     owner = conversation_owner(cwd) if agent == "claude" else None
     if follow and owner and owner[1] != HOME and source is not None and not as_owner:
         delegated = owner_response(dict(q, sid=""), owner, source)
@@ -5542,6 +5582,9 @@ def host_claude_event(provider, sid, tmux, session, event):
                              dict(requested=settings["model"], actual=actual or "unknown"))
             if isinstance(event.get("session_id"), str):
                 session["state"]["native_session"] = event["session_id"]
+                config = host_config(provider, sid)
+                if config is not None:
+                    host_write(host_paths(provider, sid)["config"], dict(config, native_session=event["session_id"]))
             host_state_write(provider, sid, session["state"])
             host_log(provider, sid, "init", dict(session=event.get("session_id")))
             host_event(provider, sid, tmux, session, "host.status", dict(state="ready"))
@@ -8868,19 +8911,42 @@ if __name__ == '__main__':
                             return stream.read(limit + 1)
                     finally:
                         _os.close(fd)
-                def publish(name, data):
-                    fd, path = _tempfile.mkstemp(prefix='.tmp-', dir=_os.path.join(home, '.multiprompt-runtime'))
+                runtime_root = _os.path.join(home, '.multiprompt-runtime')
+                temporary_prefix = '.tmp-'
+                TOOLS = (
+                    ('mp-send', 'mp-send', 'MP_SEND_SOURCE'),
+                    ('multibot-feedback', 'multibot-feedback', 'FEEDBACK_SOURCE'),
+                    ('mp-helper', 'mp-helper', 'MP_HELPER_SOURCE'),
+                    ('mp-shell', 'mp-shell', 'MP_SHELL_SOURCE'),
+                    ('mp-sessions', 'mp-sessions', 'MP_SESSIONS_SOURCE'),
+                    ('mp-fresh', 'mp-fresh', 'MP_FRESH_SOURCE'),
+                    ('mp-zsb', 'mp-zsb', 'ZSB_SOURCE'),
+                    ('mp-layout', 'mp-layout.mjs', 'MP_LAYOUT_SOURCE'),
+                )
+
+                def remove_stale_temporaries():
+                    for entry in _os.listdir(runtime_root):
+                        if entry.startswith(temporary_prefix):
+                            try:
+                                _os.unlink(entry, dir_fd=directory)
+                            except FileNotFoundError:
+                                pass
+
+                def publish(name, data, mode=0o600):
+                    fd, path = _tempfile.mkstemp(prefix=temporary_prefix, dir=runtime_root)
                     try:
                         with _os.fdopen(fd, 'wb') as stream:
+                            _os.fchmod(stream.fileno(), mode)
                             stream.write(data)
                             stream.flush()
                             _os.fsync(stream.fileno())
                         _os.replace(path, name, dst_dir_fd=directory)
                         _os.fsync(directory)
                     finally:
-                        if _os.path.exists(path):
+                        try:
                             _os.unlink(path)
-                runtime_root = _os.path.join(home, '.multiprompt-runtime')
+                        except FileNotFoundError:
+                            pass
 
                 def relink(name, target):
                     path = _os.path.join(runtime_root, name)
@@ -8890,75 +8956,29 @@ if __name__ == '__main__':
                         pass
                     _os.symlink(target, path)
 
-                def publish_named_tool(name, payload):
-                    digest = _hashlib.sha256(payload).hexdigest()
-                    stem = digest + '-' + name
-                    publish(stem, payload)
+                def publish_named_tool(name, suffix, payload):
+                    stem = _hashlib.sha256(payload).hexdigest() + '-' + suffix
+                    publish(stem, payload, 0o700)
                     relink(name, stem)
-                    return stem
 
                 def publish_tools(data):
+                    try:
+                        remove_stale_temporaries()
+                    except OSError:
+                        pass
                     try:
                         reader_digest = _hashlib.sha256(data).hexdigest()
                         publish(reader_digest + '.py', data)
                         relink('reader.py', reader_digest + '.py')
                     except OSError:
                         pass
-                    mp_send_source = globals().get('MP_SEND_SOURCE')
-                    if isinstance(mp_send_source, str) and mp_send_source:
+                    for name, suffix, variable in TOOLS:
+                        tool = globals().get(variable)
+                        if not isinstance(tool, str) or not tool:
+                            continue
                         try:
-                            published = publish_named_tool('mp-send', _base64.b64decode(mp_send_source))
-                            _os.chmod(published, 0o700, dir_fd=directory)
+                            publish_named_tool(name, suffix, _base64.b64decode(tool))
                         except (ValueError, OSError):
-                            pass
-                    feedback_source = globals().get('FEEDBACK_SOURCE')
-                    if isinstance(feedback_source, str) and feedback_source:
-                        try:
-                            publish_named_tool('multibot-feedback', _base64.b64decode(feedback_source))
-                            _os.chmod('multibot-feedback', 0o700, dir_fd=directory)
-                        except (ValueError, OSError, NotImplementedError):
-                            pass
-                    helper_source = globals().get('MP_HELPER_SOURCE')
-                    if isinstance(helper_source, str) and helper_source:
-                        try:
-                            publish_named_tool('mp-helper', _base64.b64decode(helper_source))
-                            _os.chmod('mp-helper', 0o700, dir_fd=directory)
-                        except (ValueError, OSError, NotImplementedError):
-                            pass
-                    shell_source = globals().get('MP_SHELL_SOURCE')
-                    if isinstance(shell_source, str) and shell_source:
-                        try:
-                            publish_named_tool('mp-shell', _base64.b64decode(shell_source))
-                            _os.chmod('mp-shell', 0o700, dir_fd=directory)
-                        except (ValueError, OSError, NotImplementedError):
-                            pass
-                    sessions_source = globals().get('MP_SESSIONS_SOURCE')
-                    if isinstance(sessions_source, str) and sessions_source:
-                        try:
-                            publish_named_tool('mp-sessions', _base64.b64decode(sessions_source))
-                            _os.chmod('mp-sessions', 0o700, dir_fd=directory)
-                        except (ValueError, OSError, NotImplementedError):
-                            pass
-                    layout_source = globals().get('MP_LAYOUT_SOURCE')
-                    if isinstance(layout_source, str) and layout_source:
-                        try:
-                            relink('mp-layout', publish_named_tool('mp-layout.mjs', _base64.b64decode(layout_source)))
-                            _os.chmod('mp-layout', 0o700, dir_fd=directory)
-                        except (ValueError, OSError, NotImplementedError):
-                            pass
-                    fresh_source = globals().get('MP_FRESH_SOURCE')
-                    if isinstance(fresh_source, str) and fresh_source:
-                        try:
-                            published = publish_named_tool('mp-fresh', _base64.b64decode(fresh_source))
-                            _os.chmod(published, 0o700, dir_fd=directory)
-                        except (ValueError, OSError):
-                            pass
-                    zsb_source = globals().get('ZSB_SOURCE')
-                    if isinstance(zsb_source, str) and zsb_source:
-                        try:
-                            publish_named_tool('mp-zsb', _base64.b64decode(zsb_source))
-                            _os.chmod('mp-zsb', 0o700, dir_fd=directory)
-                        except (ValueError, OSError, NotImplementedError):
                             pass
                 missing = object()
                 try:

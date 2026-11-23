@@ -1,0 +1,1 @@
+Installed chat tools are always runnable
