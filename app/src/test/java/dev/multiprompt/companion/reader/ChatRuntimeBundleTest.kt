@@ -1,6 +1,5 @@
 package dev.multiprompt.companion.reader
 
-import dev.multiprompt.companion.model.AgentKind
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.attribute.PosixFilePermission
@@ -17,22 +16,7 @@ class ChatRuntimeBundleTest {
     private val reader = sequenceOf(File("src/main/assets/chat_history_reader.py"),
         File("app/src/main/assets/chat_history_reader.py")).first { it.isFile }.readBytes()
 
-    private fun bundle(): ByteArray {
-        val mpSend = sequenceOf(File("src/main/assets/mp_send.py"), File("app/src/main/assets/mp_send.py"))
-            .first { it.isFile }.readBytes()
-        val feedback = sequenceOf(File("src/main/assets/multibot_feedback.py"), File("app/src/main/assets/multibot_feedback.py"))
-            .first { it.isFile }.readBytes()
-        val claude = sequenceOf(File("src/main/assets/chat_connectors/claude.py"), File("app/src/main/assets/chat_connectors/claude.py"))
-            .first { it.isFile }.readBytes()
-        val codex = sequenceOf(File("src/main/assets/chat_connectors/codex.py"), File("app/src/main/assets/chat_connectors/codex.py"))
-            .first { it.isFile }.readBytes()
-        fun encode(bytes: ByteArray) = Base64.getEncoder().encodeToString(bytes)
-        val prefix = "CONNECTOR_SOURCES = {'claude':'${encode(claude)}','codex':'${encode(codex)}'}\n" +
-            "MP_SEND_SOURCE = '${encode(mpSend)}'\n" +
-            "FEEDBACK_SOURCE = '${encode(feedback)}'\n" +
-            "MULTIBOT_APP_VERSION = 'android-jvm-test'\n"
-        return prefix.toByteArray(Charsets.UTF_8) + reader
-    }
+    private fun bundle() = bundleWithReader(reader)
 
     private fun serve(home: File, payload: ByteArray = bundle()): String {
         val process = ProcessBuilder("sh", "-c", ChatHistoryProtocol.command(payload)).apply {
@@ -57,35 +41,46 @@ class ChatRuntimeBundleTest {
     }
 
     @Test
-    fun newerServerBundleIsNotOverwrittenByPhoneConnect() {
+    fun phoneBundleCannotDowngradeNewerServerRuntime() {
+        val legacy = sequenceOf(
+            File("tools/fixtures/SOFT-2524/legacy-reader.py"),
+            File("../tools/fixtures/SOFT-2524/legacy-reader.py"),
+        ).first { it.isFile }.readBytes()
         val home = Files.createTempDirectory("mp-runtime").toFile()
-        val runtime = File(home, ".multiprompt-runtime").apply { mkdirs() }
-        val desktopSend = "#!/usr/bin/env python3\nprint('desktop-send')\n"
-        val sendStem = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde-mp-send"
-        File(runtime, sendStem).writeText(desktopSend)
-        File(runtime, "mp-send").delete()
-        java.nio.file.Files.createSymbolicLink(
-            File(runtime, "mp-send").toPath(),
-            File(runtime, sendStem).toPath(),
-        )
-        val readerBody = "print('desktop-reader')\n".toByteArray()
-        val readerDigest = java.security.MessageDigest.getInstance("SHA-256").digest(readerBody).joinToString("") { "%02x".format(it) }
-        File(runtime, "$readerDigest.py").writeBytes(readerBody)
-        File(runtime, "active.json").writeText(
-            JSONObject().put("protocol", 1).put("generation", 200).put("sha256", readerDigest).toString()
-        )
+        serve(home, bundleWithReader(legacy))
         serve(home)
-        assertEquals("desktop-send", File(runtime, "mp-send").readText())
-        assertEquals(200, JSONObject(File(runtime, "active.json").readText()).getInt("generation"))
+        val runtime = File(home, ".multiprompt-runtime")
+        val activeAfterCurrent = JSONObject(File(runtime, "active.json").readText())
+        serve(home, bundleWithReader(legacy))
+        val activeAfterLegacy = JSONObject(File(runtime, "active.json").readText())
+        assertEquals(activeAfterCurrent.getInt("generation"), activeAfterLegacy.getInt("generation"))
+        assertEquals(activeAfterCurrent.getString("sha256"), activeAfterLegacy.getString("sha256"))
         home.deleteRecursively()
+    }
+
+    private fun bundleWithReader(readerBytes: ByteArray): ByteArray {
+        val mpSend = sequenceOf(File("src/main/assets/mp_send.py"), File("app/src/main/assets/mp_send.py"))
+            .first { it.isFile }.readBytes()
+        val feedback = sequenceOf(File("src/main/assets/multibot_feedback.py"), File("app/src/main/assets/multibot_feedback.py"))
+            .first { it.isFile }.readBytes()
+        val claude = sequenceOf(File("src/main/assets/chat_connectors/claude.py"), File("app/src/main/assets/chat_connectors/claude.py"))
+            .first { it.isFile }.readBytes()
+        val codex = sequenceOf(File("src/main/assets/chat_connectors/codex.py"), File("app/src/main/assets/chat_connectors/codex.py"))
+            .first { it.isFile }.readBytes()
+        fun encode(bytes: ByteArray) = Base64.getEncoder().encodeToString(bytes)
+        val prefix = "CONNECTOR_SOURCES = {'claude':'${encode(claude)}','codex':'${encode(codex)}'}\n" +
+            "MP_SEND_SOURCE = '${encode(mpSend)}'\n" +
+            "FEEDBACK_SOURCE = '${encode(feedback)}'\n" +
+            "MULTIBOT_APP_VERSION = 'android-jvm-test'\n"
+        return prefix.toByteArray(Charsets.UTF_8) + readerBytes
     }
 
     @Test
     fun bundledReaderInstallsMpSendWithOwnerExecuteBit() {
         val text = sequenceOf(File("src/main/assets/chat_history_reader.py"), File("app/src/main/assets/chat_history_reader.py"))
             .first { it.isFile }.readText()
-        assertTrue(text.contains("_os.fchmod(stream.fileno(), 0o700)"))
-        assertTrue(text.contains("publish_named_tool('mp-send', 'mp-send'"))
+        assertTrue(text.contains("def publish(name, data, mode=0o600):"))
+        assertTrue(text.contains("publish(stem, payload, 0o700)"))
     }
 
     @Test
