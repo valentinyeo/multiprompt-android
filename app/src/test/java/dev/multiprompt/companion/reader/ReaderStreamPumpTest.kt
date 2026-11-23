@@ -288,6 +288,97 @@ class ReaderStreamPumpTest {
     }
 
     @Test
+    fun hidingDuringConnectDoesNotMarkFailure() = runTest {
+        var attempts = 0
+        var snapshots = 0
+        val failures = mutableListOf<Throwable>()
+        val selected = MutableStateFlow(true)
+        val pump = ReaderStreamPump<Int>(
+            wanted = selected,
+            connect = {
+                attempts++
+                if (attempts == 1) delay(500L)
+                attempts
+            },
+            stream = { _, heard ->
+                heard()
+                snapshots++
+                delay(Long.MAX_VALUE / 4)
+            },
+            release = {},
+            onClient = {},
+            onConnecting = {},
+            onFailure = { failures += it },
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        advanceTimeBy(100L)
+        runCurrent()
+        assertEquals(1, attempts)
+        assertEquals(0, snapshots)
+        selected.value = false
+        runCurrent()
+        assertTrue(failures.isEmpty())
+        selected.value = true
+        runCurrent()
+        assertTrue(failures.isEmpty())
+        assertEquals(2, attempts)
+        assertEquals(1, snapshots)
+    }
+
+    @Test
+    fun twoVisiblePumpsBothStreamConcurrently() = runTest {
+        val hostA = FakeHost()
+        val hostB = FakeHost()
+        val gateA = ChatPollGate()
+        val gateB = ChatPollGate()
+        gateA.acquire()
+        gateB.acquire()
+        backgroundScope.launch {
+            ReaderStreamPump(
+                wanted = gateA.active,
+                connect = { hostA.connects++; hostA.connects },
+                stream = { _, heard ->
+                    heard()
+                    hostA.snapshots++
+                    delay(Long.MAX_VALUE / 4)
+                },
+                release = {},
+                onClient = {},
+                onConnecting = {},
+                onFailure = {},
+                reconnectDelayMillis = 3_000L,
+                reuseFirstBytesMillis = 2_000L,
+            ).pump()
+        }
+        backgroundScope.launch {
+            ReaderStreamPump(
+                wanted = gateB.active,
+                connect = { hostB.connects++; hostB.connects + 100 },
+                stream = { _, heard ->
+                    heard()
+                    hostB.snapshots++
+                    delay(Long.MAX_VALUE / 4)
+                },
+                release = {},
+                onClient = {},
+                onConnecting = {},
+                onFailure = {},
+                reconnectDelayMillis = 3_000L,
+                reuseFirstBytesMillis = 2_000L,
+            ).pump()
+        }
+        runCurrent()
+        advanceTimeBy(1_000L)
+        runCurrent()
+        assertEquals(1, hostA.connects)
+        assertEquals(1, hostB.connects)
+        assertEquals(1, hostA.snapshots)
+        assertEquals(1, hostB.snapshots)
+    }
+
+    @Test
     fun pendingConfirmationCannotKeepAHiddenChatPolling() = runTest {
         val host = FakeHost()
         val confirmation = ModelSwitchConfirmation({ currentTime }, 25_000L)
