@@ -1,0 +1,1 @@
+Phone test checks match what the screen shows

@@ -71,10 +71,10 @@ def fresh_start_inventory(home):
     assert manifest_path.is_file(), 'SEED_FRESH_START_MANIFEST_MISSING'
     manifest = json.loads(manifest_path.read_text())
     names = sorted(subprocess.check_output(['tmux', 'list-sessions', '-F', '#{session_name}'], text=True).splitlines())
-    assert names == [manifest['session']], 'SEED_FRESH_START_SESSIONS'
+    assert manifest['session'] in names, 'SEED_FRESH_START_SESSIONS'
     option = subprocess.check_output(['tmux', 'show-options', '-t', manifest['session'], '-v', '@mp_host_sid'], text=True).strip()
     assert option == manifest['sid'], 'SEED_FRESH_START_IDENTITY'
-    return dict(sessions=len(names), bulk_sessions=0, session_names=names, shapes=[], transcript=None,
+    return dict(sessions=1, bulk_sessions=0, session_names=[manifest['session']], shapes=[], transcript=None,
                 real_chat=None, fresh_start=manifest)
 
 

@@ -10,7 +10,7 @@ Dispatch `verify.yml` with `feature=folder-bar.md` on a fresh GitHub-hosted debu
 3. Force-stop and reopen without selecting All or revealing the folder first. Require **Folder 09** selected and fully visible. The parent must fail this product assertion.
 4. Select **All**, then **Folder 06**. Require the complete selected pill clear of both fading edges after each change. Restart again and check **Folder 06** without scrolling first.
 5. Sign out through Settings and return through **Use without account (debug)**. Only the disposable fixture account is removed.
-6. In the stressed replay, open the live fixture reader and run the existing AI-switch draft continuation. Require rotation, background/return, another chat and back, throttled networking and a send during streaming, with all five retained checkpoints and independent host receipts.
+6. In the stressed replay, open the live fixture reader and run the existing AI-switch draft continuation. Require rotation, background/return, another chat and back, throttled networking and a send during streaming, with all five retained checkpoints and independent host receipts. Before streaming, require receipts containing both the Claude-to-Pi handover and `PHONE_AFTER_SWITCH_2538` on the switched Pi session, regardless of receipt order. Either missing text or a wrong provider/session fails; a receipt count alone is not proof. The final stream check counts an identical Pi command ID/body retry once and retains the raw frame count, and it reads the follow-up's first host event so a retry after a busy refusal cannot make a correctly admitted follow-up look late. A second message ID, changed body, wrong session, missing send, or duplicate rendered reply still fails.
 
 ## Evidence
 
