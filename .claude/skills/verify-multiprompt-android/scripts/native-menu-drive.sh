@@ -81,7 +81,7 @@ menu_scroll() {
 : > "$EVIDENCE/native-menu-commands.txt"
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
-    tap_text Model
+    tap_text Model Opus
     tap_menu_receipt "$model" "/model ${model,,}"
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest
@@ -93,7 +93,7 @@ for model in Opus Haiku Fable; do
     menu_state "attach-${model,,}-selected" visible "$model ›"
 done
 for effort in Low Medium; do
-    tap_text Effort
+    tap_text Effort Low
     tap_menu_receipt "$effort" "/effort ${effort,,}"
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"
     scroll_to_newest

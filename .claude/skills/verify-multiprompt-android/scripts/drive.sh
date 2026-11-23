@@ -142,10 +142,11 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan before taps=0 session=
+    local attempt action x1 y1 x2 y2 direction plan before taps=0 session= expected=${4:-}
     if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
     for attempt in {1..24}; do
         dump_ui || return
+        if [[ -n "$expected" ]] && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$expected" >/dev/null 2>&1; then return 0; fi
         if [[ -n "$session" ]] &&
             python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
             set -- desc "Robot $session" "${3:-tap}"
@@ -157,10 +158,15 @@ tap_node() {
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
             tap)
-                before=$(cat "$EVIDENCE/current.xml")
+                before=$(sha256sum "$EVIDENCE/current.xml")
                 adb shell input tap "$x1" "$y1" || return
                 dump_ui || return
-                if [[ "$(cat "$EVIDENCE/current.xml")" != "$before" ]]; then return; fi
+                if [[ "${3:-tap}" == once ]]; then return 0; fi
+                if [[ -n "$expected" ]]; then
+                    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$expected" >/dev/null 2>&1; then return 0; fi
+                elif [[ "$(sha256sum "$EVIDENCE/current.xml")" != "$before" ]]; then
+                    return 0
+                fi
                 taps=$((taps + 1))
                 if (( taps == 4 )); then
                     printf 'JOURNEY_TAP_UNCHANGED: %s after four taps; checking the journey state next\n' "$2" >&2
@@ -174,7 +180,7 @@ tap_node() {
     printf 'JOURNEY_ACTION_UNREACHABLE: %s: not reachable after 24 scrolls in the active container\n' "$2" >&2
     return 1
 }
-tap_text() { tap_node text "$1"; }
+tap_text() { tap_node text "$1" tap "${2:-}"; }
 tap_desc() { tap_node desc "$1"; }
 hold_text() {
     local point x y
@@ -414,14 +420,15 @@ if [[ "$feature" == settings-navigation.md ]]; then
     relaunch_app
     wait_for_text Inbox
     tap_desc 'Session list actions'
-    tap_text Settings
-    wait_for_text 'Workspace colors' 1 90
+    tap_text Settings 'Session list settings'
+    wait_for_text 'Session list settings' 1 90
     for attempt in {1..6}; do
-        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Auto >/dev/null 2>&1; then break; fi
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains Auto >/dev/null 2>&1; then break; fi
         read -r x1 y1 x2 y2 < <(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" scroll-back "")
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
         dump_ui
     done
+    wait_for_text 'Workspace colors' 1 90
     shot settings-workspace-colors
     adb shell input keyevent KEYCODE_BACK
     wait_for_text Inbox
@@ -2387,14 +2394,14 @@ if [[ "$feature" == native-skills.md ]]; then
     wait_receipt 'VERIFY_RECEIVED:/qa:verify-native draft stays'
     set_composer 'keep%sthis%sdraft'
     tap_desc Attach
-    tap_text Model
+    tap_text Model Haiku
     wait_for_text Haiku
     wait_for_absence 'Add image'
     shot native-model-menu
     tap_text Sonnet
     wait_receipt 'VERIFY_RECEIVED:/model sonnet'
     tap_desc Attach
-    tap_text Effort
+    tap_text Effort Medium
     wait_for_text Medium
     shot native-effort-menu
     tap_text High
@@ -2704,7 +2711,7 @@ if [[ "$feature" == terminal.md ]]; then
     sleep 2
     python3 "$scripts/mpa" terminal --step sleep --evidence "$EVIDENCE"
     shot shell-input-sleep
-    tap_desc 'Ctrl key'
+    tap_node desc 'Ctrl key' once
     adb shell input text c
     python3 "$scripts/mpa" terminal --step interrupt --evidence "$EVIDENCE"
     shot shell-input-interrupt
@@ -2714,8 +2721,8 @@ if [[ "$feature" == terminal.md ]]; then
         if select_node desc 'Up key' >/dev/null 2>&1; then break; fi
         adb shell input swipe "$x2" "$y2" "$x1" "$y1" 400
     done
-    tap_desc 'Up key'
-    tap_desc 'Up key'
+    tap_node desc 'Up key' once
+    tap_node desc 'Up key' once
     adb shell input keyevent 66
     python3 "$scripts/mpa" terminal --step history --evidence "$EVIDENCE"
     shot shell-input-history
@@ -2727,7 +2734,7 @@ if [[ "$feature" == terminal.md ]]; then
     done
     touch /tmp/verify_tabfile_unique.txt
     adb shell input text 'ls%s/tmp/verify_tabf'
-    tap_desc 'Tab key'
+    tap_node desc 'Tab key' once
     adb shell input keyevent 66
     python3 "$scripts/mpa" terminal --step tab --evidence "$EVIDENCE"
     shot shell-input-tab

@@ -25,7 +25,7 @@ The legacy chat-title model menu is not exposed by the current reader style. Its
 
 No upload request is made. Live upload-service authentication and uploading a selected image are not exercised. The unchanged image upload pipeline retains its unit coverage.
 
-Model and effort selections require a new host receipt. If none arrives within 30 seconds and the same menu row remains visible, tap it once more. A missing or duplicate receipt still fails.
+Opening Model or Effort requires an option from that submenu, not merely a changed dump or toast. Model and effort selections require a new host receipt. If none arrives within 30 seconds and the same menu row remains visible, tap it once more. A missing or duplicate receipt still fails.
 
 ## Evidence
 
