@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.platform.testTag
@@ -548,11 +549,29 @@ class DesignKitTest {
         val palette = kitPalette(true)
         compose.setContent {
             MultipromptTheme(sunlight = true, material3 = false) {
-                KitListRow("Waiting", modifier = Modifier.testTag("day-list-row"))
+                Page {
+                    KitListGroup(Modifier.testTag("day-list-card")) {
+                        KitListRow("Waiting", modifier = Modifier.testTag("day-list-row"))
+                    }
+                    KitTitlePill("Inbox", Modifier.testTag("day-title-pill"))
+                    KitSecondaryButton("More", {}, Modifier.testTag("day-secondary"))
+                }
             }
         }
         compose.onNodeWithText("Waiting").assertIsDisplayed()
-        val bitmap = capture("day-list-row", compose.onNodeWithTag("day-list-row"))
-        assertPixel(bitmap, 24, bitmap.height / 2, palette.text, "day list row label")
+        val card = capture("day-list-card")
+        assertPixel(card, card.width - 4, card.height / 2, palette.surface, "day card fill")
+        assertPixel(card, card.width / 2, 0, palette.outline, "day card outline")
+        listOf("day-list-row", "day-title-pill", "day-secondary").forEach { tag ->
+            val bitmap = capture(tag)
+            var dark = 0
+            for (x in 0 until bitmap.width) {
+                for (y in 0 until bitmap.height) {
+                    val px = bitmap.getPixel(x, y)
+                    if (px != 0 && Color(px).luminance() < 0.25f) dark++
+                }
+            }
+            assertTrue("expected dark readable label pixels in day mode for $tag, found $dark", dark > 20)
+        }
     }
 }

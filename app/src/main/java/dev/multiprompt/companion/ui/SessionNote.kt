@@ -209,10 +209,11 @@ internal fun SessionNoteChip(
         }
         if (expanded) {
             val fontSize = chatFontSize((14f * fontScale).sp, fontScale)
+            val kitColors = kit()
             Column(Modifier.padding(start = 18.dp, bottom = 4.dp).testTag("session-note-body")) {
                 ChatLinkText(note.body) { line, start ->
                     Text(
-                        terminalLinks(line, sunlight).marking(findOrigin + start, findHits, activeHit),
+                        terminalLinks(line, sunlight).marking(findOrigin + start, findHits, activeHit, kitColors),
                         fontFamily = chatFontFamily(),
                         fontSize = fontSize,
                         lineHeight = chatLineHeight((fontSize.value * 1.5f).sp, fontScale),
