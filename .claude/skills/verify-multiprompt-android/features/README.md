@@ -27,7 +27,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Legacy resync](chat-resync.md): historical held-queue proof; not host Reset proof.
   - Outcomes: `chat-resync.journey`. Runner: `verify.yml` (debug).
 - [Shared chat store](chat-shared.md): synthetic SSH store admission and host Reset, retaining both drafts.
-  - Outcomes: `chat-shared.journey`, `chat.link-recovery`. Runner: `verify.yml` (debug). Priority evidence: `shared-before-reset.json` (1000 characters), `shared-after-reset.json` (1000 characters), `shared-codex-before-restart.json` (1000 characters), `shared-codex-after-reset.json` (1000 characters), `05-shared-after-reset.xml` (3000 characters), `07-shared-codex-after-reset.xml` (3000 characters), `shared-terminal.txt` (1000 characters), `shared-result.txt` (500 characters).
+  - Outcomes: `chat-shared.journey`, `chat.link-recovery`. Runner: `verify.yml` (debug). Priority evidence: `shared-before-reset.json` (1000 characters), `shared-after-reset.json` (1000 characters), `shared-codex-before-restart.json` (1000 characters), `shared-codex-after-reset.json` (1000 characters), `shared-link-recovered.xml` (2500 characters), `shared-phone.json` (1000 characters), `shared-link-recovery.txt` (500 characters), `shared-terminal.txt` (1000 characters).
 - [Working dots on the signed release](chat-working.md): quiet tools, lock/unlock, real SSH reconnect, recording and timed visible-state samples. Uses `working-dots.yml`.
   - Outcomes: `chat-working.journey`. Runner: `working-dots.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Copy chat ID](copy-chat-id.md): the chat menu copies the host chat id, or the tmux name when the chat has no host id.
@@ -116,6 +116,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `session.fresh-start`. Runner: `verify.yml` (debug). Priority evidence: `fresh-start-state.json` (1200 characters), `fresh-start-host.json` (4000 characters), `fresh-start-open-proof.txt` (700 characters), `fresh-start-applied.json` (1000 characters), `fresh-start-inbox-inbox-after-fresh-start.json` (400 characters), `session-fresh-start-seed.json` (1000 characters).
 - [Crash report for every app exit](crash-report.md): signs in through the local account fixture, plants uncaught exception, native crash, system kill and ANR exits, relaunches and requires one uploaded crash report per exit with a summary naming it.
   - Outcomes: `crash-report.exits`. Runner: `verify.yml` (debug). Priority evidence: `crash-reports-received.txt` (3200 characters), `crash-exit-summaries.json` (900 characters), `crash-exits.txt` (1600 characters).
+- [Cleared chat](chat-clear.md): A transcribed chat that starts fresh after /clear shows only what came after the clear, keeps a message typed after it, and never shows or sends an unsent or failed message from before it.
+  - Outcomes: `chat-clear.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-clear-before-unsent.xml` (1500 characters), `00-clear-after.xml` (1500 characters), `00-clear-reopened.xml` (1500 characters), `00-clear-state.json` (1500 characters), `clear-store-after.json` (1500 characters), `clear-store-final.json` (1500 characters).
 
 ## Initial coverage gaps
 

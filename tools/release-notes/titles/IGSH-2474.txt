@@ -1,0 +1,1 @@
+Android: old messages come back after /clear
