@@ -161,7 +161,7 @@
     },
     "chat-resync.md": {
       "name": "Legacy resync",
-      "description": "historical held-queue proof; not host Reset proof.",
+      "description": "legacy held-queue proof: Reset retires unsent copies with no receipt claim and no send; the phone shows its reader transcript across Reset and never claims legacy rows, which this app version does not request.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -1080,10 +1080,10 @@
       "evidence": {
         "compacted-chat.json": 700,
         "compacted-chat-proof.txt": 700,
-        "resumed-chat.json": 700,
         "resumed-chat-proof.txt": 700,
-        "fresh-chat.json": 700,
         "fresh-chat-proof.txt": 700,
+        "code-block.json": 700,
+        "code-block-proof.txt": 700,
         "pre-425-reader.txt": 1500,
         "seed-counts.json": 3000
       }

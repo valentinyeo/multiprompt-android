@@ -14,7 +14,13 @@ Classes ranked by how often fixes, reverts, or verifier callouts recurred in com
 
 **Prevention:** `tools/message-projection/check.py` (ratchet), `MessageProjectionTest`, hosted journeys with receipt identity. New `ChatHistoryMessage(` constructors, parallel projections, and legacy matchers outside `LegacyMessageIdentity` fail CI with `MESSAGE_PROJECTION_DUPLICATE`.
 
-**Phase 1 note:** Already impossible on main; kept in the list because every other guard in this doc copied this ratchet pattern.
+**Phase 1 note:** The projection ratchet already blocked a second row constructor. It did not block a second text matcher, and #539 was exactly that: the pending copy and the saved copy were compared with a private string rule that missed the phone's skill and mention notes.
+
+**Prevention (phase 2):** One `MessageIdentity` (`reader/MessageIdentity.kt`) owns every chat row key and every text match. Keys come from `key`/`shared`/`held`/`local`/`live`/`unknown`/`unread`; text comes from `MessageIdentity.same` over the `MessageText` type, and only `MessageIdentity` may call the `LegacyMessageIdentity` rule table. `tools/message-projection/check.py` fails with `MESSAGE_IDENTITY_BYPASSED` on a locally built key, a raw `.text` comparison, a `LegacyMessageIdentity` call from anywhere else, or a matcher that takes `String` again.
+
+**Proof:** `check.py 00e1c674^` (the revision before PR 539's fix) exits non-zero with `MESSAGE_IDENTITY_BYPASSED` including `LegacyMessageIdentity.kt: untyped-matcher`; the #77, #312, #389 and #408 revisions are rejected the same way. `MessageIdentityTest` pins the #539 sent-versus-saved pair, the pending copy that must take its saved row, and the near-miss that must stay two rows.
+
+**Status: done (phase 2).** One identity and one matcher, enforced by the check, the types and the test above.
 
 ## 2. Screen-owned reader / snapshot I/O (warm chats, duplicate owners)
 

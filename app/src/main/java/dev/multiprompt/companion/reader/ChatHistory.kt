@@ -49,7 +49,7 @@ data class ChatHistory(
                     row.id.isNotEmpty() -> row.id
                     else -> "@${row.offset}"
                 }
-                val key = "$sid:$inode:${row.role}:$identity"
+                val key = MessageIdentity.key(sid, inode, row.role, identity)
                 val previous = grouped[key]
                 val text = when {
                     previous == null -> row.text
@@ -82,11 +82,11 @@ data class ChatHistory(
             }
         }
         val transcript = transcript(source)
-        val latest = transcript.filter { it.role == "user" }.mapNotNull { LegacyMessageIdentity.seconds(it.timestamp) }.maxOrNull()
+        val latest = transcript.filter { it.role == "user" }.mapNotNull { MessageIdentity.seconds(it.timestamp) }.maxOrNull()
         val host = replica?.host ?: HostStream()
         val cards = if (sent == null) scoped.filter { it.state != MessageProtocol.State.CANCELLED && !clearedMessage(it) }.sortedBy { it.position }.map { row ->
             val notSent = notSent(row, now, seen[row.id])
-            Card(ChatHistoryMessage("@shared:${row.id}", "user", row.text, "", 0, 0, row.id,
+            Card(ChatHistoryMessage(MessageIdentity.shared(row.id), "user", row.text, "", 0, 0, row.id,
                 pending = !notSent && row.state in setOf(MessageProtocol.State.QUEUED, MessageProtocol.State.SENT),
                 delivery = if (notSent) NOT_SENT else null,
                 notSentDetail = if (notSent) NotSentReason.plainText(row.receipt) else null,
@@ -101,10 +101,10 @@ data class ChatHistory(
                 held.filter { it.sid.isEmpty() || it.sid == sid } + local.filter { it.messageId.isNotEmpty() })
                 .distinctBy { it.messageId }.sortedBy { it.sentAtMillis }
             local.filter { it.messageId.isEmpty() }.distinctBy { it.localId }.map { prompt ->
-                Card(ChatHistoryMessage("@local:${prompt.localId}", "user", prompt.text, "", 0, 0, delivery = "Local · unconfirmed"))
+                Card(ChatHistoryMessage(MessageIdentity.local(prompt.localId), "user", prompt.text, "", 0, 0, delivery = "Local · unconfirmed"))
             } + own.map { prompt ->
                 val delivery = deliveryState(prompt)
-                Card(ChatHistoryMessage("@held:${prompt.messageId}", "user", prompt.text, "", 0, 0, prompt.messageId,
+                Card(ChatHistoryMessage(MessageIdentity.held(prompt.messageId), "user", prompt.text, "", 0, 0, prompt.messageId,
                     pending = delivery !in setOf(QueuedMessages.Delivery.CANCELLED, QueuedMessages.Delivery.DELIVERED),
                     delivery = when (delivery) {
                         QueuedMessages.Delivery.CANCELLED -> "Cancelled"
@@ -129,8 +129,8 @@ data class ChatHistory(
             val index = transcript.indices.firstOrNull { index ->
                 index !in claimed && transcript[index].requestId !in waitingIds && when {
                     card.shared != null && host.sentRows[card.shared.id].isNullOrEmpty() ->
-                        index > floor && LegacyMessageIdentity.shared(transcript[index], card.shared)
-                    card.legacy != null -> LegacyMessageIdentity.delivered(transcript[index], card.legacy, sid, inode)
+                        index > floor && MessageIdentity.shared(transcript[index], card.shared)
+                    card.legacy != null -> MessageIdentity.delivered(transcript[index], card.legacy, sid, inode)
                     else -> false
                 }
             }
@@ -153,11 +153,11 @@ data class ChatHistory(
             val occurrence = when {
                 card != null -> message.copy(key = card.message.key, requestId = card.message.requestId, delivery = card.message.delivery,
                     notSentDetail = card.message.notSentDetail)
-                phoneId != null -> message.copy(key = "@shared:$phoneId", requestId = phoneId)
+                phoneId != null -> message.copy(key = MessageIdentity.shared(phoneId), requestId = phoneId)
                 else -> message
             }
             projected[occurrence.key] = occurrence
-            if (LegacyMessageIdentity.replyBoundary(occurrence)) replyOwner = occurrence
+            if (MessageIdentity.replyBoundary(occurrence)) replyOwner = occurrence
             else replyOwner?.let { replyOwners[index] = it }
         }
         val blocks = (host.earlier + host.spoken.map { it.copy(turn = host.turn) }).distinctBy { it.turn to it.item }
@@ -170,8 +170,8 @@ data class ChatHistory(
             val index = transcript.indices.firstOrNull { index ->
                 val message = transcript[index]
                 index !in matchedReplies && message.role == "assistant" &&
-                    (message.requestId.isNotEmpty() && rowKey(message.requestId) == rowKey(block.item) ||
-                        LegacyMessageIdentity.reply(message, block, replyOwners[index]))
+                    (message.requestId.isNotEmpty() && sharedItem(message.requestId, block.item) ||
+                        MessageIdentity.reply(message, block, replyOwners[index]))
             }
             if (index != null) {
                 matchedReplies.add(index)
@@ -182,7 +182,7 @@ data class ChatHistory(
             }
         }
         fun appendReply(block: HostBlock) {
-            val key = "@live:${block.turn}:${block.item}"
+            val key = MessageIdentity.live(block.turn, block.item)
             projected[key] = ChatHistoryMessage(key, "assistant", block.text, "", 0, 0, pending = !block.done)
         }
         val ordered = projected.values.toList()
@@ -202,9 +202,9 @@ data class ChatHistory(
         cards.filter { it.message.key !in placed && it.visible && !stale(it) }.forEach { append(it.message) }
         replies.values.flatten().forEach(::appendReply)
         val canonical = scoped.associateBy { it.id }
-        unresolved.filter { it.operation == "submit" && it.scope.sid == sid && canonical[it.messageId]?.text != it.text }.forEach { entry ->
-            val key = if (entry.messageId in canonical) "@unknown:${entry.id}" else "@shared:${entry.messageId}"
-            if (projected.values.none { it.role == "user" && it.requestId == entry.messageId && it.text == entry.text }) {
+        unresolved.filter { it.operation == "submit" && it.scope.sid == sid && !MessageIdentity.sameKnown(canonical[it.messageId]?.identityText, it.identityText) }.forEach { entry ->
+            val key = if (entry.messageId in canonical) MessageIdentity.unknown(entry.id) else MessageIdentity.shared(entry.messageId)
+            if (projected.values.none { it.role == "user" && it.requestId == entry.messageId && MessageIdentity.same(it.identityText, entry.identityText) }) {
                 projected[key] = ChatHistoryMessage(key, "user", entry.text.orEmpty(), "", 0, 0, entry.messageId,
                     delivery = if (offline) NOT_SENT else null, unknownId = entry.id)
             }
@@ -212,7 +212,7 @@ data class ChatHistory(
         waiting.distinctBy { it.id }.filter { entry ->
             entry.id !in canonical && projected.values.none { it.role == "user" && it.requestId == entry.id }
         }.forEach { entry ->
-            projected["@shared:${entry.id}"] = ChatHistoryMessage("@shared:${entry.id}", "user", entry.text, "", 0, 0, entry.id,
+            projected[MessageIdentity.shared(entry.id)] = ChatHistoryMessage(MessageIdentity.shared(entry.id), "user", entry.text, "", 0, 0, entry.id,
                 pending = entry.error == null, delivery = if (entry.error == null) PendingPrompts.WAITING_LABEL else NOT_SENT)
         }
         unmatched.filter { it.turn == host.turn }.forEach(::appendReply)
@@ -228,6 +228,12 @@ data class ChatHistory(
     )
 
     private fun rowKey(id: String): String = id.substringBefore(":text:")
+
+    private fun sharedItem(requestId: String, item: String): Boolean {
+        if (requestId == item) return true
+        if (requestId.contains(":text:")) return false
+        return rowKey(requestId) == rowKey(item)
+    }
 
     internal fun deliveryState(prompt: QueuedMessages.SentPrompt): QueuedMessages.Delivery {
         val terminal = setOf(QueuedMessages.Delivery.DELIVERED, QueuedMessages.Delivery.CANCELLED)
@@ -308,6 +314,6 @@ data class ChatHistory(
         }
 
         private fun newestSeconds(history: ChatHistory): Double? =
-            history.rows.mapNotNull { LegacyMessageIdentity.seconds(it.timestamp) }.maxOrNull()
+            history.rows.mapNotNull { MessageIdentity.seconds(it.timestamp) }.maxOrNull()
     }
 }

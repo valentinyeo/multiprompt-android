@@ -13,7 +13,7 @@ The signed APK is unchanged. Published mode checks its manifest commit, URL, siz
 5. Restart the fixture app, open **All**, and long-press `verify-session`. Capture **Favorite**, the Desktop word. Tap it.
 6. Open **Favorites**. Require both sessions visible. Independently snapshot both persisted booleans as true. Restart and require both visible again.
 
-7. Long-press `verify-session`. Open **Archive Session**. Check the exact title, warning, and buttons. Capture `confirmation-archive`. Tap **Cancel**. Require both sessions visible. Require both tmux sessions alive.
+7. Long-press `verify-session`. Tap **Waiting**. Require that row absent and `verify-keep` visible. Capture `favorites-waiting`. Choose **Switch session bucket → Waiting**, long-press `verify-session`, and tap **Return to open**. Switch the bucket to **Inbox**. Require both favorites visible and both tmux sessions alive. Capture `favorites-returned-to-open`. Waiting changes the local bucket immediately; it has no confirmation and does not end tmux.
 8. Long-press `verify-session` again. Open **End tmux session**. Check the exact title, warning, and buttons. Capture `confirmation-end`. Press system Back. Require Favorites selected. Require both sessions visible. Require both tmux sessions alive.
 
 9. Verify the resolved ETA log is absent. Enable the guarded generic-console history fixture. Confirm its actual alternate-screen live marker. Open **Session history**. Capture the first numbered page. Load older and capture another page.
@@ -29,6 +29,6 @@ Run the signed candidate first. Run published proof after release. Inspect the u
 
 This proves the signed app frontend and isolated offline cache only. It does not prove production sign-in, production sync, a physical phone, or a matching Desktop screenshot. The separate `account-journey.yml` builds a debug APK against an isolated real account service and independently reads its layout; it is not signed-release proof. A candidate is not published-release proof.
 
-These cancellation checks cover Inbox only. Reader confirmation and production accounts remain unproven.
+The end-session cancellation check covers Inbox only. Reader confirmation and production accounts remain unproven.
 
 History proof uses the generic console only. Native Claude and Codex remain unproven. Physical phones and day-scale stability remain unproven. Clipboard contents are not verified.
