@@ -156,7 +156,7 @@ tap_text() { [[ "$screen" == Settings ]]; }
             result = subprocess.run(['bash', '-ec', shell], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_reminder_search_reveals_the_title_before_long_pressing(self):
+    def test_reminder_search_hides_keyboard_before_verifying_and_revealing_the_title(self):
         import subprocess
         import xml.etree.ElementTree as ET
         fixture = Path(__file__).parent / 'fixtures/7b7f76f1-clipped-session.xml'
@@ -169,32 +169,35 @@ tap_text() { [[ "$screen" == Settings ]]; }
         shell = '''search_open=false
 searched=false
 cleared=false
+keyboard_hidden=true
 scripts=/driver
 EVIDENCE=/evidence
 select_node() {
     if [[ "$2" == 'Close session search' ]]; then
         [[ "$search_open" == true ]]
     elif [[ "$1" == focused-field ]]; then
-        [[ "$search_open" == true && "$2" == '' ]]
+        [[ "$search_open" == true && "$keyboard_hidden" == true ]]
     else
         [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-session' ]]
         printf '105 450\\n'
     fi
 }
-tap_desc() { [[ "$1" == 'Search sessions' ]]; search_open=true; }
+tap_desc() { [[ "$1" == 'Search sessions' ]]; search_open=true; keyboard_hidden=false; }
 fill() { return 1; }
-clear_field() { [[ "$search_open" == true && "$1" == '' ]]; cleared=true; }
+clear_field() { select_node focused-field ''; cleared=true; }
 dump_ui() { :; }
-python3() { [[ "$3" == field-value && "$4" == '' && "$5" == verify-session && "$searched" == true ]]; }
+python3() { [[ "$3" == field-value && "$4" == '' && "$5" == verify-session && "$searched" == true && "$keyboard_hidden" == true ]]; }
 wait_for_text() { [[ "$1" == 'Remind me' || "$searched" == true && "$1" == '1 result across all splits' ]]; }
 tap_node() { [[ "$searched" == true && "$1" == desc && "$2" == 'Robot verify-session' && "$3" == reveal ]]; }
 hold_text() { return 1; }
 adb() {
     if [[ "$*" == 'shell input text verify-session' ]]; then
-        [[ "$cleared" == true ]]
+        [[ "$search_open" == true && "$keyboard_hidden" == true && "$cleared" == true ]]
         searched=true
+    elif [[ "$*" == 'shell input keyevent KEYCODE_BACK' ]]; then
+        keyboard_hidden=true
     else
-        [[ "$*" == 'shell input swipe 105 450 105 450 800' || "$*" == 'shell input keyevent KEYCODE_BACK' ]]
+        [[ "$*" == 'shell input swipe 105 450 105 450 800' ]]
     fi
 }
 tap_text() { [[ "$1" == 'Remind Me…' ]]; }
