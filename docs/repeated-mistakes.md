@@ -20,6 +20,8 @@ Classes ranked by how often fixes, reverts, or verifier callouts recurred in com
 
 **Proof:** `check.py 00e1c674^` (the revision before PR 539's fix) exits non-zero with `MESSAGE_IDENTITY_BYPASSED` including `LegacyMessageIdentity.kt: untyped-matcher`; the #77, #312, #389 and #408 revisions are rejected the same way. `MessageIdentityTest` pins the #539 sent-versus-saved pair, the pending copy that must take its saved row, and the near-miss that must stay two rows.
 
+**Status: done (phase 2).** One identity and one matcher, enforced by the check, the types and the test above.
+
 ## 2. Screen-owned reader / snapshot I/O (warm chats, duplicate owners)
 
 **Frequency:** High (#1607, #2311, #328, #341, #391).
