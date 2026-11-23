@@ -1,0 +1,1 @@
+Phone carries the fixed shared chat reader and tools

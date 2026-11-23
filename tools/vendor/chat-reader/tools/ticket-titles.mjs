@@ -1,5 +1,16 @@
 import fs from 'node:fs';
-import { parseTicketId, canonicalTicketId } from './ticket-id.js';
+import { parseTicketId, canonicalTicketId, multipromptMovedBoardId } from './ticket-id.js';
+
+function acceptsTaskForId(id, ticket, task) {
+  if (!task?.title) return false;
+  const moved = ticket.boardId === 2060 && task.boardId === multipromptMovedBoardId;
+  if (task.boardId !== ticket.boardId && !moved) return false;
+  if (moved) return true;
+  if (task.ticketNumber == null && task.uniqueIndex == null) return false;
+  if (task.ticketNumber != null && parseTicketId(task.ticketNumber)?.id !== id) return false;
+  if (task.uniqueIndex != null && String(task.uniqueIndex) !== ticket.number) return false;
+  return true;
+}
 
 export function ticketRecord(id, title) {
   id = canonicalTicketId(id);
@@ -63,7 +74,7 @@ export async function resolveTicketTitles(ids, catalog, token, request = fetch) 
     if (!response.ok) throw new Error(`Title lookup failed for ${id}`);
     const data = await response.json().catch(() => null);
     const task = data?.tasks?.[0];
-    if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || task?.boardId !== ticket.boardId || (task.ticketNumber == null && task.uniqueIndex == null) || (task.ticketNumber != null && parseTicketId(task.ticketNumber)?.id !== id) || (task.uniqueIndex != null && String(task.uniqueIndex) !== ticket.number)) throw new Error(`Unresolved title for ${id}`);
+    if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || !acceptsTaskForId(id, ticket, task)) throw new Error(`Unresolved title for ${id}`);
     titles[id] = ticketRecord(id, task.title).title;
   }
   for (const id of ids) ticketRecord(id, titles[id]);

@@ -368,4 +368,12 @@ export async function run(argv, overrides = {}) {
   }
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1] || '').href) process.exitCode = await run(process.argv.slice(2));
+function runsItself() {
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+  } catch {
+    return false;
+  }
+}
+
+if (runsItself()) process.exitCode = await run(process.argv.slice(2));
