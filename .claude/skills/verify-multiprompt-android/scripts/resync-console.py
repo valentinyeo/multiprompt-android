@@ -153,15 +153,13 @@ def console():
         for row in result["rows"]:
             require(row["sid"] == SID and row["source_inode"] == initial.st_ino and row["origin"] == initial.st_size,
                     "RESYNC_ROW_SOURCE_CHANGED:" + row["key"])
-            expected = ("submitted" if row["key"] == "recovery-head" else "queued") if phase == "before" else (
-                "delivered" if row["key"] in ACCEPTED else "queued")
-            require(row["state"] == expected, "RESYNC_RECEIPT_ID_NOT_SETTLED:" + row["key"])
-        require(result["claims"] == ({} if phase == "before" else {key: 1 for key in ACCEPTED}),
-                "RESYNC_RECEIPT_CLAIM_COUNT_WRONG")
-        require(all(claim["sid"] == SID and claim["inode"] == initial.st_ino
-                    and initial.st_size <= claim["offset"] < result["source_bytes"] for claim in result["receipt_claims"]),
-                "RESYNC_RECEIPT_SOURCE_CHANGED")
-        require(set(result["held"]) == (set(TEXTS) if phase == "before" else set(TEXTS) - ACCEPTED),
+            if phase == "before":
+                expected = "submitted" if row["key"] == "recovery-head" else "queued"
+                require(row["state"] == expected, "RESYNC_PENDING_STATE_WRONG:" + row["key"])
+            else:
+                require(row["state"] == "cancelled", "RESYNC_LEGACY_QUEUE_NOT_RETIRED:" + row["key"])
+        require(result["claims"] == {} and not result["receipt_claims"], "RESYNC_RECEIPT_CLAIM_COUNT_WRONG")
+        require(set(result["held"]) == (set(TEXTS) if phase == "before" else set()),
                 "RESYNC_HELD_IDS_WRONG")
 
     def command(name):
@@ -192,10 +190,7 @@ def console():
                 return accepted_event
             require(name in ("after", "repeat"), "RESYNC_UNKNOWN_EVENT")
             require(accepted_event is not None, "RESYNC_EVENT_ORDER_WRONG")
-            if name == "after":
-                reader.drain_held_queue(TMUX, SID, TRANSCRIPT)
             result = snapshot(db)
-            result["legacy_recovery"] = "fixture"
             verify(result, "after")
             if name == "after":
                 baseline = result
