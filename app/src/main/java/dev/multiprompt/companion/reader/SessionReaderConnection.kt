@@ -288,7 +288,7 @@ class SessionReaderConnection(
             val history = historyConnection ?: return PromptAdmission.Rejected("Chat is not ready")
             if (!pollGate.active.value) return PromptAdmission.Rejected("Chat is no longer selected")
             if (text.isBlank() || '\u0000' in text) return PromptAdmission.Rejected("Message is empty or invalid")
-            pendingPrompts.state.value.firstOrNull { it.text == text && it.error == null }?.let {
+            pendingPrompts.state.value.firstOrNull { MessageIdentity.same(it.identityText, MessageIdentity.text(text)) && it.error == null }?.let {
                 return PromptAdmission.WaitingForConnection(it.id)
             }
             history.state.value.messageError?.let { return PromptAdmission.Rejected(it) }

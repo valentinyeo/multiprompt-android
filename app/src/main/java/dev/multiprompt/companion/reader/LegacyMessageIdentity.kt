@@ -7,9 +7,9 @@ internal object LegacyMessageIdentity {
     private val SKILL = Regex("/[A-Za-z0-9:_-]+")
     private const val SKILL_LIMIT = 64
 
-    fun same(left: String, right: String): Boolean {
-        val a = left.replace("\r", "").trimEnd(' ')
-        val b = right.replace("\r", "").trimEnd(' ')
+    fun same(left: MessageText, right: MessageText): Boolean {
+        val a = left.value.replace("\r", "").trimEnd(' ')
+        val b = right.value.replace("\r", "").trimEnd(' ')
         if (a == b) return true
         return sameSkillText(words(a), words(b))
     }
@@ -22,18 +22,19 @@ internal object LegacyMessageIdentity {
             .getOrNull()
 
     fun shared(message: ChatHistoryMessage, card: MessageProtocol.Row): Boolean =
-        message.role == "user" && seconds(message.timestamp)?.let { it >= card.created - 2.0 } == true && same(message.text, card.text)
+        message.role == "user" && seconds(message.timestamp)?.let { it >= card.created - 2.0 } == true &&
+            same(MessageText(message.text), MessageText(card.text))
 
     fun delivered(message: ChatHistoryMessage, prompt: QueuedMessages.SentPrompt, sid: String, inode: Long): Boolean =
         prompt.sid.isNotEmpty() && prompt.sid == sid && prompt.inode == inode && message.role == "user" &&
-            message.offset >= prompt.afterOffset && same(message.text, prompt.text)
+            message.offset >= prompt.afterOffset && same(MessageText(message.text), MessageText(prompt.text))
 
     fun replyBoundary(message: ChatHistoryMessage): Boolean = message.role == "user" ||
         message.role == "assistant" && message.requestId.startsWith("history-") &&
             (message.text == "---\nFresh start\n---" || message.text.startsWith("---\nSwitched AI: ") && message.text.endsWith("\n---"))
 
     fun reply(message: ChatHistoryMessage, block: HostBlock, owner: ChatHistoryMessage?): Boolean =
-        block.done && message.role == "assistant" && same(message.text, block.text) &&
+        block.done && message.role == "assistant" && same(MessageText(message.text), MessageText(block.text)) &&
             (block.messageId == null || message.requestId.startsWith("history-") && when (owner?.role) {
                 "user" -> block.messageId == owner.requestId
                 "assistant" -> block.messageId.startsWith("fresh-")
