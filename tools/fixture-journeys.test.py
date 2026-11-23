@@ -139,6 +139,38 @@ class FixtureJourneyTest(unittest.TestCase):
                     result = subprocess.run([sys.executable, '-B', '-c', program.replace('/home/verifyssh', str(home))], capture_output=True, text=True)
                     self.assertEqual(valid, result.returncode == 0, result.stdout + result.stderr)
 
+    def test_ai_switch_stress_counts_messages_not_identical_pi_command_retries(self):
+        program = (SCRIPTS / 'ai-switch-drive.sh').read_text().split("<<'PYSTRESSHOST'\n", 1)[1].split('\nPYSTRESSHOST', 1)[0]
+        texts = ['handover', 'PHONE_AFTER_SWITCH_2538', 'PHONE_STREAM_2569', 'PHONE_DURING_STREAM_2569',
+                 'This chat ran on Pi until now and continues on Claude.', 'PHONE_SECOND_SWITCH_2569']
+        receipts = [dict(provider='pi' if index < 4 else 'claude', sid='pi-sid' if index < 4 else 'claude-sid',
+                         text=text, **(dict(id=f'message-{index}') if index < 4 else {})) for index, text in enumerate(texts)]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            root = home / '.local/state/multiprompt'
+            (root / 'agent-host').mkdir(parents=True)
+            (root / 'agent-host/claude.config.json').write_text(json.dumps(dict(provider='claude', enabled=True, tmux='live-verify-session')))
+            (root / 'shared-messages').mkdir()
+            with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
+                db.execute('CREATE TABLE message_events (sid TEXT, seq INTEGER, body TEXT)')
+                events = [dict(kind='turn.started', turn='turn', payload=dict(message_id='message-2')),
+                          dict(kind='text.done', turn='turn', at=2000)]
+                db.executemany('INSERT INTO message_events VALUES (?, ?, ?)', [('pi-sid', index, json.dumps(event)) for index, event in enumerate(events)])
+                db.execute('CREATE TABLE shared_messages (id TEXT, created REAL)')
+                db.execute('INSERT INTO shared_messages VALUES (?, ?)', ('message-3', 1))
+            cases = [(receipts, True), (receipts[:4] + [receipts[3]] + receipts[4:], True),
+                     (receipts[:3] + receipts[4:], False),
+                     (receipts[:4] + [dict(receipts[3], id='another-message')] + receipts[4:], False),
+                     (receipts[:4] + [dict(receipts[3], text='changed')] + receipts[4:], False),
+                     (receipts[:3] + [dict(receipts[3], sid='wrong-session')] + receipts[4:], False)]
+            for frames, valid in cases:
+                with self.subTest(frames=frames):
+                    (home / 'ai-switch-provider-receipts.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in frames))
+                    result = subprocess.run([sys.executable, '-B', '-c', program.replace('/home/verifyssh', str(home))], capture_output=True, text=True)
+                    self.assertEqual(valid, result.returncode == 0, result.stdout + result.stderr)
+                    if valid:
+                        self.assertEqual(len(frames), json.loads(result.stdout)['provider_frames'])
+
     def test_ai_switch_fixture_user_can_enable_the_initial_chat(self):
         fixture = load('ai_switch_fixture', SCRIPTS / 'ai-switch-fixture.py')
         branch = (SCRIPTS / 'fixture.sh').read_text().split('== ai-switch.md ]]; then', 1)[1].split('elif', 1)[0]

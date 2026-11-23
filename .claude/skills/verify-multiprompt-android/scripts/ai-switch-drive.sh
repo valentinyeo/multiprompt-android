@@ -158,9 +158,15 @@ from pathlib import Path
 import sqlite3
 home = Path('/home/verifyssh')
 root = home / '.local/state/multiprompt'
-receipts = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+frames = [json.loads(line) for line in (home / 'ai-switch-provider-receipts.jsonl').read_text().splitlines()]
+receipts = []
+for row in frames:
+    if row['provider'] == 'pi' and row.get('id') and row in receipts:
+        continue
+    receipts.append(row)
 assert len(receipts) == 6, receipts
 assert [row['provider'] for row in receipts] == ['pi'] * 4 + ['claude'] * 2, receipts
+assert len({row['sid'] for row in receipts[:4]}) == 1, receipts
 assert [row['text'] for row in receipts[1:4]] == ['PHONE_AFTER_SWITCH_2538', 'PHONE_STREAM_2569', 'PHONE_DURING_STREAM_2569'], receipts
 assert receipts[5]['text'] == 'PHONE_SECOND_SWITCH_2569', receipts
 assert 'This chat ran on Pi until now and continues on Claude.' in receipts[4]['text'], receipts
@@ -174,7 +180,8 @@ with sqlite3.connect(root / 'shared-messages/store.sqlite3') as db:
     assert submitted < completed, (submitted, completed)
 configs = [json.loads(path.read_text()) for path in (root / 'agent-host').glob('*.config.json')]
 assert [config['provider'] for config in configs if config['enabled'] and config['tmux'] == 'live-verify-session'] == ['claude'], configs
-print(json.dumps(dict(switches=2, followup_submitted_while_streaming=True, submitted=submitted, completed=completed, receipts=receipts[1:4] + receipts[5:])))
+print(json.dumps(dict(switches=2, followup_submitted_while_streaming=True, submitted=submitted, completed=completed,
+    provider_frames=len(frames), receipts=receipts[1:4] + receipts[5:])))
 PYSTRESSHOST
 python3 - "$EVIDENCE" <<'PYSTRESSUI'
 import json

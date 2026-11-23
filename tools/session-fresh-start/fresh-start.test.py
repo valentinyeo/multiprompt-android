@@ -128,6 +128,20 @@ class FreshStartFixtureTest(unittest.TestCase):
         self.assertEqual(1, len(inbox_tool.session_rows(xml, session)))
         self.assertEqual(1, inbox_tool.main(['inbox.py', str(xml), session]))
 
+    def test_inbox_replay_allows_only_the_two_named_stress_sessions(self):
+        session = fixture.TMUX
+        extras = ['live-pi_verify-breakit-probe', 'verify-breakit-other']
+        allowed = [argument for name in extras for argument in ('--allow-session', name)]
+        rows = [row(session, 'verify-session', 400)] + [row(name, name, 650 + index * 200) for index, name in enumerate(extras)]
+        xml = self.inbox_xml(rows)
+        self.assertEqual(1, inbox_tool.main(['inbox.py', str(xml), session]))
+        self.assertEqual(0, inbox_tool.main(['inbox.py', str(xml), session, *allowed]))
+        for broken in ([*rows, row(session, 'verify-session', 1200)],
+                       [*rows, row(fixture.NATIVE_AFTER, 'verify-session', 1200)],
+                       rows[1:], [*rows, row('verify-breakit-other-duplicate', 'verify-session', 1200)]):
+            xml = self.inbox_xml(broken)
+            self.assertEqual(1, inbox_tool.main(['inbox.py', str(xml), session, *allowed]))
+
     def test_drive_script_reaches_the_row_by_avatar(self):
         drive = (
             ROOT / '.claude/skills/verify-multiprompt-android/scripts/session-fresh-start-drive.sh'

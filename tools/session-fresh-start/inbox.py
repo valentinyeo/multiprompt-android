@@ -56,8 +56,11 @@ def main(argv):
     parser = argparse.ArgumentParser(description='Count enabled inbox rows for one tmux session name.')
     parser.add_argument('xml')
     parser.add_argument('session')
+    parser.add_argument('--allow-session', action='append', default=[])
     arguments = parser.parse_args(argv[1:])
     matches, others = scan(arguments.xml, arguments.session)
+    others = [row for row in others if row['description'] not in
+              {AVATAR + session for session in arguments.allow_session}]
     if len(matches) != 1:
         print(f'FRESH_START_INBOX_ROW_COUNT: expected exactly one row for {arguments.session}, got {len(matches)}', file=sys.stderr)
         for row in matches:
