@@ -43,11 +43,18 @@ tap_menu_receipt() {
         shot "native-menu-$label-missing-$retry"
         python3 "$scripts/mpa" read --xml "$EVIDENCE/current.xml" > "$EVIDENCE/native-menu-$label-missing-$retry-tree.json"
         printf 'Native menu tap did not send %s on attempt %s; the retained tree names the toast or the remaining menu\n' "$command" "$retry" >&2
+        if sudo grep -F "$command" /home/verifyssh/receipts.txt | grep -Fvx "VERIFY_RECEIVED:$command"; then
+            printf 'NATIVE_MENU_RECEIPT_CORRUPTED: the host received %s with extra bytes\n' "$command" >&2
+        fi
         if ! select_node text "$label" >/dev/null 2>&1; then
             if [[ -z "$section" ]]; then break; fi
-            tap_desc Attach
-            wait_for_text 'Add image'
-            tap_text "$section" "$label"
+            if ! select_node text 'Add image' >/dev/null 2>&1; then
+                tap_desc Attach
+                wait_for_text 'Add image'
+            fi
+            if select_node text "$section" >/dev/null 2>&1; then
+                tap_text "$section" "$label"
+            fi
         fi
     done
     printf 'NATIVE_MENU_RECEIPT_MISSING: VERIFY_RECEIVED:%s\n' "$command" >&2
