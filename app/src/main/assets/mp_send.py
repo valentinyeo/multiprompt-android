@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -23,6 +25,9 @@ SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 MESSAGE_ID = re.compile(r"[A-Za-z0-9_-]{16,80}\Z")
 TMUX_NAME = re.compile(r"[A-Za-z0-9_.:-]{1,64}\Z")
 MENTION = re.compile(r"@?(.*?)\{([A-Za-z0-9_.:-]{1,64})\}\Z", re.S)
+FOLDER_PATH = re.compile(r"[A-Za-z0-9_./~+ -]{1,220}\Z")
+VERIFY_TRIES = 4
+VERIFY_PAUSE = 1.0
 _reader = None
 
 
@@ -151,6 +156,109 @@ def read_json(path):
     return value if isinstance(value, dict) else None
 
 
+def write_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    temporary = path.with_name("." + path.name + "." + str(os.getpid()) + ".tmp")
+    handle = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(handle, "w", encoding="utf-8") as stream:
+        stream.write(json.dumps(value, separators=(",", ":"), sort_keys=True))
+    os.replace(temporary, path)
+
+
+def host_root():
+    return state_root() / "agent-host"
+
+
+def host_config_key(provider, sid):
+    return hashlib.sha256((provider + ":" + sid).encode()).hexdigest()[:32]
+
+
+def reader_cli(*args):
+    reader = str(reader_path())
+    try:
+        done = subprocess.run([sys.executable, reader, "host", *args], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise ValueError("host command failed: " + str(error))
+    try:
+        reply = json.loads(done.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        raise ValueError("host command gave no answer")
+    return reply if isinstance(reply, dict) else {}
+
+
+def zsb_command():
+    here = Path(__file__).resolve()
+    candidates = [here.with_name("mp-zsb")]
+    found = shutil.which("zsb")
+    if found:
+        candidates.append(Path(found))
+    candidates.append(Path.home() / ".local/bin/zsb")
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return "zsb"
+
+
+def zsb(*args):
+    try:
+        done = subprocess.run([zsb_command(), *args], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as error:
+        return dict(ok=False, error="zsb_unavailable", message=str(error))
+    try:
+        reply = json.loads(done.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return dict(ok=False, error="zsb_no_answer", message=(done.stderr or "").strip()[:200])
+    return reply if isinstance(reply, dict) else dict(ok=False, error="zsb_no_answer")
+
+
+def iter_tabs(listing):
+    for workspace in listing.get("workspaces") or []:
+        for tab in workspace.get("tabs") or []:
+            yield workspace.get("name"), None, tab
+        for group in workspace.get("groups") or []:
+            for tab in group.get("tabs") or []:
+                yield workspace.get("name"), group.get("name"), tab
+
+
+def find_tab(listing, tmux):
+    for workspace, group, tab in iter_tabs(listing):
+        if tab.get("tmux") == tmux:
+            return workspace, group, tab
+    return None, None, None
+
+
+def verify_tab(tmux):
+    for attempt in range(VERIFY_TRIES):
+        if attempt:
+            time.sleep(VERIFY_PAUSE)
+        listing = zsb("workspace-list")
+        tab = find_tab(listing, tmux)[2] if listing.get("ok") is True else None
+        if tab:
+            return tab
+    return None
+
+
+def open_visible_tab(listing, tmux, title, workspace, host, group=None, after_tab=None):
+    if listing.get("ok") is not True:
+        return dict(ok=False, error=listing.get("error") or "zsb_failed")
+    existing = find_tab(listing, tmux)[2]
+    if existing:
+        return dict(ok=True, tab=existing.get("id"), existing=True)
+    common = ("--host", host, "--tmux", tmux, "--name", title)
+    if after_tab is not None:
+        opened = zsb("session-open", "--workspace", workspace, "--after-tab", str(after_tab), *common)
+    elif group:
+        opened = zsb("session-open", "--workspace", workspace, "--group", group, *common)
+    else:
+        return dict(ok=False, error="no_placement")
+    if opened.get("ok") is not True and opened.get("error") == "reply_timeout":
+        tab = verify_tab(tmux)
+        if tab:
+            return dict(ok=True, tab=tab.get("id"), verified=True)
+    return opened
+
+
 def pid_alive(pid):
     if not isinstance(pid, int) or pid <= 0:
         return False
@@ -178,6 +286,11 @@ def published_names():
     return {tmux: entry["name"] for tmux, entry in known.items() if isinstance(entry, dict) and isinstance(entry.get("name"), str) and entry["name"].strip()}
 
 
+def host_owner_pid(config_path):
+    owner = read_json(config_path.with_name(config_path.name[: -len(".config.json")] + ".owner.json")) or {}
+    return owner.get("pid") if owner.get("owner") == "host" else None
+
+
 def live_chats():
     root = state_root() / "agent-host"
     names = published_names()
@@ -191,17 +304,25 @@ def live_chats():
         tmux, sid, provider = config.get("tmux"), state.get("sid"), state.get("provider")
         if not isinstance(tmux, str) or TMUX_NAME.match(tmux) is None or not isinstance(sid, str) or SESSION_ID.match(sid) is None:
             continue
-        if provider not in PROVIDERS or not pid_alive(state.get("pid")):
+        if provider not in PROVIDERS:
             continue
-        if sessions is not None and tmux not in sessions:
+        hosted = pid_alive(state.get("pid")) or pid_alive(host_owner_pid(config_path))
+        terminal = sessions is None or tmux in sessions
+        if not hosted and not terminal:
             continue
+        shown = names.get(tmux)
         started = state.get("started") if isinstance(state.get("started"), (int, float)) else 0
-        row = dict(name=names.get(tmux), provider=provider, sid=sid, tmux=tmux, cwd=config.get("cwd"), state="busy" if state.get("inflight") else "idle", started=started)
-        if tmux not in best or started >= best[tmux]["started"]:
+        if hosted:
+            row_state = "busy" if state.get("inflight") else "idle"
+        else:
+            row_state = "stopped"
+        row = dict(name=shown, provider=provider, sid=sid, tmux=tmux, cwd=config.get("cwd"), state=row_state,
+                   started=started, hosted=hosted, link=link_token(shown, tmux))
+        if tmux not in best or (row["hosted"], row["started"]) >= (best[tmux]["hosted"], best[tmux]["started"]):
             best[tmux] = row
     rows = sorted(best.values(), key=lambda row: ((row["name"] or row["tmux"]).casefold(), row["tmux"]))
     for row in rows:
-        del row["started"]
+        del row["started"], row["hosted"]
     return rows
 
 
@@ -287,6 +408,16 @@ def last_answer(reader, chat):
 
 def label(chat):
     return chat["name"] or chat["tmux"]
+
+
+def link_token(name, tmux):
+    text = name.strip() if isinstance(name, str) else ""
+    if not text or "{" in text or "}" in text or "@" in text:
+        text = tmux
+    token = text + "{" + tmux + "}"
+    if " " in text:
+        token = "@" + token
+    return token
 
 
 def squash(text):
@@ -391,6 +522,30 @@ def read_text(text):
     return text
 
 
+def resolve_destination(reader, provider, sid, tmux):
+    tmux = tmux or reader.host_chat_name(provider, sid) or locator_tmux(reader, provider, sid) or sid
+    if TMUX_NAME.fullmatch(tmux) is None:
+        raise ValueError("invalid terminal session: " + str(tmux))
+    bound = None
+    if sid == tmux:
+        hosted = reader.host_sid_for_tmux(provider, tmux)
+        if hosted:
+            sid = hosted
+        else:
+            bound = reader.resolve_tmux_agent(provider, tmux, require_bound=True)
+            if bound:
+                sid = bound[0]
+    if SESSION_ID.fullmatch(sid) is None:
+        raise ValueError("invalid session id: " + str(sid))
+    hosting = reader.host_dispatch_switch(provider, sid)
+    if hosting and reader.host_chat_name(provider, sid) == tmux and reader.host_owned(provider, sid):
+        return sid, tmux
+    bound = bound or reader.resolve_tmux_agent(provider, tmux, require_bound=True)
+    if bound and bound[0] == sid and (not hosting or reader.host_chat_name(provider, sid) == tmux):
+        return sid, tmux
+    raise ValueError("no live host or pane agent for " + provider + " session " + sid + " in " + tmux + "; run mp-sessions to find a live chat")
+
+
 def deliver(args, provider, sid, tmux, text, sender=None):
     reader = reader_module(args.reader)
     check_rate(reader, provider, sid, sender)
@@ -413,24 +568,18 @@ def deliver(args, provider, sid, tmux, text, sender=None):
             print(line)
     state = (final or {}).get("state")
     if state == "failed" or state == "cancelled":
+        print("mp-send: message " + str(state) + ": " + str((final or {}).get("receipt") or "delivery failed"), file=sys.stderr)
         return 3
-    if not args.wait:
-        return 0
-    if state not in TERMINAL_STATES:
-        print("timed out waiting for the message", file=sys.stderr)
+    if state not in (TERMINAL_STATES if args.wait else HANDOFF_STATES):
+        print("mp-send: timed out waiting for the message" + ("" if args.wait else " handoff; delivery is unconfirmed"), file=sys.stderr)
         return 4
     return 0
 
 
 def run(args):
-    if SESSION_ID.match(args.sid) is None:
-        raise ValueError("invalid session id: " + str(args.sid))
     text = read_text(args.text)
-    reader = reader_module(args.reader)
-    tmux = args.tmux or locator_tmux(reader, args.provider, args.sid)
-    if not tmux:
-        raise ValueError("no terminal binding for this session; pass --tmux")
-    return deliver(args, args.provider, args.sid, tmux, text)
+    sid, tmux = resolve_destination(reader_module(args.reader), args.provider, args.sid, args.tmux)
+    return deliver(args, args.provider, sid, tmux, text)
 
 
 def run_named(args):
@@ -473,7 +622,7 @@ def run_read(argv):
 def table(chats):
     rows = [("NAME", "AI", "STATE", "TMUX", "SID", "FOLDER")]
     for chat in chats:
-        rows.append((chat["name"] or "(no name yet)", chat["provider"], chat["state"], chat["tmux"], chat["sid"], chat["cwd"] or ""))
+        rows.append((chat.get("link") or chat["name"] or "(no name yet)", chat["provider"], chat["state"], chat["tmux"], chat["sid"], chat["cwd"] or ""))
     widths = [max(len(row[i]) for row in rows) for i in range(5)]
     return "\n".join("  ".join(row[i].ljust(widths[i]) for i in range(5)) + "  " + row[5] for row in rows)
 

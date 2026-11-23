@@ -467,9 +467,25 @@ export function verifyTokens(before, after, language) {
 
 function git(root, args) { return execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }); }
 
-export function run(root, { verify = false, check = false, base = 'HEAD', exemptions = [] } = {}) {
+export function addedLines(root, ref) {
+  const mergeBase = git(root, ['merge-base', ref, 'HEAD']).trim();
+  const known = new Set(git(root, ['ls-tree', '-r', '--name-only', '-z', mergeBase]).split('\0'));
+  const added = new Map();
+  let file = null;
+  for (const line of git(root, ['-c', 'core.quotepath=off', 'diff', '-U0', '--no-color', '--no-ext-diff', '--no-renames', mergeBase]).split('\n')) {
+    if (line.startsWith('+++ ')) { file = line.startsWith('+++ b/') ? line.slice(6) : null; if (file && !added.has(file)) added.set(file, []); continue; }
+    const hunk = file && line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+    if (!hunk) continue;
+    const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    if (count) added.get(file).push([Number(hunk[1]), Number(hunk[1]) + count - 1]);
+  }
+  return { added, known };
+}
+
+export function run(root, { verify = false, check = false, base = 'HEAD', exemptions = [], addedSince = null } = {}) {
   root = path.resolve(root);
   const files = git(root, ['ls-files', '-z']).split('\0').filter(Boolean);
+  const changes = addedSince ? addedLines(root, addedSince) : null;
   const report = { root, base, filesChanged: 0, languages: {}, kept: [], exemptions, found: [] };
   const baseFiles = new Set(verify ? git(root, ['ls-tree', '-r', '--name-only', '-z', base]).split('\0') : []);
   for (const file of files) {
@@ -493,7 +509,14 @@ export function run(root, { verify = false, check = false, base = 'HEAD', exempt
     if (check) {
       let comments;
       try { comments = tokenize(current, language).comments; } catch (error) { throw new Error(`${file}: ${error.message}`, { cause: error }); }
-      for (const c of comments.filter(c => !c.reason)) report.found.push({ file, line: current.slice(0, c.start).split('\n').length, text: current.slice(c.start, c.end).split('\n')[0].slice(0, 120) });
+      const added = changes && changes.known.has(file) ? changes.added.get(file) || [] : null;
+      if (added && !added.length) continue;
+      for (const c of comments.filter(c => !c.reason)) {
+        const line = current.slice(0, c.start).split('\n').length;
+        const lastLine = line + current.slice(c.start, c.end).split('\n').length - 1;
+        if (added && !added.some(([from, to]) => line <= to && lastLine >= from)) continue;
+        report.found.push({ file, line, text: current.slice(c.start, c.end).split('\n')[0].slice(0, 120) });
+      }
       continue;
     }
     let result;
@@ -519,18 +542,19 @@ export function run(root, { verify = false, check = false, base = 'HEAD', exempt
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  let verify = false, check = false, base = 'HEAD', root = '.', exemptions = [];
+  let verify = false, check = false, base = 'HEAD', root = '.', exemptions = [], addedSince = null;
   for (let i = 2; i < process.argv.length; i++) {
     const arg = process.argv[i];
     if (arg === '--verify') verify = true;
     else if (arg === '--check') check = true;
     else if (arg === '--base') base = process.argv[++i];
+    else if (arg === '--added-since') addedSince = process.argv[++i];
     else if (arg === '--exempt') exemptions.push(process.argv[++i]);
     else if (arg === '--exempt-file') exemptions.push(...JSON.parse(fs.readFileSync(process.argv[++i], 'utf8')));
     else if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}`);
     else root = arg;
   }
-  const report = run(root, { verify, check, base, exemptions });
+  const report = run(root, { verify, check, base, exemptions, addedSince });
   if (!check) console.log(JSON.stringify(report, null, 2));
   else if (report.found.length) {
     for (const f of report.found) console.error(`${f.file}:${f.line}: ${f.text}`);

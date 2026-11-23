@@ -41,12 +41,15 @@ test('MUBO tickets are accepted like other board prefixes', () => {
   assert.deepEqual(noteLines(['MUBO-236: stop sending End from jump to newest'], shipped), [
     '- MUBO-236 Jump to newest sends a stray key that breaks the next command',
   ]);
+  const pr = spawnSync('node', [tool, '--pr-title', 'MUBO-216: Two chats connecting together both go live'], { encoding: 'utf8' });
+  assert.equal(pr.status, 0, pr.stderr);
 });
 
 test('a commit without its ticket is refused', () => {
   assert.throws(() => noteLines(['Session previews no longer show terminal reply codes (#260)'], catalog), /must start with its ticket/);
   assert.throws(() => ticketFor('IGSH-0: nothing'), /must start with its ticket/);
   assert.throws(() => ticketFor('IGSH-12 no colon'), /must start with its ticket/);
+  assert.throws(() => ticketFor('MUBO-0: nothing'), /must start with its ticket/);
 });
 
 test('a ticket missing from the title list is refused', () => {

@@ -205,6 +205,17 @@ object TmuxCommands {
     fun createShellSession(sessionName: String, remotePath: String): String =
         createAgentSession(sessionName, remotePath, AgentHarness.SHELL)
 
+    fun newSessionCommand(
+        sessionName: String,
+        remotePath: String,
+        harness: AgentHarness,
+        sid: String,
+    ): String = if (harness.agent == null) {
+        createAgentSession(sessionName, remotePath, harness)
+    } else {
+        createLiveChat(sessionName, remotePath, sid, harness)
+    }
+
     fun createAgentSession(
         sessionName: String,
         remotePath: String,

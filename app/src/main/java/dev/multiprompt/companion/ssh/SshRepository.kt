@@ -634,11 +634,7 @@ class SshRepository(private val secrets: SecretStorage) {
                 val stamp = System.currentTimeMillis().toString(36)
                 val sessionName = if (agent != null) AgentKind.liveChatName(agent, project, stamp) else "${harness.namePrefix}-$project-$stamp"
                 val sid = if (live) UUID.randomUUID().toString() else ""
-                val command = if (live) {
-                    TmuxCommands.createLiveChat(sessionName, remotePath, sid, harness)
-                } else {
-                    TmuxCommands.createAgentSession(sessionName, remotePath, harness)
-                }
+                val command = TmuxCommands.newSessionCommand(sessionName, remotePath, harness, sid)
                 val result = execute(client, command, stdin = if (live) readerScript else null)
                 result.requireSuccess("create the ${harness.label} session")
                 require(result.stdout.lineSequence().any {

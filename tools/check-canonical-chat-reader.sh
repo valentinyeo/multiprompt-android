@@ -6,6 +6,7 @@ tools/sync-chat-reader.sh --check
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/src"
+cp -R tools/vendor/chat-reader/src/. "$tmp/src/"
 cp -R tools/vendor/chat-reader/tools "$tmp/tools"
 tar -xzf "$tmp/tools/ticket-titles.tar.gz" -C "$tmp"
 cp app/src/main/assets/chat_history_reader.py "$tmp/src/chat_history_reader.py"
