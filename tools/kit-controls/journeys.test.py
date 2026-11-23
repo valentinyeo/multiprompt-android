@@ -13,6 +13,37 @@ SCRIPTS = ROOT / ".claude/skills/verify-multiprompt-android/scripts"
 
 
 class ControlJourneyTest(unittest.TestCase):
+    def test_pins_scroll_away_from_the_pinned_end_in_both_list_orders(self):
+        source = (SCRIPTS / 'pins-drive.sh').read_text()
+        helpers = source[source.index('pins_top() {'):source.index('pins_instrument pins-seed')]
+        start = source.index('    pins_top\n', source.index('    wait_for_text Inbox'))
+        phase = source[start:source.index('    pins_capture "pins-$reverse-scrolled"', start)]
+        for reverse in ('false', 'true'):
+            with self.subTest(reverse=reverse), tempfile.TemporaryDirectory() as directory:
+                script = '''set -euo pipefail
+EVIDENCE="$1"
+reverse="$2"
+scripts=unused
+package=dev.multiprompt.companion
+python3() {
+    case "$2" in
+        top) return 0 ;;
+        pin-bounds) return 0 ;;
+        swipe-area) printf '540 606 1569\\n' ;;
+        *) return 1 ;;
+    esac
+}
+dump_ui() { :; }
+sleep() { :; }
+adb() { printf '%s\\n' "$*" >> "$EVIDENCE/swipes"; }
+''' + helpers + phase + '\npins_swipe start\n'
+                result = subprocess.run(['bash', '-c', script, 'pins-scroll', directory, reverse], capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                swipes = (Path(directory) / 'swipes').read_text().splitlines()
+                start_y, end_y = (1569, 606) if reverse == 'false' else (606, 1569)
+                self.assertEqual(swipes, [f'shell input swipe 540 {start_y} 540 {end_y} 500'] * 4
+                                 + [f'shell input swipe 540 {end_y} 540 {start_y} 500'])
+
     def test_changed_key_waits_for_the_sheet_before_using_underlying_controls(self):
         source = (SCRIPTS / "drive.sh").read_text()
         rotated = source.split('> "$EVIDENCE/rotated-sshd-pid.txt"', 1)[1]

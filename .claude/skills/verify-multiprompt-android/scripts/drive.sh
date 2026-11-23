@@ -543,7 +543,7 @@ if [[ "$feature" == session-favorite-dot.md ]]; then
             search)
                 python3 "$scripts/mpa" read --xml "$path" --select absent --value verify-keep >/dev/null
                 python3 "$scripts/mpa" read --xml "$path" --select text --value '1 result across all splits' >/dev/null
-                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside verify-session
+                python3 "$scripts/mpa" read --xml "$path" --select desc --value 'Session favorite dot' --inside 'Robot verify-session'
                 ;;
             plain)
                 python3 "$scripts/mpa" read --xml "$path" --select desc-absent --value 'Session favorite dot' >/dev/null
@@ -1260,6 +1260,7 @@ if [[ "$feature" == session-stop.md ]]; then
     exit 0
 fi
 if [[ "$feature" == session-summaries.md ]]; then
+    select_node desc 'Robot verify-session' reveal >/dev/null || true
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
     sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter

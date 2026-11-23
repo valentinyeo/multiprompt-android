@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+from functools import cmp_to_key
 import os
 import re
 import shutil
@@ -150,7 +151,12 @@ def resolve(root, mode, value, extra=(), inside=None):
             raise MpaError("INSIDE_MISSING", f"Missing container: {inside}", f"Run `mpa read`; `{inside}` is not on screen.")
         if len(anchors) != 1:
             raise MpaError("INSIDE_AMBIGUOUS", f"Ambiguous container: {inside} ({len(anchors)})", "Scope with a unique text or description, then retry.")
-        allowed = {id(node) for node in anchors[0].iter("node")}
+        anchor = anchors[0]
+        while anchor is not None and anchor is not root and anchor.get("clickable") != "true":
+            anchor = parents.get(anchor)
+        if anchor is None:
+            anchor = anchors[0]
+        allowed = {id(node) for node in anchor.iter("node")}
         candidates = [node for node in candidates if id(node) in allowed]
     matches = []
     for node in candidates:
@@ -350,6 +356,13 @@ def rect(bounds_text):
     return tuple(numbers)
 
 
+def reading_order(left, right):
+    (first, first_value), (second, second_value) = left, right
+    if first[1] < second[3] and second[1] < first[3]:
+        return (first[0] > second[0]) - (first[0] < second[0])
+    return (first[1] > second[1]) - (first[1] < second[1])
+
+
 def screen_order(root, values):
     application = package()
     matches = {}
@@ -383,9 +396,9 @@ def screen_order(root, values):
             outer = rect(ancestor.get("bounds"))
             if outer and not (outer[0] <= found[0] and found[2] <= outer[2] and outer[1] <= found[1] and found[3] <= outer[3]):
                 raise MpaError("ORDER_OFFSCREEN", f"Clipped by its scroll container: {value}", "Scroll the container until the whole row is visible, then retry `mpa proof --order`.")
-        positioned.append((found[1], found[0], value))
-    positioned.sort()
-    observed = [item[2] for item in positioned]
+        positioned.append((found, value))
+    positioned.sort(key=cmp_to_key(reading_order))
+    observed = [item[1] for item in positioned]
     if observed != list(values):
         raise MpaError("ORDER_MISMATCH", f"Screen order is {observed}, expected {list(values)}", "Run `mpa read`; the rows are not in the expected top-to-bottom order.")
     return observed

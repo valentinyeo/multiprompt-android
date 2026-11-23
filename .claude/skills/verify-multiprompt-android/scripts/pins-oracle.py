@@ -111,12 +111,11 @@ try:
         if args[0] == "any":
             pin = None
             for name in pin_names:
-                if named(name):
-                    try:
-                        pin = clickable(name)
-                        break
-                    except ValueError:
-                        pass
+                try:
+                    pin = clickable(name)
+                    break
+                except ValueError:
+                    continue
             if pin is None:
                 raise ValueError("no visible clickable pin")
         else:
