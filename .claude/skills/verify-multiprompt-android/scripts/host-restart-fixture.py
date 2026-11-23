@@ -224,6 +224,21 @@ def console_working():
     os.execvp('sleep', ['sleep', 'infinity'])
 
 
+def host_diagnostics(reader, sid):
+    paths = reader['host_paths']('claude', sid)
+    log = paths['log'].read_text() if paths['log'].exists() else ''
+    errors = paths['errors'].read_text() if paths['errors'].exists() else ''
+    published = reader['host_published_runtime']()
+    return dict(
+        host_log=log.splitlines()[-60:],
+        host_stderr=errors[-8000:],
+        state=reader['host_read'](paths['state']),
+        owner=reader['host_read'](paths['owner']),
+        published_runtime=published,
+        published_runtime_exists=bool(published) and Path(published).exists(),
+    )
+
+
 def phone_restart_before():
     published = HOME / '.multiprompt-runtime/reader.py'
     published.parent.mkdir(parents=True, exist_ok=True)
@@ -248,6 +263,8 @@ def wait_phone_restart():
             break
         time.sleep(0.2)
     else:
+        failure = dict(before=before, after=snap, rotated=False, diagnostics=host_diagnostics(reader, SID))
+        print(json.dumps(failure, indent=2), flush=True)
         raise AssertionError(f'Phone chat restart did not rotate host: before={before} after={snap}')
     result = dict(before=before, after=snap, rotated=True)
     print(json.dumps(result, indent=2), flush=True)
@@ -304,6 +321,8 @@ def wait_batch_restart():
         time.sleep(0.2)
     else:
         RELEASE_WORKING.touch()
+        failure = dict(before=before, after=idle_after, changed=False, diagnostics=host_diagnostics(reader, SID))
+        print(json.dumps(failure, indent=2), flush=True)
         raise AssertionError(f'Inbox batch restart did not rotate idle chat: before={before} after={idle_after}')
     time.sleep(1.0)
     working_after = host_snapshot(reader, SID_WORKING)
