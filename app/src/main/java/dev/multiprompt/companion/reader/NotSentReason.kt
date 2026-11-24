@@ -22,6 +22,7 @@ object NotSentReason {
         "host_disabled" to "Chat is turned off on the computer",
         "host_handed_over" to "Chat is in the terminal, try again from the computer",
         "owner_busy" to "Chat was busy, try again",
+        "blocked_by_hook" to "Chat blocked this message, nothing was sent",
         "not_sent" to GENERIC,
     )
 

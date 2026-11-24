@@ -43,7 +43,8 @@ object ChatHistoryProtocol {
     data class Identity(val agent: AgentKind, val tmux: String, val cwd: String = "", val sid: String = "")
 
     enum class QueueOperation(val wire: String) {
-        ENQUEUE("enqueue"), REMOVE("remove"), DEQUEUE("dequeue"), POP_ALL("popAll"), REJECTED("rejected");
+        ENQUEUE("enqueue"), REMOVE("remove"), DEQUEUE("dequeue"), POP_ALL("popAll"), REJECTED("rejected"),
+        BLOCKED("blocked");
     }
 
     data class Settlement(val operation: QueueOperation, val content: String)
@@ -156,7 +157,7 @@ object ChatHistoryProtocol {
                     deliveries[value.getString("id")] = QueuedMessages.Delivery.valueOf(value.getString("state").uppercase())
                 }
             }
-            if (row.optString("role") !in setOf("user", "assistant")) null else parseRow(row).also {
+            if (row.optString("role") !in setOf("user", "assistant")) null else parseRow(row)?.also {
                 require(it.offset >= base && it.end <= end && it.end > it.offset)
             }
         }
@@ -221,23 +222,27 @@ object ChatHistoryProtocol {
         fun hasPending(): Boolean = pending.size() > 0
     }
 
-    internal fun parseRow(row: JSONObject): Row = Row(
-        row.getString("role"), row.getString("text"), row.optString("id"), row.optString("timestamp"),
-        row.getLong("offset"), row.getLong("end"), row.optBoolean("queued"),
-        row.optJSONObject("settlement")?.let { fact ->
-            Settlement(QueueOperation.entries.first { it.wire == fact.getString("operation") }, fact.getString("content"))
-        },
-        row.optJSONObject("question")?.let { request ->
-            val questions = request.getJSONArray("questions")
-            (0 until questions.length()).map { index ->
-                PendingQuestion.parse(row.getString("id"), index, questions.getJSONObject(index), request.getString("provider"))
-            }
-        }.orEmpty(), row.optString("questionResult"), JSONObject(row.toString()).also { metadata ->
-            listOf("role", "text", "id", "timestamp", "offset", "end", "queued", "settlement", "question", "questionResult").forEach { metadata.remove(it) }
-        }.let { if (it.length() == 0) "" else it.toString() },
-    ).also {
-        require(it.role in setOf("user", "assistant") && it.offset >= 0 && it.end > it.offset)
-        require(if (it.settlement == null && it.questions.isEmpty() && it.questionResult.isEmpty()) it.text.isNotBlank() else it.role == "assistant" && it.text.isEmpty())
-        require(!it.queued || it.role == "user" && it.settlement == null)
+    internal fun parseRow(row: JSONObject): Row? {
+        val settlement = row.optJSONObject("settlement")?.let { fact ->
+            val operation = QueueOperation.entries.firstOrNull { it.wire == fact.getString("operation") } ?: return null
+            Settlement(operation, fact.getString("content"))
+        }
+        return Row(
+            row.getString("role"), row.getString("text"), row.optString("id"), row.optString("timestamp"),
+            row.getLong("offset"), row.getLong("end"), row.optBoolean("queued"),
+            settlement,
+            row.optJSONObject("question")?.let { request ->
+                val questions = request.getJSONArray("questions")
+                (0 until questions.length()).map { index ->
+                    PendingQuestion.parse(row.getString("id"), index, questions.getJSONObject(index), request.getString("provider"))
+                }
+            }.orEmpty(), row.optString("questionResult"), JSONObject(row.toString()).also { metadata ->
+                listOf("role", "text", "id", "timestamp", "offset", "end", "queued", "settlement", "question", "questionResult").forEach { metadata.remove(it) }
+            }.let { if (it.length() == 0) "" else it.toString() },
+        ).also {
+            require(it.role in setOf("user", "assistant") && it.offset >= 0 && it.end > it.offset)
+            require(if (it.settlement == null && it.questions.isEmpty() && it.questionResult.isEmpty()) it.text.isNotBlank() else it.role == "assistant" && it.text.isEmpty())
+            require(!it.queued || it.role == "user" && it.settlement == null)
+        }
     }
 }
