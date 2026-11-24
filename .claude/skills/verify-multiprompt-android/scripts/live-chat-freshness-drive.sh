@@ -57,9 +57,9 @@ live_chat_freshness() {
     scroll_to_newest
     shot live-chat-appended
     python3 "$scripts/mpa" proof --name live-chat-appended --xml "$EVIDENCE/$(printf '%02d' "$step")-live-chat-appended.xml" \
-        --require-text "$reply_newest" --require-text "$user_newest" \
         --require-text "$live_chat_user" --require-text "$live_chat_reply" \
         --forbid-text "$stale_first" --forbid-text "$neighbour" \
+        --order "$user_newest" --order "$reply_newest" \
         --order "$live_chat_user" --order "$live_chat_reply"
     sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/real-chat-fixture.py check \
         > "$EVIDENCE/live-chat-host-check.json"

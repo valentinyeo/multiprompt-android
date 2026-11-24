@@ -23,8 +23,8 @@ text is the assertion; a host frame or a reader reply never counts as screen pro
    within 8,000 ms and record the measured milliseconds.
 4. Append an assistant reply with `LIVE_CHAT_APPEND_REPLY_2781` the same way. Require it on
    the phone screen within the same limit and record its own measurement.
-5. Require both appended rows above the previous newest pair, the previous newest pair still
-   present, and the stale sibling and neighbouring chat still absent.
+5. Require the previous newest pair and then both appended rows, in that order, each fully on
+   screen once, with the stale sibling and the neighbouring chat still absent.
 6. Read the host transcript back: the fixture `check` passes with the appended rows as the
    newest, and the transcript's last two lines carry both markers.
 
