@@ -2,6 +2,7 @@ package dev.multiprompt.companion.ui
 
 import org.json.JSONArray
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReplyQuoteTest {
@@ -48,9 +49,48 @@ class ReplyQuoteTest {
     @Test
     fun skillMessageKeepsTheQuoteWithTheDraft() {
         assertEquals(
-            "/review > Kraków\n\nmy answer",
+            "/review my answer\n> Kraków",
             PromptComposer.composeMessage("/review my answer", emptyList(), "Kraków", listOf(dev.multiprompt.companion.skills.NativeSkill("review", "Review"))),
         )
+    }
+
+    @Test
+    fun commandReplyStartsWithTheCommandLine() {
+        val wire = ReplyQuote.compose("Quoted line", "/review check this")
+        assertEquals("/review check this\n> Quoted line", wire)
+        assertTrue(wire.startsWith("/review"))
+        val reply = requireNotNull(ReplyQuote.parse(wire))
+        assertEquals("> Quoted line", reply.quoted)
+        assertEquals("/review check this", reply.body)
+        val pill = dev.multiprompt.companion.skills.NativeSkills.spans(
+            wire,
+            listOf(dev.multiprompt.companion.skills.NativeSkill("review", "Review")),
+        )
+        assertEquals(0, pill.single().start)
+    }
+
+    @Test
+    fun commandReplyKeepsItsFollowingLinesAfterTheQuote() {
+        assertEquals(
+            "/pstack:poteto-help why did this arrive as plain text?\n> the earlier answer\n\nand a following line",
+            ReplyQuote.compose("the earlier answer", "/pstack:poteto-help why did this arrive as plain text?\nand a following line"),
+        )
+    }
+
+    @Test
+    fun commandReplyWithNoOtherTextKeepsTheQuoteAfterTheCommand() {
+        val wire = ReplyQuote.compose("the earlier answer", "/pstack:poteto-help")
+        assertEquals("/pstack:poteto-help\n> the earlier answer", wire)
+        val reply = requireNotNull(ReplyQuote.parse(wire))
+        assertEquals("> the earlier answer", reply.quoted)
+        assertEquals("/pstack:poteto-help", reply.body)
+    }
+
+    @Test
+    fun ordinaryReplyAndAPathLikeWordKeepTheQuoteFirst() {
+        assertEquals("> the earlier answer\n\nmy answer", ReplyQuote.compose("the earlier answer", "my answer"))
+        assertEquals("> the earlier answer\n\n/tmp/notes.txt says hello", ReplyQuote.compose("the earlier answer", "/tmp/notes.txt says hello"))
+        assertEquals("> the earlier answer\n\nplease /review this", ReplyQuote.compose("the earlier answer", "please /review this"))
     }
     @Test
     fun displaySeparatesTheReferenceWithoutChangingWhatTheAgentReceives() {

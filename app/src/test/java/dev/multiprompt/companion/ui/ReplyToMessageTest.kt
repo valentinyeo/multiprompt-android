@@ -80,7 +80,7 @@ class ReplyToMessageTest {
     private lateinit var clipboard: ClipboardManager
     private lateinit var view: View
 
-    private fun harness(agentText: String = "First line\nSecond line") {
+    private fun harness(agentText: String = "First line\nSecond line", draft: String = "my answer") {
         compose.setContent {
             MaterialTheme {
                 var replyTo by remember { mutableStateOf<String?>(null) }
@@ -112,7 +112,7 @@ class ReplyToMessageTest {
                     replyTo?.let {
                         ReplyQuoteBar(message = it, sunlight = true, onCancel = { replyTo = null })
                     }
-                    KitPrimaryButton("Send", onClick = { sent.add(ReplyQuote.compose(replyTo, "my answer")) })
+                    KitPrimaryButton("Send", onClick = { sent.add(PromptComposer.composeMessage(draft, emptyList(), replyTo, emptyList())) })
                 }
             }
         }
@@ -127,6 +127,18 @@ class ReplyToMessageTest {
         compose.onNodeWithText("Send").performClick()
         compose.runOnIdle {
             assertEquals(listOf("> First line\n> Second line\n\nmy answer"), sent)
+        }
+    }
+
+    @Test
+    fun commandReplySendsTheCommandBeforeTheQuote() {
+        harness(draft = "/review check this")
+        compose.onNodeWithTag("agent").performTouchInput { swipeRight() }
+        compose.onNodeWithText("Replying").assertIsDisplayed()
+        compose.onNodeWithText("Send").performClick()
+        compose.runOnIdle {
+            assertEquals(listOf("/review check this\n> First line\n> Second line"), sent)
+            assertTrue(sent.single().startsWith("/review"))
         }
     }
 
