@@ -30,6 +30,14 @@ files=0
 if timeout 300 adb pull /data/anr/ "$dir/data-anr" >> "$dir/pull-$tag.txt" 2>&1; then
     files=$(find "$dir/data-anr" -type f 2> /dev/null | wc -l)
 fi
+if [ "$files" -eq 0 ] && grep -q 'anr_' "$dir/ls-$tag.txt" 2> /dev/null; then
+    say 'traces listed but not pulled, retrying as root'
+    timeout 60 adb root >> "$dir/root.txt" 2>&1
+    timeout 180 adb wait-for-device >> "$dir/root.txt" 2>&1
+    sleep 2
+    timeout 300 adb pull /data/anr/ "$dir/data-anr" >> "$dir/pull-$tag.txt" 2>&1
+    files=$(find "$dir/data-anr" -type f 2> /dev/null | wc -l)
+fi
 say "pulled=$files"
 
 timeout 120 adb shell dumpsys dropbox --print data_app_anr > "$dir/dropbox-$tag.txt" 2>&1 || rm -f "$dir/dropbox-$tag.txt"
