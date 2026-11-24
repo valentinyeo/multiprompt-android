@@ -290,13 +290,23 @@ test('only an unexpanded journey matrix may skip, and a journey never fails', as
   assert.throws(() => checkStatus(pr), /Checks not green/);
 });
 
-test('a skipped speed check passes and a failed one blocks the merge', async () => {
-  const { checkStatus } = await gate;
+test('the speed check name matches its workflow job name', async () => {
+  const { speedCheckJob } = await gate;
+  const workflow = readFileSync(path.join(__dirname, '../.github/workflows/speed-check.yml'), 'utf8');
+  const jobName = workflow.split(/^jobs:\s*$/m)[1].match(/^ {4}name: (.+?)[ \t]*$/m)?.[1];
+  assert.equal(speedCheckJob, jobName);
+});
+
+test('a skipped speed check passes only under its workflow name', async () => {
+  const { checkStatus, speedCheckJob } = await gate;
   const skipped = await green();
-  skipped.statusCheckRollup.push({ ...skipped.statusCheckRollup[0], name: 'chat list remeasures', conclusion: 'SKIPPED' });
+  skipped.statusCheckRollup.push({ ...skipped.statusCheckRollup[0], name: speedCheckJob, conclusion: 'SKIPPED' });
   assert.equal(checkStatus(skipped).ready, true);
   skipped.statusCheckRollup.at(-1).conclusion = 'FAILURE';
-  assert.throws(() => checkStatus(skipped), /Checks not green: chat list remeasures/);
+  assert.throws(() => checkStatus(skipped), new RegExp(`Checks not green: ${speedCheckJob}`));
+  const stale = await green();
+  stale.statusCheckRollup.push({ ...stale.statusCheckRollup[0], name: 'chat list remeasures', conclusion: 'SKIPPED' });
+  assert.throws(() => checkStatus(stale), /Checks not green: chat list remeasures/);
 });
 
 test('a picked journey that skipped blocks the merge', async () => {
