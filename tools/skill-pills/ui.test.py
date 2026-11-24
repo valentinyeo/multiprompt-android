@@ -126,9 +126,9 @@ class SkillPillsUiTest(unittest.TestCase):
         self.node(parent=message, text='/clear', bounds='[120,50][281,90]')
         ImageDraw.Draw(self.image).rectangle((20, 40, 379, 119), fill=(233, 233, 233))
         with self.assertRaisesRegex(AssertionError, 'fill'):
-            self.check('sent', 'Keep /clear this', '/clear')
+            self.check('sent-command', 'Keep /clear this', '/clear')
         self.pill((120, 50, 280, 89))
-        self.assertEqual(self.check('sent', 'Keep /clear this', '/clear')['sent_pill'], '/clear')
+        self.assertEqual(self.check('sent-command', 'Keep /clear this', '/clear')['sent_pill'], '/clear')
         with self.assertRaisesRegex(AssertionError, 'file path'):
             self.check('sent-path', 'Keep /clear this', '/clear')
 

@@ -82,7 +82,7 @@ def check(xml, screenshot, phase, text, pill='/review-native'):
     assert len(editors) == 1, 'Expected one composer'
     editor = editors[0]
     result = dict(screenshot=Path(screenshot).name, text=text)
-    if phase in ('sent', 'sent-removed', 'sent-path'):
+    if phase in ('sent', 'sent-command', 'sent-removed', 'sent-path'):
         assert editor.get('text') in ('', 'Message verify-session'), 'Send did not clear the composer'
         messages = [node for node in nodes if node.get('class') != 'android.widget.EditText'
                     and node.get('text') == text]
@@ -93,7 +93,7 @@ def check(xml, screenshot, phase, text, pill='/review-native'):
             assert not inline, ('A file path must not render as a skill pill', [child.get('text') for child in inline])
             result.update(sent_path=text, sent_pill=None)
             return result
-        if phase == 'sent':
+        if phase in ('sent', 'sent-command'):
             pills = [child for message in messages for child in message.iter('node')
                      if child.get('text') == pill]
             assert len(pills) == 1, 'Sent message must contain one inline skill pill'
