@@ -54,7 +54,7 @@ ungrouped_layout='{"workspaces":["Studio","Review"],"tabs":{"verify-session":{"w
 "$mpa" tap text Studio
 "$mpa" read --wait-text ORIGINAL
 "$mpa" screenshot group-headings
-"$mpa" proof --name group-headings --require-text ORIGINAL --require-text OTHER --require-text RECENTS --order ORIGINAL --order OTHER --forbid-text 'Rename group'
+"$mpa" proof --name group-headings --require-text ORIGINAL --require-text OTHER --forbid-text RECENTS --forbid-text 'Rename group'
 account_layout_prefs group-headings "$studio_layout"
 "$mpa" tap desc 'Session list actions'
 "$mpa" tap text 'New workspace'
@@ -121,7 +121,7 @@ account_layout_receipt group-renamed "$renamed_layout"
 "$mpa" read --wait-absent 'Rename group'
 "$mpa" read --wait-text RECENTS
 "$mpa" screenshot group-ungrouped
-"$mpa" proof --name group-ungrouped --require-text RECENTS --require-text OTHER --forbid-text RENAMED --forbid-text ORIGINAL --forbid-text 'Rename group'
+"$mpa" proof --name group-ungrouped --require-text RECENTS --require-text OTHER --order RECENTS --order OTHER --forbid-text RENAMED --forbid-text ORIGINAL --forbid-text 'Rename group'
 account_layout_prefs group-ungrouped "$ungrouped_layout"
 account_layout_receipt group-ungrouped "$ungrouped_layout"
 sudo cat /home/verifyssh/device-approval-receipts.jsonl > "$EVIDENCE/device-approval-receipts.txt"
