@@ -42,7 +42,7 @@ test('all six phone jobs and historical replays run periodically, never on PRs',
   assert.match(periodic, /bash tools\/kit-controls\/replay\.sh/);
   assert.doesNotMatch(periodic, /  pull_request:|phone-routing|needs: build/);
   for (const job of [...phones, 'baseline-profile', 'message-projection-replays', 'historical-controls']) assert.ok(jobs(periodic).includes(job), job);
-  for (const name of ['account-journey', 'app-name', 'reply-notifications', 'top-fade', 'multiprompt-parity']) {
+  for (const name of ['account-journey', 'app-name', 'reply-notifications', 'top-fade', 'multiprompt-parity', 'scroll-jank']) {
     const workflow = read(`.github/workflows/${name}.yml`);
     assert.doesNotMatch(workflow, /^  pull_request:/m, name);
     assert.match(workflow, /^  schedule:/m, name);
