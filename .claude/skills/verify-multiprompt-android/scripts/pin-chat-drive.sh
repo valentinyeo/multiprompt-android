@@ -75,7 +75,25 @@ prove_pinned_on_top pin-after-reply
 relaunch_app Inbox
 "$mpa" read --wait-text Inbox
 prove_pinned_on_top pin-after-restart
-row_below=$(python3 - "$EVIDENCE/pin-top-rows-pin-after-restart.json" <<'PY'
+"$mpa" hold desc "$deep_description"
+"$mpa" read --wait-text Unpin
+"$mpa" read --select absent --value 'Pin to top'
+"$mpa" screenshot pin-unpin-menu
+"$mpa" tap text Unpin
+"$mpa" read --wait-absent Unpin
+sleep 2
+"$mpa" screenshot pin-unpinned
+cp "$EVIDENCE/current.xml" "$EVIDENCE/pin-unpinned.xml"
+relaunch_app Inbox
+"$mpa" read --wait-text Inbox
+"$mpa" proof --name pin-unpinned --order "$deep_target" --order "$other_target"
+"$mpa" hold desc "$deep_description"
+"$mpa" read --wait-text 'Pin to top'
+"$mpa" tap text 'Pin to top'
+"$mpa" read --wait-absent 'Pin to top'
+sleep 2
+prove_pinned_on_top pin-archive-top
+row_below=$(python3 - "$EVIDENCE/pin-top-rows-pin-archive-top.json" <<'PY'
 import json
 import sys
 print(json.load(open(sys.argv[1]))[1])
@@ -101,16 +119,8 @@ sleep 2
 prove_pinned_on_top pin-after-restore
 "$mpa" hold desc "$deep_description"
 "$mpa" read --wait-text Unpin
-"$mpa" read --select absent --value 'Pin to top'
-"$mpa" screenshot pin-unpin-menu
 "$mpa" tap text Unpin
 "$mpa" read --wait-absent Unpin
-sleep 2
-"$mpa" screenshot pin-unpinned
-cp "$EVIDENCE/current.xml" "$EVIDENCE/pin-unpinned.xml"
-relaunch_app Inbox
-"$mpa" read --wait-text Inbox
-"$mpa" proof --name pin-unpinned --order "$deep_target" --order "$other_target"
 python3 - "$EVIDENCE" "$deep_target" "$other_target" <<'PY'
 import json
 from pathlib import Path
@@ -118,7 +128,7 @@ import sys
 
 root = Path(sys.argv[1])
 pinned_chat, other_chat = sys.argv[2], sys.argv[3]
-names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-archive-next", "pin-after-restore", "pin-unpinned"]
+names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-unpinned", "pin-archive-top", "pin-archive-next", "pin-after-restore"]
 phases = {}
 for name in names:
     phase = json.loads((root / f"{name}.json").read_text())
