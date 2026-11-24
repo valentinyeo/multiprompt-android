@@ -64,8 +64,10 @@ menu_scroll() {
     return 1
 }
 : > "$EVIDENCE/native-menu-commands.txt"
+wait_for_absence 'Model switch did not finish; try again'
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
+    wait_for_absence 'Model switch did not finish; try again'
     tap_text Model
     tap_text "$model"
     wait_receipt "VERIFY_RECEIVED:/model ${model,,}"
@@ -79,6 +81,7 @@ for model in Opus Haiku Fable; do
     menu_state "attach-${model,,}-selected" visible "$model ›"
 done
 for effort in Low Medium; do
+    wait_for_absence 'Model switch did not finish; try again'
     tap_text Effort
     tap_text "$effort"
     wait_receipt "VERIFY_RECEIVED:/effort ${effort,,}"
