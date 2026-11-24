@@ -109,8 +109,12 @@
       "label": "New workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:InboxOverflowMenu:KitMenuRow:431d04890f02a3da:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/AppMenu.kt:79",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Open the inbox menu and tap New workspace",
+        "result": "The New workspace sheet appears with the Name field, Cancel and Create"
+      }
     },
     {
       "id": "inbox-menu.refresh",
@@ -1717,8 +1721,12 @@
       "label": "Dismiss Rename group",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:5921326e32256c64:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1370",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Press back on the Rename group sheet",
+        "result": "The sheet closes, ORIGINAL stays and the stored group is still Original"
+      }
     },
     {
       "id": "rename-group.group-name",
@@ -1726,8 +1734,12 @@
       "label": "Group name",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:682890a7f73b52e4:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1375",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Read the Name field and replace it with Renamed",
+        "result": "The field first shows Original and then reads Renamed back"
+      }
     },
     {
       "id": "rename-group.keyboard-done",
@@ -1753,8 +1765,12 @@
       "label": "Ungroup",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:883d6f54931a3e10:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1396",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Press and hold RENAMED and tap Ungroup",
+        "result": "RENAMED is gone, RECENTS and OTHER remain, and the stored group for verify-session is empty"
+      }
     },
     {
       "id": "rename-group.rename",
@@ -1762,8 +1778,12 @@
       "label": "Rename",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:3f5e606e19021a8d:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1400",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Replace the group name with Renamed and tap Rename",
+        "result": "RENAMED replaces ORIGINAL on screen and the stored group is renamed"
+      }
     },
     {
       "id": "move-to-group.dismiss-move-to-group",
@@ -2398,8 +2418,12 @@
       "label": "Dismiss New workspace",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSheet:9dea4374bd6c177e:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1856",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Open the New workspace sheet and press back",
+        "result": "The sheet closes and the stored layout still holds only Studio"
+      }
     },
     {
       "id": "new-workspace.workspace-name",
@@ -2407,8 +2431,12 @@
       "label": "Workspace name",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:OutlinedTextField:29e14769c4224308:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1858",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Type into the Name field of the New workspace sheet",
+        "result": "The field reads the typed name back before Create"
+      }
     },
     {
       "id": "new-workspace.cancel",
@@ -2416,8 +2444,12 @@
       "label": "Cancel",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitSecondaryButton:b25b4dec63101f4c:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1866",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Type Discarded and tap Cancel",
+        "result": "The sheet closes and the stored layout still holds only Studio"
+      }
     },
     {
       "id": "new-workspace.create",
@@ -2425,8 +2457,12 @@
       "label": "Create",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitPrimaryButton:fbc971a129caee75:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:1867",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Type Review and tap Create",
+        "result": "The sheet closes, the Review split is selectable and shows This split is clear, and the stored layout holds Studio and Review"
+      }
     },
     {
       "id": "inbox-bucket-menu.switch-session-bucket",
@@ -2716,8 +2752,12 @@
       "label": "Long-press group to rename",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:combinedClickable:985970dfd659cb48:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:2209",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "workspace-group-controls.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/workspace-group-controls.md",
+        "action": "Press and hold the ORIGINAL group heading",
+        "result": "The Rename group sheet opens with the group name in its field"
+      }
     },
     {
       "id": "end-session-confirmation-inbox-and-reader.dismiss-end-session-confirmation-inbox-and-reader",

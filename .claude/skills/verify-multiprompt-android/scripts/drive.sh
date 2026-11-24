@@ -1104,6 +1104,11 @@ if [[ "$feature" == crash-report.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == workspace-group-controls.md ]]; then
+    source "$scripts/workspace-group-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0

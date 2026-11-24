@@ -124,6 +124,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `crash-report.exits`. Runner: `verify.yml` (debug). Priority evidence: `crash-reports-received.txt` (3200 characters), `crash-exit-summaries.json` (900 characters), `crash-exits.txt` (1600 characters).
 - [Cleared chat](chat-clear.md): A transcribed chat that starts fresh after /clear shows only what came after the clear, keeps a message typed after it, and never shows or sends an unsent or failed message from before it.
   - Outcomes: `chat-clear.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-clear-before-unsent.xml` (1500 characters), `00-clear-after.xml` (1500 characters), `00-clear-reopened.xml` (1500 characters), `00-clear-state.json` (1500 characters), `clear-store-after.json` (1500 characters), `clear-store-final.json` (1500 characters).
+- [Workspace and group controls](workspace-group-controls.md): Create a workspace through the inbox menu, cancel and dismiss it, then long-press a chat group to rename and ungroup it, with the stored account layout checked. MUBO-288.
+  - Outcomes: `inbox.workspace-groups`. Runner: `verify.yml` (debug). Prerequisites: Local authenticated account fixture; live production email OTP is not exercised. Priority evidence: `group-headings.json` (1200 characters), `new-workspace-open.json` (800 characters), `workspace-created.json` (1200 characters), `rename-group-open.json` (1200 characters), `group-renamed.json` (1200 characters), `group-renamed-host.json` (1200 characters).
 
 ## Initial coverage gaps
 
