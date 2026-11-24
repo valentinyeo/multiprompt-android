@@ -18,8 +18,8 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35], application = Application::class)
 class ReaderSwipeOrderTest {
     private lateinit var f: SessionActivityFixture
-    private val firstPin = session("first-pin", 50)
-    private val secondPin = session("second-pin", 40)
+    private val firstPin = session("first-pin", 5)
+    private val secondPin = session("second-pin", 4)
     private val newest = session("newest", 30)
     private val middle = session("middle", 20)
     private val oldest = session("oldest", 10)
