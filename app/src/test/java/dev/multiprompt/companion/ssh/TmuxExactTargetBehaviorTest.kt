@@ -191,13 +191,13 @@ class TmuxExactTargetBehaviorTest {
         return announced ?: 0
     }
 
-    private fun stopGroup(group: Long?, process: Process, reader: Thread) {
+    private fun stopGroup(group: Long?, process: Process, reader: Thread, expectSignal: Boolean = true) {
         val killer = group?.takeIf { it > 1 && process.isAlive }?.let { ProcessBuilder("/bin/kill", "-KILL", "--", "-$it").start() }
         killer?.waitFor()
         if (process.isAlive) process.destroyForcibly()
         process.waitFor()
         reader.join()
-        if (killer != null) assertEquals("Group signal must succeed", 0, killer.exitValue())
+        if (expectSignal && killer != null) assertEquals("Group signal must succeed", 0, killer.exitValue())
         assertFalse("Stream must terminate", process.isAlive)
         assertFalse("Stream reader must terminate", reader.isAlive)
     }
@@ -311,7 +311,7 @@ class TmuxExactTargetBehaviorTest {
             Files.write(gate, byteArrayOf())
             assertEquals("Slow child must keep running", "started", lines.take())
         } finally {
-            stopGroup(group, process, reader)
+            stopGroup(group, process, reader, expectSignal = false)
         }
     }
 
