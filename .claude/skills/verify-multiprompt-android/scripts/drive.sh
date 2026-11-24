@@ -2507,6 +2507,72 @@ print('CLEAR_JOURNEY_RESULT', json.dumps(result))
 CLEAR_RESULT
     exit 0
 fi
+if [[ "$feature" == owner-skills.md ]]; then
+    tap_text verify-session
+    wait_for_text VERIFY_READY_528
+    sudo -u verifyssh tmux display-message -p -t verify-session '#{session_path}' > "$EVIDENCE/owner-session-path.txt"
+    grep -Fx '/home/skillowner/chat-work' "$EVIDENCE/owner-session-path.txt"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/owner-receipts-before.txt" 2>/dev/null || true
+    if grep -F '/owner-note' "$EVIDENCE/owner-receipts-before.txt"; then
+        printf 'OWNER_SKILL_ALREADY_SENT\n' >&2
+        exit 1
+    fi
+    shot owner-reader
+    tap_node editor ''
+    adb shell input keycombination 113 29
+    adb shell input text /
+    wait_for_text '/owner-note'
+    wait_for_absence '/login-note'
+    shot owner-skill-list
+    tap_text '/owner-note'
+    shot owner-skill-inserted
+    python3 - "$EVIDENCE" <<'OWNER'
+import sys
+import xml.etree.ElementTree as ET
+from pathlib import Path
+root = Path(sys.argv[1])
+package = 'dev.multiprompt.companion.debug'
+def keep(source, dest):
+    tree = ET.parse(source).getroot()
+    out = ET.Element('hierarchy')
+    for node in tree.iter('node'):
+        text = node.get('text') or ''
+        if '/owner-note' in text or '/login-note' in text or 'Owner account skill' in text or 'Login account skill' in text:
+            copy = ET.SubElement(out, 'node')
+            for key in ('text', 'class', 'package', 'content-desc'):
+                if node.get(key):
+                    copy.set(key, node.get(key))
+    ET.ElementTree(out).write(dest, encoding='unicode')
+listed_path = next(root.glob('*-owner-skill-list.xml'))
+listed = ET.parse(listed_path).getroot()
+texts = [node.get('text') or '' for node in listed.iter('node')]
+assert any('/owner-note' in text for text in texts), texts
+assert not any('/login-note' in text for text in texts), texts
+assert not any('BODY_MUST_NOT_BE_INJECTED' in text for text in texts), texts
+inserted_path = next(root.glob('*-owner-skill-inserted.xml'))
+inserted = ET.parse(inserted_path).getroot()
+fields = [node for node in inserted.iter('node') if node.get('class') == 'android.widget.EditText' and node.get('package') == package]
+assert len(fields) == 1 and fields[0].get('text') == '/owner-note ', fields
+keep(listed_path, root / 'owner-skill-list.xml')
+keep(inserted_path, root / 'owner-skill-inserted.xml')
+print('OWNER_SKILL_LIST_VISIBLE')
+OWNER
+    adb shell input text kept
+    tap_desc 'Send prompt'
+    wait_receipt 'VERIFY_RECEIVED:/owner-note kept'
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/owner-receipts.txt"
+    grep -Fx 'VERIFY_RECEIVED:/owner-note kept' "$EVIDENCE/owner-receipts.txt"
+    if grep -F '/login-note' "$EVIDENCE/owner-receipts.txt"; then
+        printf 'LOGIN_SKILL_LEAKED\n' >&2
+        exit 1
+    fi
+    sudo cat /home/verifyssh/sudo.log > "$EVIDENCE/owner-sudo.txt"
+    grep -F 'USER=skillowner ; COMMAND=/usr/bin/python3' "$EVIDENCE/owner-sudo.txt"
+    grep -F 'native-skills' "$EVIDENCE/owner-sudo.txt"
+    sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/owner-ssh-auth.txt"
+    printf 'OWNER_ACCOUNT_SKILLS_PROVEN\n' | tee "$EVIDENCE/owner-result.txt"
+    exit 0
+fi
 if [[ "$feature" == native-skills.md ]]; then
     set_composer() {
         tap_node editor ''
