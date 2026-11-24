@@ -1,0 +1,1 @@
+MUBO-299: A phone check catches a slow update before it merges

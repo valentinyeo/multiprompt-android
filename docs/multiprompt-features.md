@@ -50,6 +50,9 @@ Historical gaps remain linked in this list.
 
 Agent operation: `python3 tools/parity/multiprompt-parity.py --apply`.
 Without `--apply`, only planned pairs are printed.
+Tickets linked on Hypertask stay paired, in either direction and any link type.
+Done and Not now tickets never count as pairs or as sources.
+A run refuses to create more than five tickets unless `--max-create` raises that cap.
 The daily user timer is `multiprompt-parity.timer`.
-Board writes use `bin/ceo-ht` as Hax Runner 14.
+Board writes use the `hypertask` CLI as the Multiprompt Android agent.
 Update this inventory when gap tickets ship.

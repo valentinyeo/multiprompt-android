@@ -28,6 +28,7 @@ export const retiringChecks = [
   'pick journeys',
 ];
 export const emptyJourneyMatrix = /^(?:parent )?journey \$\{\{ matrix\.feature \}\}(?: \/ .*)?$/;
+export const speedCheckJob = 'chat list remeasures';
 export const journeyVerifyCheck = /^journey (.+) \/ verify$/;
 export const nightlyWorkflow = 'android-full.yml';
 export const nightlyJobName = /^nightly (.+) \/ verify$/;
@@ -55,7 +56,8 @@ export function behindMessage(prNumber = '<PR>') {
 function checkFailed(check) {
   if (check.__typename === 'CheckRun') {
     return check.status === 'COMPLETED' && check.conclusion !== 'SUCCESS'
-      && !(check.conclusion === 'SKIPPED' && emptyJourneyMatrix.test(check.name ?? ''));
+      && !(check.conclusion === 'SKIPPED'
+        && (emptyJourneyMatrix.test(check.name ?? '') || check.name === speedCheckJob));
   }
   if (check.__typename === 'StatusContext') return !['SUCCESS', 'PENDING', 'EXPECTED'].includes(check.state);
   return true;

@@ -63,25 +63,23 @@ menu_scroll() {
     done
     return 1
 }
-open_section() {
-    local title=$1 probe=$2 attempt
-    for attempt in 1 2 3; do
-        if select_node text "$probe" >/dev/null 2>&1; then return 0; fi
-        if select_node text "$title" >/dev/null 2>&1; then
-            tap_text "$title"
-            if select_node text "$probe" >/dev/null 2>&1; then return 0; fi
-        else
-            if select_node text Model >/dev/null 2>&1; then tap_text Model; fi
-            if select_node text Effort >/dev/null 2>&1; then tap_text Effort; fi
-        fi
+open_menu_page() {
+    local row=$1 target=$2 attempt
+    for attempt in {1..3}; do
+        if ! select_node text 'Add image' >/dev/null 2>&1; then tap_desc Attach; fi
+        wait_for_text 'Add image'
+        tap_text "$row" || true
+        if select_node text "$target" >/dev/null 2>&1; then return 0; fi
+        if select_node desc 'Close sheet' >/dev/null 2>&1; then adb shell input keyevent KEYCODE_BACK; fi
+        wait_for_absence 'Add image' || true
     done
-    printf 'Attach section %s did not open\n' "$title" >&2
+    printf 'JOURNEY_ACTION_UNREACHABLE: the %s row never listed %s in three opens\n' "$row" "$target" >&2
     return 1
 }
 : > "$EVIDENCE/native-menu-commands.txt"
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
-    open_section Model Fable
+    open_menu_page Model "$model"
     tap_text "$model"
     wait_receipt "VERIFY_RECEIVED:/model ${model,,}"
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
@@ -94,7 +92,7 @@ for model in Opus Haiku Fable; do
     menu_state "attach-${model,,}-selected" visible "$model ›"
 done
 for effort in Low Medium; do
-    open_section Effort High
+    open_menu_page Effort "$effort"
     tap_text "$effort"
     wait_receipt "VERIFY_RECEIVED:/effort ${effort,,}"
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"

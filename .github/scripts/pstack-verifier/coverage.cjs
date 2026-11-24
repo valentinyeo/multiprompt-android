@@ -7,7 +7,7 @@ const registry = require('../../../.claude/skills/verify-multiprompt-android/fea
 const baseline = require('../../../.claude/skills/verify-multiprompt-android/features/coverage-baseline.json');
 const REGISTRY_PATH = '.claude/skills/verify-multiprompt-android/features';
 const HARNESS = /^(?:tools\/journey-actions\/|\.claude\/skills\/verify-multiprompt-android\/scripts\/|\.github\/workflows\/verify\.yml$)/;
-const PR_NON_JOURNEY_CHECKS = 9;
+const PR_NON_JOURNEY_CHECKS = 10;
 const PR_CHECK_CAP = 20;
 const MAX_PR_JOURNEYS = PR_CHECK_CAP - PR_NON_JOURNEY_CHECKS;
 const HARNESS_SMOKE_JOURNEYS = [
@@ -19,6 +19,7 @@ const HARNESS_SMOKE_JOURNEYS = [
   'hosts.md',
 ];
 const ownedScripts = new Set(Object.values(registry.journeys).flatMap(journey => journey.runner.scripts ?? []));
+const speedPatterns = registry.speedCheck?.paths ?? [];
 const debugJourneys = Object.entries(registry.journeys).filter(([, journey]) => journey.runner.kind === 'debug').map(([name]) => name);
 const prJourneys = Object.entries(registry.journeys).filter(([, journey]) => ['debug', 'signed'].includes(journey.runner.kind)).map(([name]) => name);
 
@@ -52,6 +53,11 @@ function sharedHarness(paths) {
 function directJourneys(paths) {
   return prJourneys.filter(name => paths.has(`${REGISTRY_PATH}/${name}`)
     || (registry.journeys[name].runner.scripts ?? []).some(script => paths.has(script)));
+}
+
+function speedRelevant(diff, files = []) {
+  const paths = [...changedPaths(diff, files)];
+  return paths.some(file => speedPatterns.some(pattern => new RegExp(pattern).test(file)));
 }
 
 function harnessSmokeJourneys(direct) {
@@ -218,8 +224,8 @@ function renderWorkflow(source) {
 }
 
 module.exports = {
-  registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, HARNESS_SMOKE_JOURNEYS, MAX_PR_JOURNEYS, PR_CHECK_CAP,
-  changedRecipes, changedJourneys, directJourneys, selectionForChange, prioritizeJourneys, capPrJourneys, changedProduct,
+  registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, HARNESS_SMOKE_JOURNEYS, MAX_PR_JOURNEYS, PR_CHECK_CAP, PR_NON_JOURNEY_CHECKS, speedPatterns,
+  changedRecipes, changedJourneys, directJourneys, speedRelevant, selectionForChange, prioritizeJourneys, capPrJourneys, changedProduct,
   pathOutcomes, recipeOutcomes, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors,
   renderIndex, renderWorkflow,
 };

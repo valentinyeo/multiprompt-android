@@ -48,6 +48,35 @@ print(json.dumps(dict(sid=sid, replayed=[started, done])))
 PYCATCHUP
 wait_for_text PI_HISTORY_CAUGHT_UP_2569
 shot ai-switch-reply
+source "$scripts/pi-login-drive.sh"
+step=$((step + 4))
+python3 - "$EVIDENCE" <<'PYPI'
+import json
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+root = Path(sys.argv[1])
+def texts(phase):
+    file, = root.glob(f'[0-9][0-9]-ai-switch-{phase}.xml')
+    values = [node.get('text', '') for node in ET.parse(file).getroot().iter('node')]
+    return file, values
+login_file, login = texts('pi-login')
+assert 'https://pi.example/verify-device' in login, login
+assert 'Sign in to Pi' in login, login
+assert 'Open sign-in link' in login, login
+logged_file, logged = texts('pi-logged-in')
+assert 'Logged in to anthropic. The next reply uses that login.' in logged, logged
+assert 'Open sign-in link' not in logged, logged
+after_file, after = texts('pi-after-login')
+assert after.count('PI_REPLY_PI_LOGIN_AFTER_2276') == 1, after
+for file in (login_file, logged_file, after_file):
+    assert file.with_suffix('.png').stat().st_size > 100, file
+root.joinpath('ai-switch-pi-login.json').write_text(json.dumps(dict(
+    login=dict(xml=login_file.name, link='https://pi.example/verify-device'),
+    logged_in=dict(xml=logged_file.name, card='absent'),
+    after_login=dict(xml=after_file.name, reply='PI_REPLY_PI_LOGIN_AFTER_2276')), indent=2) + '\n')
+print('PI_LOGIN_PROMPT_AND_RECOVERY_OK')
+PYPI
 tap_desc 'Session actions'
 tap_text 'Switch AI'
 wait_for_text Claude

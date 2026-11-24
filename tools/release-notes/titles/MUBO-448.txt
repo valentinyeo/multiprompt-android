@@ -1,0 +1,1 @@
+Speed check also catches a slow inbox

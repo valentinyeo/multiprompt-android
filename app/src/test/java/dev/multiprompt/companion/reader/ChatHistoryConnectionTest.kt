@@ -281,6 +281,27 @@ class ChatHistoryConnectionTest {
         JSONObject().put("v", 1).put("sid", "sid1").put("turn", "t1").put("kind", kind).put("at", 1).put("payload", payload)
 
     @Test
+    fun openingPiReplaysPendingLoginAndItsResult(): Unit = runBlocking {
+        val link = "https://auth.example/device"
+        val pending = hostEvent("text.done", JSONObject().put("text", "Open this link\n$link"))
+            .put("item", "pi-login-1")
+        val completed = hostEvent("text.done", JSONObject().put("text", "Logged in to anthropic."))
+            .put("item", "pi-login-2")
+        for (done in listOf(false, false, true)) {
+            val fake = FakeHost("pi").apply { events = if (done) listOf(pending, completed) else listOf(pending) }
+            ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.PI, "tmux", "/cwd", "sid1"),
+                byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(),
+                connectedExchange = { fake.connect(it) }, pollGate = ChatPollGate()).use { chat ->
+                chat.pollGate.acquire()
+                chat.start()
+                val state = withTimeout(5_000L) { chat.state.first { it.ready } }
+                val prompt = PiLoginPrompt.current(state.history.projectMessages(state.replica))
+                if (done) assertNull(prompt) else assertEquals(link, prompt?.prompt?.link)
+            }
+        }
+    }
+
+    @Test
     fun conversationAppearsBeforeMessagingFinishesAndAStallShowsAnError(): Unit = runBlocking {
         val fake = FakeHost().apply { hangSnapshot = true }
         ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),

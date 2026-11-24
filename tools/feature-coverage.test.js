@@ -1064,3 +1064,19 @@ test('Bot look and reader menu changes schedule their registered verify.yml jour
   const selected = verifier.includeRequiredJourneys({ features: [], dropped: [], smoke: true }, { outcomes: [] }, diff);
   assert.deepEqual(selected.features.sort(), ['bot-look.md', 'reader-controls.md']);
 });
+
+
+test('Pi login changes always pick the registered head journey through its existing driver', () => {
+  const file = 'java/dev/multiprompt/companion/reader/PiLoginPrompt.kt';
+  const diff = productDiff(file, 'message.hostItem');
+  const plan = gate.planChange(diff, []);
+  assert.ok(plan.outcomes.includes('chat.pi-login'));
+  for (const features of [[], ['ai-switch.md', 'reader-version.md', 'settings-controls.md']]) {
+    const picked = verifier.includeRequiredJourneys({ features, dropped: [], smoke: true }, plan, diff);
+    assert.ok(picked.features.includes('pi-login.md'));
+    assert.equal(picked.smoke, false);
+  }
+  assert.equal(gate.registry.outcomes['chat.pi-login'].journey, 'pi-login.md');
+  assert.equal(verifier.journeyRunners(['pi-login.md'])['pi-login.md'].feature, 'ai-switch.md');
+  assert.ok(gate.registry.journeys['pi-login.md'].evidence['pi-login-browser.json']);
+});

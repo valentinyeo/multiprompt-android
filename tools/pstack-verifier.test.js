@@ -369,7 +369,8 @@ test('a harness-only change runs the fixed smoke set instead of every journey', 
   assert.deepEqual(verifier.includeRequiredJourneys({ features: [], dropped: [] }, { outcomes: [] }, diff).features, gate.HARNESS_SMOKE_JOURNEYS);
   assert.equal(verifier.noProductChange([{ filename: 'tools/journey-actions/action.test.py' }], 1), false);
   assert.deepEqual(gate.changedJourneys('', [{ filename: '.claude/skills/verify-multiprompt-android/scripts/pins-drive.sh' }]), ['session-pins.md']);
-  assert.equal(gate.MAX_PR_JOURNEYS, gate.PR_CHECK_CAP - 9);
+  assert.equal(gate.MAX_PR_JOURNEYS, gate.PR_CHECK_CAP - gate.PR_NON_JOURNEY_CHECKS);
+  assert.equal(gate.PR_NON_JOURNEY_CHECKS, 10);
 });
 
 test('the journey cap keeps direct feature checks ahead of harness smoke', () => {
@@ -399,6 +400,40 @@ test('a shared-driver change runs every journey it touches instead of deferring 
   const body = verifier.buildComment({ sha, ...ruled, summary: 'Full proof.', evidence: [], notCovered: [], runUrl });
   assert.doesNotMatch(body, /Deferred/);
   for (const name of required) assert.ok(body.includes(name), name);
+});
+
+test('a change to the inbox, chat list or reader path schedules the speed check, and a slow head blocks the merge', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const inbox = [{ filename: 'app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList.kt' }];
+  assert.equal(gate.speedRelevant('', inbox), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryCache.kt' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/assets/chat_history_reader.py' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'tools/speed-check/report.py' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest.kt' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/test/java/dev/multiprompt/companion/ui/ChatListSnapshotTest.kt' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt' }]), false);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/terminal/ShellView.kt' }]), false);
+  const diff = 'diff --git a/app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt b/app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt\n+changed\n';
+  assert.equal(gate.speedRelevant(diff), true);
+  assert.equal(verifier.applyRules({ features: [], conclusions: {}, speed: { required: true, result: 'failure' } }).verdict, 'FAIL');
+  const slow = verifier.applyRules({ features: [], conclusions: {}, speed: { required: true, result: 'failure' } });
+  assert.match(slow.notes.join(' '), /speed check did not pass \(failure\)/);
+  const fast = verifier.applyRules({ features: [], conclusions: {}, speed: { required: true, result: 'success' } });
+  assert.equal(fast.verdict, 'PASS+NOTES');
+  assert.match(fast.notes.join(' '), /speed check passed/);
+  const skipped = verifier.applyRules({ features: [], conclusions: {}, speed: { required: false, result: 'skipped' } });
+  assert.equal(skipped.verdict, 'PASS+NOTES');
+  assert.doesNotMatch(skipped.notes.join(' '), /speed check/);
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  const job = jobBlock(workflow, 'speed');
+  assert.match(job, /if: needs\.pick\.outputs\.speed == 'yes'/);
+  assert.match(job, /uses: \.\/\.github\/workflows\/speed-check\.yml/);
+  assert.match(job, /base_sha: \$\{\{ needs\.pick\.outputs\.merge_base \}\}/);
+  assert.match(job, /head_sha: \$\{\{ needs\.pick\.outputs\.head_sha \}\}/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /SPEED_REQUIRED: \$\{\{ needs\.pick\.outputs\.speed \}\}/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /SPEED_RESULT: \$\{\{ needs\.speed\.result \}\}/);
+  assert.match(jobBlock(workflow, 'pick'), /speed: \$\{\{ steps\.pick-retry\.outputs\.speed/);
 });
 
 test('nine directly edited recipes pick nine journeys', () => {
@@ -811,7 +846,7 @@ test('the pick and judge jobs check out only the scripts and the journey maps, n
 test('every PR to main gets an unconditional pstack-verifier result, including drafts, forks and dependabot', () => {
   const workflow = read('.github/workflows/pstack-verifier.yml');
   assert.match(jobBlock(workflow, 'pstack-verifier'), /^ {4}name: pstack-verifier$/m);
-  assert.match(jobBlock(workflow, 'pstack-verifier'), /needs: \[pick, journeys\]/);
+  assert.match(jobBlock(workflow, 'pstack-verifier'), /needs: \[pick, journeys, speed\]/);
   assert.match(jobBlock(workflow, 'pstack-verifier'), /pull-requests: write/);
   const pick = jobBlock(workflow, 'pick');
   assert.doesNotMatch(pick, /^ {4}if:/m);
