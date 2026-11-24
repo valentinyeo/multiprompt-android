@@ -30,6 +30,9 @@ object NativeSkills {
         var start = cursor
         while (start > 0 && !wordBreak(text[start - 1])) start--
         if (start == cursor || text[start] != '/') return null
+        var end = start + 1
+        while (end < text.length && !wordBreak(text[end])) end++
+        if (pathWord(text.substring(start + 1, end))) return null
         return SlashToken(start, cursor, text.substring(start + 1, cursor))
     }
 
@@ -37,7 +40,7 @@ object NativeSkills {
 
     fun spans(text: String, skills: List<NativeSkill>): List<SkillSpan> {
         if (text.isEmpty() || skills.isEmpty()) return emptyList()
-        val names = skills.map { it.name }.filter { it.isNotEmpty() }.distinct().sortedByDescending { it.length }
+        val names = skills.map { it.name }.filter { it.isNotEmpty() && !pathWord(it) }.distinct().sortedByDescending { it.length }
         if (names.isEmpty()) return emptyList()
         val found = ArrayList<SkillSpan>()
         var index = 0
@@ -63,6 +66,8 @@ object NativeSkills {
         it.name.contains(query, ignoreCase = true) || it.description.contains(query, ignoreCase = true)
     }
 
+    fun catalogue(skills: List<NativeSkill>): List<NativeSkill> =
+        (skills + claudeCommands).distinctBy { it.name.lowercase() }.filter { !pathWord(it.name) }
 
     val claudeCommands: List<NativeSkill> = listOf(
         NativeSkill("add-dir", "Add a new working directory"),
@@ -175,6 +180,7 @@ object NativeSkills {
             if (seen.add(command.name.lowercase())) rows.add(command to true)
         }
         for (skill in skills) {
+            if (pathWord(skill.name)) continue
             if (seen.add(skill.name.lowercase())) rows.add(skill to false)
         }
         return rows.mapNotNull { (skill, command) ->
@@ -239,6 +245,8 @@ object NativeSkills {
         val value = if (rest.isEmpty()) "$prefix$head " else "$prefix$head $rest"
         return SkillInsertion(value, prefix.length + head.length + 1)
     }
+
+    private fun pathWord(word: String) = word.any { it == '/' || it == '\\' }
 
     private fun wordBreak(c: Char) = c == ' ' || c == '\t' || c == '\r' || c == '\n'
 }

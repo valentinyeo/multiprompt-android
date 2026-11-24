@@ -30,10 +30,10 @@ class SkillPillsUiTest(unittest.TestCase):
     def pill(self, box=(120, 220, 280, 259)):
         ImageDraw.Draw(self.image).rounded_rectangle(box, radius=16, outline=(46, 46, 46), fill=(31, 31, 31))
 
-    def check(self, phase='inserted', text='Please /review-native this'):
+    def check(self, phase='inserted', text='Please /review-native this', pill='/review-native'):
         ET.ElementTree(self.root).write(self.xml)
         self.image.save(self.png)
-        return ui.check(self.xml, self.png, phase, text)
+        return ui.check(self.xml, self.png, phase, text, pill)
 
     def test_composer_requires_painted_pill_not_just_slash_text_or_field_border(self):
         with self.assertRaisesRegex(AssertionError, 'outline'):
@@ -108,6 +108,36 @@ class SkillPillsUiTest(unittest.TestCase):
         ET.ElementTree(self.root).write(self.xml)
         with self.assertRaisesRegex(AssertionError, 'clipped'):
             ui.picker_swipe(self.xml)
+
+    def test_a_sent_file_path_must_not_render_an_inline_pill(self):
+        self.editor.set('text', 'Message verify-session')
+        message = self.node(text='Please /home/verifyssh/notes this', bounds='[20,40][380,120]')
+        self.assertEqual(self.check('sent-path', 'Please /home/verifyssh/notes this')['sent_pill'], None)
+        self.node(parent=message, text='/home/verifyssh/notes', bounds='[120,50][281,90]')
+        with self.assertRaisesRegex(AssertionError, 'file path'):
+            self.check('sent-path', 'Please /home/verifyssh/notes this')
+        message.remove(message.find('node'))
+        with self.assertRaisesRegex(AssertionError, 'Exact sent message'):
+            self.check('sent-path', 'Please /home/verifyssh')
+
+    def test_a_built_in_command_pill_is_checked_as_a_painted_pill(self):
+        self.editor.set('text', 'Message verify-session')
+        message = self.node(text='Keep /clear this', bounds='[20,40][380,120]')
+        self.node(parent=message, text='/clear', bounds='[120,50][281,90]')
+        ImageDraw.Draw(self.image).rectangle((20, 40, 379, 119), fill=(233, 233, 233))
+        with self.assertRaisesRegex(AssertionError, 'fill'):
+            self.check('sent-command', 'Keep /clear this', '/clear')
+        self.pill((120, 50, 280, 89))
+        self.assertEqual(self.check('sent-command', 'Keep /clear this', '/clear')['sent_pill'], '/clear')
+        with self.assertRaisesRegex(AssertionError, 'file path'):
+            self.check('sent-path', 'Keep /clear this', '/clear')
+
+    def test_a_mid_message_built_in_command_keeps_its_composer_outline(self):
+        self.editor.set('text', 'Keep /clear this')
+        with self.assertRaisesRegex(AssertionError, 'outline'):
+            self.check('command', 'Keep /clear this')
+        self.pill()
+        self.assertTrue(self.check('command', 'Keep /clear this')['composer_pill'])
 
     def test_wrong_draft_missing_picker_and_uncleared_send_fail(self):
         self.pill()

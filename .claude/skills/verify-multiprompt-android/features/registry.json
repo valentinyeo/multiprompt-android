@@ -745,7 +745,7 @@
     },
     "skill-pills.md": {
       "name": "Skills within messages",
-      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.",
+      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text, refuse a file path and pill a built-in command. SOFT-2543, MUBO-146.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -760,8 +760,8 @@
         "skills.pills"
       ],
       "evidence": {
-        "skill-pills-state.json": 4000,
-        "skill-pills-receipts.txt": 1000
+        "skill-pills-state.json": 6000,
+        "skill-pills-receipts.txt": 1500
       }
     },
     "chat-table.md": {
@@ -1526,11 +1526,11 @@
       }
     },
     "skills.pills": {
-      "description": "Insert skills mid-message and render visible skill pills.",
+      "description": "Insert skills mid-message and render visible skill pills, refuse file paths and pill built-in commands.",
       "journey": "skill-pills.md",
       "sideEffect": true,
       "match": [
-        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|NativeSkills\\.(?:token|query|spans|insert)|skills/NativeSkills\\.kt"
+        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|pillSkills|NativeSkills\\.(?:token|query|spans|insert|catalogue|menu)|skills/NativeSkills\\.kt"
       ],
       "citations": {
         "action": {
