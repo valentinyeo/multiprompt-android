@@ -594,8 +594,6 @@ def render(data):
 
 CHAT = text('Native session skills are ready.', 1200) + desc('Session actions', 80) + desc('Send prompt', 1400)
 REPLY_CHAT = text('REPLY_BUBBLE_418', 600, clickable=True) + desc('Session actions', 80) + desc('Send prompt', 1400)
-MENTION = ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,1500][1080,1690]">'
-           + text('Mention 2953', 1560, clickable=True) + avatar(1520) + '</node>')
 MENTION_READER = avatar(60) + text('Mention 2953', 320) + desc('Session actions', 80)
 BOT_LOOK = (text('Bot look', 100) + text('Face', 200)
             + desc('Face 1', 260, left=40, right=100) + desc('Face 2', 260, left=120, right=180) + desc('Face 3', 260, left=200, right=260)
@@ -605,8 +603,25 @@ BOT_LOOK = (text('Bot look', 100) + text('Face', 200)
             + text('Auto', 500, clickable=True))
 
 
+def mention_row(name, top):
+    return ('<node class="android.view.View" package="' + PKG + '" bounds="[40,' + str(top) + '][1040,' + str(top + 80) + ']" clickable="true" enabled="true">'
+            + '<node text="' + name + '" package="' + PKG + '" bounds="[40,' + str(top + 10) + '][700,' + str(top + 70) + ']" class="android.widget.TextView" />'
+            + '<node text="Bot" package="' + PKG + '" bounds="[950,' + str(top + 10) + '][1030,' + str(top + 70) + ']" class="android.widget.TextView" />'
+            + '</node>')
+
+
 def mention_open(data):
     return mode == "reply" and data["text"].startswith("@") and " " not in data["text"]
+
+
+def mention(data):
+    if not mention_open(data):
+        return ''
+    if data["text"].startswith("@verify-session"):
+        return ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,1500][1080,1690]">'
+                + mention_row('verify-session', 1560) + '</node>')
+    return ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,1500][1080,1690]">'
+            + mention_row('Mention 2953', 1560) + avatar(1520) + '</node>')
 REPLY_BAR = text('Replying', 1500) + desc('Cancel reply', 120, left=700, right=820)
 PICKER = ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,600][1080,1200]">'
           + text('/clear', 620, clickable=True) + text('/client', 720, clickable=True) + text('/aaa-paper', 820, clickable=True)
@@ -622,8 +637,8 @@ SHEET = (text('AI usage', 120)
 def xml_for(data):
     screen = data["screen"]
     if screen == "inbox":
-        mention_row = text('Mention 2953', 300, clickable=True) if mode == "reply" else ''
-        return window(text('Inbox', 80) + desc('Robot verify-session', 200, left=0, right=1080) + desc('Session list actions', 80) + mention_row)
+        inbox_mention = text('Mention 2953', 300, clickable=True) if mode == "reply" else ''
+        return window(text('Inbox', 80) + desc('Robot verify-session', 200, left=0, right=1080) + desc('Session list actions', 80) + inbox_mention)
     if mode == "reply":
         if screen == "mention-chat":
             return window(MENTION_READER)
@@ -636,11 +651,13 @@ def xml_for(data):
         if screen == "replying":
             return window(REPLY_CHAT + REPLY_BAR + composer(data))
         if screen == "mention-sent":
-            return window(REPLY_CHAT + text('@Mention 2953', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data))
+            return window(REPLY_CHAT + text('@Mention 2953', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data) + mention(data))
+        if screen == "self-mention-sent":
+            return window(REPLY_CHAT + text('@verify-session', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data) + mention(data))
         if screen == "sent":
             return window(REPLY_CHAT + text('REPLY_BODY_418', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data)
-                          + (MENTION if mention_open(data) else ''))
-        return window(REPLY_CHAT + composer(data) + (MENTION if mention_open(data) else ''))
+                          + mention(data))
+        return window(REPLY_CHAT + composer(data) + mention(data))
     if mode == "usage":
         if screen == "menu":
             return window(text('Inbox', 80) + desc('Session list actions', 80) + text('AI usage', 300, clickable=True) + text('Refresh', 420, clickable=True))
@@ -684,10 +701,13 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
             data["focused"] = True
         elif "Send prompt" in descs:
             mention = mode == "reply" and data["text"].startswith("@Mention 2953")
-            data["screen"] = "mention-sent" if mention else "sent"
+            self_mention = mode == "reply" and data["text"].startswith("@verify-session")
+            data["screen"] = "self-mention-sent" if self_mention else "mention-sent" if mention else "sent"
             with receipts.open("a") as stream:
                 if mode == "ranking":
                     stream.write("VERIFY_RECEIVED:/clear\\n")
+                elif self_mention:
+                    stream.write("> REPLY_BUBBLE_418\\n@verify-session{verify-session}\\n")
                 elif mention:
                     stream.write("> REPLY_BUBBLE_418\\n@Mention 2953{live-cl_mention-2953}\\n")
                 else:
@@ -702,6 +722,8 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
                 stream.write(json.dumps({"command": "cat ~/.local/state/token-ladder/status.json", "exitCode": 0, "stdout": json.dumps({"ts": 1, "accounts": [{"provider": "claude", "week": {"used": 37.5}}, {"provider": "codex", "week": {"used": 62.5}}]})}) + "\\n")
         elif "Reply" in texts:
             data["screen"] = "replying"
+        elif "Bot" in texts and data["text"] == "@verify-session":
+            data["text"] = "@verify-session "
         elif "Mention 2953" in texts:
             if data["screen"] == "inbox":
                 data["screen"] = "mention-chat"
@@ -818,14 +840,26 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertEqual(['same-bot', 'look-changed'], [check['kind'] for check in bot_face['checks']])
         self.assertEqual([(128, 128)] * 3, [tuple(avatar['crop']) for avatar in bot_face['avatars'].values()])
         self.assertEqual('MENTION_LIST_NAMED_BY_CHAT', (self.evidence / 'mention-proof.txt').read_text().splitlines()[0])
-        self.assertEqual('@Mention 2953{live-cl_mention-2953}', (self.evidence / 'mention-receipts.txt').read_text().splitlines()[-1])
         mention_sent = json.loads((self.evidence / 'mention-sent.json').read_text())
         self.assertTrue(mention_sent['passed'])
         self.assertEqual(['present', 'absent', 'absent'], [check['kind'] for check in mention_sent['checks']])
         self.assertEqual(['@Mention 2953', 'live-cl_mention-2953', '{live-cl_mention-2953}'], [check['value'] for check in mention_sent['checks']])
         self.assertEqual('MENTION_ROUTES_TO_SESSION', (self.evidence / 'mention-sent-proof.txt').read_text().splitlines()[0])
+        self_list = json.loads((self.evidence / 'self-mention-list.json').read_text())
+        self.assertTrue(self_list['passed'])
+        self.assertEqual([{'kind': 'present', 'value': 'verify-session', 'passed': True}], self_list['checks'])
+        self.assertEqual('MENTION_OFFERS_TYPING_CHAT', (self.evidence / 'self-mention-list-proof.txt').read_text().splitlines()[0])
+        receipts = (self.evidence / 'mention-receipts.txt').read_text().splitlines()
+        self.assertIn('@Mention 2953{live-cl_mention-2953}', receipts)
+        self.assertEqual('@verify-session{verify-session}', receipts[-1])
+        self_mention = json.loads((self.evidence / 'self-mention-sent.json').read_text())
+        self.assertTrue(self_mention['passed'])
+        self.assertEqual(['present', 'absent'], [check['kind'] for check in self_mention['checks']])
+        self.assertEqual(['@verify-session', '{verify-session}'], [check['value'] for check in self_mention['checks']])
+        self.assertEqual('MENTION_OF_TYPING_CHAT_ROUTES', (self.evidence / 'self-mention-sent-proof.txt').read_text().splitlines()[0])
         for name in ('01-mention-bot-before.xml', '02-mention-bot-chosen.xml', '03-reply-menu.xml',
-                     '04-reply-open.xml', '05-reply-cancelled.xml', '06-reply-sent.xml', '07-mention-list.xml'):
+                     '04-reply-open.xml', '05-reply-cancelled.xml', '06-reply-sent.xml', '07-mention-list.xml',
+                     '08-mention-sent.xml', '09-self-mention-list.xml', '10-self-mention-sent.xml'):
             self.assertTrue((self.evidence / name).is_file(), name)
 
     def test_the_clear_ranking_journey_runs_end_to_end_through_the_cli(self):

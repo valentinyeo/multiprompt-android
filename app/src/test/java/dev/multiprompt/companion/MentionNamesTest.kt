@@ -29,15 +29,16 @@ class MentionNamesTest {
 
     @Test fun aLiveChatIsMentionedByTheNameTheChatListShows() {
         assertEquals(
-            listOf(MentionChat("SF Design Lead", "live-design-5511", host.id)),
+            listOf(
+                MentionChat("This chat", "live-this-5511", host.id),
+                MentionChat("SF Design Lead", "live-design-5511", host.id),
+            ),
             state.mentionChats(current),
         )
     }
 
     @Test fun everyMentionNameMatchesItsInboxRow() {
-        val inbox = state.inboxSessions
-            .filter { it.name != current.name }
-            .map { it.displayName }
+        val inbox = state.inboxSessions.map { it.displayName }
         assertEquals(inbox, state.mentionChats(current).map { it.name })
     }
 }
