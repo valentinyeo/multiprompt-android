@@ -21,6 +21,21 @@ room_order_submits() {
     fi
 }
 
+room_order_inbox() {
+    local cycle attempt
+    for cycle in {1..4}; do
+        if python3 "$scripts/mpa" read --select contains --value 'Order room' >/dev/null 2>&1; then return 0; fi
+        adb shell input keyevent KEYCODE_HOME
+        sleep 2
+        adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity" >/dev/null
+        for attempt in {1..25}; do
+            if python3 "$scripts/mpa" read --select contains --value 'Order room' >/dev/null 2>&1; then return 0; fi
+            sleep 1
+        done
+    done
+    return 1
+}
+
 room_order_journey() {
     local attempt stage account_id
     setup_failure=1
@@ -53,10 +68,8 @@ room_order_journey() {
         fi
     done < "$EVIDENCE/account-origin-blocked.txt"
     relaunch_app
-    for attempt in {1..45}; do
-        if python3 "$scripts/mpa" read --select contains --value 'Order room' >/dev/null 2>&1; then break; fi
-        sleep 1
-    done
+    adb shell run-as "$package" cat shared_prefs/encrypted_secrets.xml > "$EVIDENCE/account-store.txt" || true
+    room_order_inbox || true
     python3 "$scripts/mpa" read --select contains --value 'Order room'
     python3 "$scripts/mpa" screenshot room-inbox
     python3 "$scripts/mpa" tap text 'Order room'
