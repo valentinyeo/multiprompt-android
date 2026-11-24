@@ -21,16 +21,28 @@ def versions(path):
 
 def cpu_windows(path):
     samples = defaultdict(list)
+    proc_samples = defaultdict(list)
+    anrs = defaultdict(int)
+    skipped = defaultdict(list)
+    pairs = defaultdict(lambda: defaultdict(list))
     failures = []
     if not Path(path).is_file():
-        return samples, failures
+        return samples, proc_samples, anrs, skipped, pairs, failures
     with Path(path).open() as source:
         for row in csv.DictReader(source):
             if not row.get('ticks'):
                 failures.append(row)
                 continue
-            samples[row['sha']].append(int(row['ticks']) * 10)
-    return samples, failures
+            ms = int(row['ticks']) * 10
+            samples[row['sha']].append(ms)
+            if row.get('proc_ticks'):
+                proc_samples[row['sha']].append(int(row['proc_ticks']) * 10)
+            if row.get('anr'):
+                anrs[row['sha']] += int(row['anr'])
+            if row.get('skipped_frames'):
+                skipped[row['sha']].append(int(row['skipped_frames']))
+            pairs[row['pair']][(row['side'], row['sha'])].append(ms)
+    return samples, proc_samples, anrs, skipped, pairs, failures
 
 
 def counted(directory):
@@ -66,22 +78,41 @@ def main(argv):
     parser.add_argument('--out', default='bisect-evidence/bisect')
     args = parser.parse_args(argv)
     names = versions(args.versions)
-    samples, failures = cpu_windows(args.readings)
+    samples, proc_samples, anrs, skipped, pairs, failures = cpu_windows(args.readings)
     counters = counted(args.counters)
     every = list(dict.fromkeys(list(samples) + list(counters)))
-    lines = ['| version | sha | cpu_ms/10s | recompositions/10s | remeasures/10s | windows | idle | live | inbox_rows/50 | inbox_remeasures/50 |',
-             '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |']
+    lines = ['| version | sha | cpu_ms/10s | proc_ms/10s | anr | skipped | recompositions/10s | remeasures/10s | windows |',
+             '| --- | --- | --- | --- | --- | --- | --- | --- | --- |']
     for sha in every:
         windows = samples.get(sha) or []
+        pwindows = proc_samples.get(sha) or []
+        swindows = skipped.get(sha) or []
         median = f'{statistics.median(windows):.0f}' if windows else 'missing'
+        pmedian = f'{statistics.median(pwindows):.0f}' if pwindows else '-'
+        smedian = f'{statistics.median(swindows):.0f}' if swindows else '-'
         spread = f'{min(windows)}-{max(windows)}' if windows else '-'
         probe = counters.get(sha, {})
-        lines.append('| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |'.format(
-            names.get(sha, '?'), sha[:8], median,
+        lines.append('| {} | {} | {} | {} | {} | {} | {} | {} | {} |'.format(
+            names.get(sha, '?'), sha[:8], median, pmedian, anrs.get(sha, 0), smedian,
             scaled(probe.get('inbox_rows'), PROBE_SNAPSHOTS),
             scaled(probe.get('live'), PROBE_REPLIES),
-            spread, probe.get('idle', '-'), probe.get('live', '-'),
-            probe.get('inbox_rows', '-'), probe.get('inbox_remeasures', '-')))
+            spread))
+    if pairs:
+        lines.append('')
+        lines.append('| pair | base | base_ms | suspect | suspect_ms | delta_ms |')
+        lines.append('| --- | --- | --- | --- | --- | --- |')
+        for pair_id in sorted(pairs, key=lambda x: int(x) if str(x).isdigit() else 0):
+            entries = pairs[pair_id]
+            base_item = next(((sha, vals) for (side, sha), vals in entries.items() if side == 'base'), None)
+            suspect_item = next(((sha, vals) for (side, sha), vals in entries.items() if side == 'suspect'), None)
+            if base_item and suspect_item:
+                bsha, bvals = base_item
+                ssha, svals = suspect_item
+                bmed = statistics.median(bvals)
+                smed = statistics.median(svals)
+                lines.append('| {} | {} {} | {:.0f} | {} {} | {:.0f} | {:+.0f} |'.format(
+                    pair_id, names.get(bsha, '?'), bsha[:8], bmed,
+                    names.get(ssha, '?'), ssha[:8], smed, smed - bmed))
     lines.append('')
     lines.append(f'recompositions/10s = inbox row compositions over {PROBE_SNAPSHOTS} snapshots x 10/{PROBE_SNAPSHOTS}')
     lines.append(f'remeasures/10s = chat list remeasures for {PROBE_REPLIES} new replies x 10/{PROBE_REPLIES}')

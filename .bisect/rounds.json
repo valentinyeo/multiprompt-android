@@ -1,5 +1,5 @@
 {
-  "counters": false,
+  "counters": true,
   "repeats": 3,
   "replies_per_window": 40,
   "reply_interval_s": 0.25,
@@ -16,6 +16,14 @@
     {
       "base": "d9dfd975ad2adaf859c6f9f0350f6dc4fdca71cf",
       "suspect": "ed1cc9e507a63ae43fe080af9fc06408e3e1fa89"
+    },
+    {
+      "base": "207b5d7823730a1047cd42d95a2563b0f6cf385d",
+      "suspect": "b70f2ef54fb5188b5b0ee137b54ff05eccd8880a"
+    },
+    {
+      "base": "cf6a240bb93cee53903cf2cc4df76a1b991e92a7",
+      "suspect": "60aff06fb0ff51f3456bb3d2eb5dc68b7b11c04e"
     }
   ]
 }
