@@ -16,7 +16,11 @@ class ChatReaderBundleTest {
         val bundle = full.copyOfRange(0, at) + full.copyOfRange(at + versionLine.size, full.size)
         val hash = MessageDigest.getInstance("SHA-256").digest(bundle)
             .joinToString("") { "%02x".format(it.toInt() and 0xff) }
-        assertEquals(506327, bundle.size)
-        assertEquals("b490b690099bf6438fe0cfa6f0bf5172500299dcaaa59864cf4251227e44aaaa", hash)
+        val pin = app.assets.open("chat_history_reader.sha").use { it.readBytes().toString(Charsets.UTF_8) }.trim().lines()
+        assertEquals("chat_history_reader.sha holds the desktop revision and, on its second line, the bundle fingerprint", 2L, pin.size.toLong())
+        val fingerprint = pin[1].split(" ")
+        assertEquals("chat_history_reader.sha line two holds '<length> <sha256>'", 2L, fingerprint.size.toLong())
+        assertEquals("The bundled reader must have the length tools/sync-chat-reader.sh recorded for this desktop revision", fingerprint[0].toLong(), bundle.size.toLong())
+        assertEquals("The bundled reader must have the SHA-256 tools/sync-chat-reader.sh recorded for this desktop revision", fingerprint[1], hash)
     }
 }

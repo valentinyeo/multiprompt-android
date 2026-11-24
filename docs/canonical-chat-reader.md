@@ -2,19 +2,19 @@
 
 Desktop owns the reader and connectors.
 Desktop also owns the test files.
-Source: [Desktop master](https://github.com/valentinyeo/multiprompt/tree/605597a163923914989a0cae06f727a83afbcd5a).
-Commit: `605597a163923914989a0cae06f727a83afbcd5a`.
-The reader SHA-256 is `13ff821c39e8e81b700016b054c92f03a474c6b7ca9e52e03979e17bb2b7012c`.
-The Claude module SHA-256 is `7b181305096a39c3ac4276607a3177177f23ca0a88535c96604c2b3f393d1729`.
-The Codex module SHA-256 is `07e448dc7d5a849cbbf4b914ce375e147f9343906f213bcda00a7d7663757a31`.
-Android copies Desktop's ordered base64 prefix.
-Bundle length: 501543 bytes.
-Bundle SHA-256: `1331a99fec06fd45db0cfcebd8bf803c81e8dc129512613a4f46c5bac139d19d`.
+Source: [Desktop master](https://github.com/valentinyeo/multiprompt/tree/4e43135910fd38cb8939506a29a07c2ea62c1066).
 
-`tools/sync-chat-reader.sh --check` verifies all three assets against Desktop.
+`tools/sync-chat-reader.sh` holds the one pin: the desktop revision and the SHA-256 of every bundled file.
+It copies those files into `app/src/main/assets/` and writes `app/src/main/assets/chat_history_reader.sha`, which holds the revision on its first line and the bundle length and SHA-256 on its second.
+`tools/chat-reader-bundle.py` computes that fingerprint from the bundled bytes.
+Never edit the bundled files or the pin by hand: re-pin by changing the revision in the script and running it.
+
+`tools/sync-chat-reader.sh --check` verifies every asset and the pin against Desktop.
 Locally, set `MULTIPROMPT_DESKTOP_REPO` to the Desktop repository.
 GitHub Actions can download the pinned files.
-Without `--check`, the script restores those files.
+Without `--check`, the script restores those files and the pin.
+`tools/check-canonical-chat-reader.sh` runs it on every pull request.
+`ChatReaderBundleTest` compares the reader bundle the app assembles against the pin on a phone.
 `tools/vendor/chat-reader/SHA256SUMS` lists the vendored test corpus hashes.
 
 The bundled reader supplies generation 126.

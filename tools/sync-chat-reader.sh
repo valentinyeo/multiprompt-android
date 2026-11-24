@@ -2,8 +2,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 revision=4e43135910fd38cb8939506a29a07c2ea62c1066
-[[ "$(cat app/src/main/assets/chat_history_reader.sha)" == "$revision" ]]
 [[ $# -le 1 && ( "${1:-}" == "" || "${1:-}" == --check ) ]]
+mode=write
+if [[ "${1:-}" == --check ]]; then
+    mode=check
+fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 for entry in \
@@ -24,11 +27,12 @@ for entry in \
     fi
     printf '%s  %s\n' "$hash" "$tmp/$path" | sha256sum --check --status
     asset="app/src/main/assets/$path"
-    if [[ "${1:-}" == --check ]]; then
+    if [[ "$mode" == check ]]; then
         cmp "$tmp/$path" "$asset"
     else
         mkdir -p "$(dirname "$asset")"
         cp "$tmp/$path" "$asset"
     fi
 done
+python3 -B tools/chat-reader-bundle.py --revision "$revision" "$mode"
 printf 'Reader and connectors match canonical revision and SHA256\n'
