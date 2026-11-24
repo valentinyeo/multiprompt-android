@@ -3092,6 +3092,9 @@ internal fun ReaderScreen(
         promptFocusRequester.requestFocus()
     }
     val prompt = promptField.text
+    val pillSkills = remember(reader.nativeSkills, session.agent) {
+        if (session.agent == AgentKind.CLAUDE) NativeSkills.catalogue(reader.nativeSkills) else reader.nativeSkills
+    }
     val skillQuery = if (session.agent == AgentKind.CLAUDE && promptField.selection.collapsed) {
         NativeSkills.query(prompt, promptField.selection.start)
     } else null
@@ -4601,7 +4604,7 @@ internal fun ReaderScreen(
                             draftEmpty = prompt.isEmpty() && imageAttachments.isEmpty(),
                         ) == ComposerSlot.STOP
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
-                        val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
+                        val skillSpans = remember(prompt, pillSkills) { NativeSkills.spans(prompt, pillSkills) }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
@@ -4983,7 +4986,7 @@ internal fun ReaderScreen(
                                 ChatLinkText(message.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
-                                        skills = reader.nativeSkills,
+                                        skills = pillSkills,
                                         color = bodyColor,
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
@@ -5076,7 +5079,7 @@ internal fun ReaderScreen(
                                 ChatLinkText(block.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
-                                        skills = reader.nativeSkills,
+                                        skills = pillSkills,
                                         color = chatTextColor(sunlightMode),
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
