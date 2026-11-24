@@ -36,7 +36,7 @@ internal object PromptComposer {
             imageUrls.joinToString("\n") { it.trim() }.trim(),
             arguments,
         ).filter(String::isNotBlank).joinToString("\n")
-        val message = ReplyQuote.compose(replyTo, body)
-        return if (skill == null) message else "/${skill.name} $message".trimEnd()
+        val typed = if (skill == null) body else "/${skill.name}" + if (body.isBlank()) "" else " $body"
+        return ReplyQuote.compose(replyTo, typed)
     }
 }

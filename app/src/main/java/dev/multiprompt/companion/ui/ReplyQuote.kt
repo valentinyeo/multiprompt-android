@@ -18,19 +18,30 @@ internal object ReplyQuote {
         val lines = message.lines()
         val head = lines.firstOrNull().orEmpty()
         val command = head.substringBefore(' ').takeIf { COMMAND.matches(it) }
+        val afterCommand = if (command == null) "" else head.removePrefix(command).trimStart()
+        val inline = afterCommand.isNotEmpty() && !quoted(afterCommand) && lines.getOrNull(1)?.let(::quoted) == true
         val rest = when {
             command == null -> lines
+            inline -> lines.drop(1)
             head == command -> lines.drop(1).dropWhile { it.isBlank() }
             else -> listOf(head.removePrefix(command).trimStart()) + lines.drop(1)
         }
-        val end = rest.indexOfFirst { it != ">" && !it.startsWith("> ") }
-        if (end <= 0 || !rest[end].isBlank()) return null
-        val block = rest.take(end)
+        val end = rest.indexOfFirst { !quoted(it) }
+        if (end == 0 || end > 0 && !rest[end].isBlank()) return null
+        val boundary = if (end < 0) rest.size else end
+        val block = rest.take(boundary).dropLastWhile { it.isBlank() }
         if (block.all { it.removePrefix(">").isBlank() }) return null
-        val body = rest.drop(end).dropWhile { it.isBlank() }.joinToString("\n")
-        if (body.isBlank()) return null
-        return Reply(block.joinToString("\n"), if (command == null) body else "$command $body")
+        val body = rest.drop(boundary).dropWhile { it.isBlank() }.joinToString("\n")
+        val text = when {
+            inline -> listOf(head, body).filter { it.isNotBlank() }.joinToString("\n")
+            body.isBlank() -> command ?: return null
+            command == null -> body
+            else -> "$command $body"
+        }
+        return Reply(block.joinToString("\n"), text)
     }
+
+    private fun quoted(line: String): Boolean = line == ">" || line.startsWith("> ")
 
     fun sourceIndex(messages: List<String>, before: Int, quoted: String): Int? =
         (0 until before.coerceIn(0, messages.size)).lastOrNull { quote(messages[it]) == quoted }
@@ -45,8 +56,18 @@ internal object ReplyQuote {
     fun compose(quoted: String?, message: String): String = when {
         quoted.isNullOrBlank() -> message
         message.isBlank() -> ""
-        else -> quote(quoted) + "\n\n" + message
+        else -> {
+            val head = message.lineSequence().first()
+            if (command(head) == null) quote(quoted) + "\n\n" + message
+            else {
+                val tail = message.lineSequence().drop(1).dropWhile { it.isBlank() }.joinToString("\n")
+                head + "\n" + quote(quoted) + if (tail.isBlank()) "" else "\n\n" + tail
+            }
+        }
     }
+
+    private fun command(head: String): String? =
+        head.substringBefore(' ').takeIf { COMMAND.matches(it) }
 
     fun preview(message: String, limit: Int = PREVIEW_LIMIT): String = cut(
         message.lineSequence().filter { it.isNotBlank() }.take(2).joinToString(" "),
