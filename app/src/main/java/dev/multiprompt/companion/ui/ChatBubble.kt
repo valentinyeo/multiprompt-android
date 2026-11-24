@@ -68,7 +68,7 @@ fun chatTextColor(sunlight: Boolean, isUser: Boolean = LocalChatUser.current): C
 @Composable
 fun chatHintColor(sunlight: Boolean): Color = when {
     LocalReaderStyle.current || LocalMaterial3.current -> MaterialTheme.colorScheme.onSurfaceVariant
-    sunlight -> Color(0xFF4A4D52)
+    sunlight -> ChatHintLight
     else -> ChatHintDark
 }
 

@@ -574,4 +574,19 @@ class DesignKitTest {
             assertTrue("expected dark readable label pixels in day mode for $tag, found $dark", dark > 20)
         }
     }
+
+    @Test
+    fun dayModeMutedLabelsStayReadable() {
+        val day = kitPalette(true)
+        listOf("page" to day.page, "surface" to day.surface, "sheet" to day.sheet).forEach { (name, background) ->
+            val ratio = contrast(day.textMuted, background)
+            assertTrue("day muted labels on $name need 4.5, got $ratio", ratio >= 4.5f)
+        }
+    }
+
+    private fun contrast(a: Color, b: Color): Float {
+        val first = a.luminance()
+        val second = b.luminance()
+        return (kotlin.math.max(first, second) + 0.05f) / (kotlin.math.min(first, second) + 0.05f)
+    }
 }

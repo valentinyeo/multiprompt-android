@@ -90,7 +90,7 @@ val ChatBubbleAgentLight = Color(0xFFF4F4F4)
 val ChatTextDark = Color(0xFFFFFFFF)
 val ChatTextLight = Color(0xFF1C1C1C)
 val ChatHintDark = Color(0xFF787C84)
-val ChatHintLight = Color(0xFF8C9098)
+val ChatHintLight = Color(0xFF4A4D52)
 
 val TerminalBackground =Color(0xFF161616)
 val TerminalSurface = Color(0xFF1F1F1F)
