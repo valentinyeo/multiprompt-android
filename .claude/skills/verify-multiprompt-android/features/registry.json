@@ -308,7 +308,8 @@
         ]
       },
       "outcomes": [
-        "claude.skills-model-effort"
+        "claude.skills-model-effort",
+        "reader.follow-newest"
       ],
       "evidence": {
         "native-menu-state.txt": 5000,
@@ -2090,6 +2091,14 @@
           "quote": "\"reason\": \"blocked_by_hook\""
         }
       }
+    },
+    "reader.follow-newest": {
+      "description": "A chat already showing its newest reply keeps incoming replies on screen through the working indicator and message layout changes, without tapping Jump to newest. The native-skills journey requires each model and effort reply on screen after its independent host receipt.",
+      "journey": "native-skills.md",
+      "sideEffect": true,
+      "match": [
+        "requestScrollToItem"
+      ]
     }
   }
 }

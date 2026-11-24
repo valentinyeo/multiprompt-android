@@ -1,0 +1,8 @@
+[Unit]
+Description=File a ticket when the daily chat probe fails
+
+[Service]
+Type=oneshot
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/projects/multiprompt-android-jobs/tools/chat-shapes/file-ticket.sh
+UMask=0077
