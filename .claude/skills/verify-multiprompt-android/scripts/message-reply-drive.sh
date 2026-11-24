@@ -55,4 +55,21 @@ grep -Fx '@Mention 2953{live-cl_mention-2953}' "$EVIDENCE/mention-receipts.txt"
 "$mpa" read --wait-text '@Mention 2953'
 "$mpa" screenshot mention-sent
 "$mpa" proof --name mention-sent --require-text '@Mention 2953' --forbid-text 'live-cl_mention-2953' --forbid-text '{live-cl_mention-2953}' --note MENTION_ROUTES_TO_SESSION --proof-file "$EVIDENCE/mention-sent-proof.txt"
+"$mpa" fill 'Message verify-session' '@verify-session'
+"$mpa" read --select text --value 'verify-session' --inside Bot --timeout 15
+"$mpa" screenshot self-mention-list
+"$mpa" proof --name self-mention-list --require-text 'verify-session' --note MENTION_OFFERS_TYPING_CHAT --proof-file "$EVIDENCE/self-mention-list-proof.txt"
+"$mpa" tap text Bot
+"$mpa" read --wait-text '@verify-session'
+"$mpa" tap desc 'Send prompt'
+for attempt in {1..30}; do
+    if sudo grep -Fx '@verify-session{verify-session}' /home/verifyssh/receipts.txt; then break; fi
+    sleep 1
+done
+sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/mention-receipts.txt"
+grep -Fx '@verify-session{verify-session}' "$EVIDENCE/mention-receipts.txt"
+"$mpa" read --select editor-value --value composer --extra ''
+"$mpa" read --wait-text '@verify-session'
+"$mpa" screenshot self-mention-sent
+"$mpa" proof --name self-mention-sent --require-text '@verify-session' --forbid-text '{verify-session}' --note MENTION_OF_TYPING_CHAT_ROUTES --proof-file "$EVIDENCE/self-mention-sent-proof.txt"
 step=$((step + 4))

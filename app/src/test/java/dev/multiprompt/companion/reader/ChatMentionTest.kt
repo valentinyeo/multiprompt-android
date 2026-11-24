@@ -15,7 +15,7 @@ class ChatMentionTest {
     private fun session(name: String, host: String = "vps", account: String? = null) =
         TmuxSession(host, name, 1, 0, 0, accountName = account)
 
-    @Test fun theListIsEveryOtherChatOnThisHost() {
+    @Test fun theListIsEveryChatOnThisHostIncludingTheTypingChat() {
         val here = session("live-here", account = "This chat")
         val all = listOf(
             here,
@@ -26,11 +26,32 @@ class ChatMentionTest {
         )
         assertEquals(
             listOf(
+                MentionChat("This chat", "live-here", "vps"),
                 MentionChat("SF Design Lead", "live-design", "vps"),
                 MentionChat("Multi Bot Android", "multiprompt-android", "vps"),
             ),
             ChatMention.chats(all, here),
         )
+    }
+
+    @Test fun theTypingChatIsOfferedUnderTheNameTheChatListShows() {
+        val here = session("live-here", account = "This chat")
+        val all = listOf(here, session("live-design", account = "SF Design Lead"))
+        val offered = ChatMention.chats(all, here)
+        assertEquals(listOf(MentionChat("This chat", "live-here", "vps")), ChatMention.options(offered, "This"))
+        assertEquals(1, offered.count { it.session == "live-here" })
+    }
+
+    @Test fun pickingTheTypingChatMarksItLikeAnyOtherPick() {
+        val here = session("live-here", account = "This chat")
+        val offered = ChatMention.chats(listOf(here), here)
+        val self = ChatMention.options(offered, "This").single()
+        val (text, cursor) = ChatMention.pick("@This", MentionQuery(0, "This"), 5, self)
+        assertEquals("@This chat ", text)
+        assertEquals(text.length, cursor)
+        val sent = ChatMention.annotate(text, listOf(self), offered)
+        assertEquals("@This chat{live-here} ", sent)
+        assertEquals(text, ChatMention.visible(sent))
     }
 
     @Test fun typingAtAfterASpaceOpensTheList() {
