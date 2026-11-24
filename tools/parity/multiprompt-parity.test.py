@@ -23,6 +23,14 @@ def inventory():
     return {"track_since": "2026-10-29T22:55:59Z", "features": [], "catch_up_tickets": []}
 
 
+def relation(number="MUBO-165", direction="incoming"):
+    other = {"id": 93381, "title": "Reader keeps the old offset", "status": "Normal",
+             "projectId": 13734, "uniqueIndex": 165}
+    if number is not None:
+        other["ticketNumber"] = number
+    return {"relationType": "RelatedTo", "direction": direction, "otherTask": other}
+
+
 def stub(links=None, twin="MUBO-2001", calls=None, direction="incoming"):
     links = links or {}
     def api(*args):
@@ -107,6 +115,18 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(parity.pairs(inventory(), [desktop], stub(links={"MUBO-3000": ["IGSH-2000"]})),
                          [(desktop, "android")])
         self.assertEqual(parity.pairs(inventory(), [desktop], stub(links={"MUBO-3000": ["MUBO-3002"]})), [])
+
+    def test_relation_to_another_board_is_skipped(self):
+        desktop = task("MUBO-3000")
+        def api(*args):
+            return {"success": True, "relations": [relation("SOFT-12")]}
+        self.assertEqual(parity.links("MUBO-3000", api), [])
+        self.assertEqual(parity.pairs(inventory(), [desktop], api), [(desktop, "android")])
+
+    def test_relation_without_a_ticket_number_is_skipped(self):
+        def api(*args):
+            return {"success": True, "relations": [relation(None)]}
+        self.assertEqual(parity.links("MUBO-3000", api), [])
 
     def test_cap_refuses_a_big_plan_and_creates_nothing(self):
         rows = [task(f"MUBO-{3000 + index}") for index in range(6)]

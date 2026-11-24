@@ -155,7 +155,7 @@ def links(ticket, api=call):
     for row in rows:
         other = (row.get("otherTask") or {}).get("ticketNumber")
         if not isinstance(other, str) or not re.fullmatch(TICKET, other):
-            raise ValueError("Relation lacks a ticket number")
+            continue
         found.append(other)
     return found
 
