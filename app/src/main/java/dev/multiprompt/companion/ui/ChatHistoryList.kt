@@ -333,8 +333,9 @@ internal fun ChatHistoryList(
     val atBottom = !listState.canScrollBackward && pendingJump == null
     val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, questions.size, showDots)
     val holdingForUnread = openHold && anchorPosition != null
-    SideEffect {
-        if (atBottom && !listState.isScrollInProgress && !holdingForUnread && findQuery.isBlank()) listState.requestScrollToItem(0)
+    val newest = messages.lastOrNull()
+    LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
+        if (atBottom && !holdingForUnread && findQuery.isBlank()) listState.scrollToItem(0)
     }
     LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, showDots, questions.size) {
         val hit = activeFind ?: return@LaunchedEffect
