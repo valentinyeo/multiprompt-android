@@ -109,7 +109,7 @@ object ChatHistoryProtocol {
         return JSONObject().put("id", id).put("codex", wire(identity) == "codex")
             .also { query -> hostedProvider(identity.agent, identity.sid)?.let { query.put("provider", it) } }
             .put("sid", identity.sid).put("tmux", identity.tmux).put("cwd", identity.cwd).put("follow", identity.tmux.isNotEmpty())
-            .put("questions", true).put("held", held).put("delivery_ids", org.json.JSONArray(deliveryIds)).put("source_offsets", true).put("no_jump", true).put("settlement", true)
+            .put("questions", true).put("held", held).put("delivery_ids", org.json.JSONArray(deliveryIds)).put("source_offsets", true).put("no_jump", true).put("settlement", true).put("blocked_settlement", true)
             .put("cached_sid", history.sid).put("inode", history.inode).put("offset", history.offset)
             .put("start", history.start).put("before", before).put("mtime", history.mtime)
             .put("probe", history.probe).toString() + "\n"

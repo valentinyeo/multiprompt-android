@@ -308,7 +308,8 @@
         ]
       },
       "outcomes": [
-        "claude.skills-model-effort"
+        "claude.skills-model-effort",
+        "reader.follow-newest"
       ],
       "evidence": {
         "native-menu-state.txt": 5000,
@@ -570,6 +571,25 @@
         "search-keyboard.json": 1200,
         "row-long-press-actions.xml": 1500,
         "pin-chat-state.json": 1400
+      }
+    },
+    "send-blocked.md": {
+      "name": "Blocked prompt shows not sent",
+      "description": "The fixture host records a hook-blocked prompt the phone sent, and the message shows Not sent with the blocked reason within seconds instead of after the ten-minute wait.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.send-blocked"
+      ],
+      "evidence": {
+        "send-blocked-not-sent.xml": 1500,
+        "send-blocked-store.json": 1500,
+        "send-blocked-state.json": 1500
       }
     },
     "settings-navigation.md": {
@@ -2076,6 +2096,40 @@
           "quote": "\"CLEARED_BEFORE_2474\": \"cancelled\""
         }
       }
+    },
+    "chat.send-blocked": {
+      "description": "A prompt a hook blocked shows Not sent within seconds with the blocked reason, not after the ten-minute waiting limit, and adds no delivered bubble of its own.",
+      "journey": "send-blocked.md",
+      "sideEffect": true,
+      "match": [
+        "blocked_settlement|blocked_by_hook|promptSubmitEnding"
+      ],
+      "paths": [
+        "^app/src/main/assets/chat_connectors/claude\\.py$",
+        "^app/src/main/java/dev/multiprompt/companion/reader/NotSentReason\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message verify-session' BLOCKED_BY_HOOK_266"
+        },
+        "result": {
+          "file": "send-blocked-not-sent.xml",
+          "quote": "Chat blocked this message, nothing was sent"
+        },
+        "sideEffect": {
+          "file": "send-blocked-store.json",
+          "quote": "\"reason\": \"blocked_by_hook\""
+        }
+      }
+    },
+    "reader.follow-newest": {
+      "description": "A chat already showing its newest reply keeps incoming replies on screen through the working indicator and message layout changes, without tapping Jump to newest. The native-skills journey requires each model and effort reply on screen after its independent host receipt.",
+      "journey": "native-skills.md",
+      "sideEffect": true,
+      "match": [
+        "requestScrollToItem"
+      ]
     }
   }
 }

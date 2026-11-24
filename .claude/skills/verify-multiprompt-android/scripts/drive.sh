@@ -2181,7 +2181,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"
     exit 0
 fi
-if [[ "$feature" == chat-queued.md || "$feature" == chat-clear.md ]]; then
+if [[ "$feature" == chat-queued.md || "$feature" == chat-clear.md || "$feature" == send-blocked.md ]]; then
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     wait_for_text VERIFY_READY_1008
 else
@@ -2571,6 +2571,122 @@ OWNER
     grep -F 'native-skills' "$EVIDENCE/owner-sudo.txt"
     sudo grep 'Accepted publickey for verifyssh' "$FIXTURE/sshd.log" > "$EVIDENCE/owner-ssh-auth.txt"
     printf 'OWNER_ACCOUNT_SKILLS_PROVEN\n' | tee "$EVIDENCE/owner-result.txt"
+    exit 0
+fi
+if [[ "$feature" == send-blocked.md ]]; then
+    wait_for_text 'Ready for queued messages.'
+    blocked_event() { sudo -u verifyssh env GITHUB_ACTIONS="$GITHUB_ACTIONS" HOME=/home/verifyssh python3 /home/verifyssh/queued-console.py "$1"; }
+    blocked_store() {
+        sudo -u verifyssh env HOME=/home/verifyssh python3 - <<'BLOCKED_STORE'
+import importlib.util
+import json
+import sqlite3
+spec = importlib.util.spec_from_file_location('blocked_reader', '/home/verifyssh/queue-reader.py')
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+with sqlite3.connect(reader.message_store_path()) as db:
+    rows = db.execute("SELECT state,receipt,created FROM shared_messages WHERE provider='claude' AND text='BLOCKED_BY_HOOK_266' ORDER BY position").fetchall()
+state, receipt, created = rows[-1] if rows else (None, None, None)
+reason = json.loads(receipt).get('reason') if isinstance(receipt, str) and receipt.startswith('{') else None
+print(json.dumps(dict(rows=len(rows), state=state, receipt=receipt, reason=reason, created=created), indent=2))
+BLOCKED_STORE
+    }
+    blocked_screen() {
+        local attempt
+        for attempt in {1..30}; do
+            dump_ui
+            if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "$1"; then return; fi
+            sleep 1
+        done
+        printf 'Timed out waiting for %s\n' "$1" >&2
+        return 1
+    }
+    fill 'Message verify-session' BLOCKED_BY_HOOK_266
+    shot blocked-draft
+    tap_desc 'Send prompt'
+    blocked_screen BLOCKED_BY_HOOK_266
+    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Not sent'; then
+        printf 'BLOCKED_PROMPT_SHOWED_NOT_SENT_WITHOUT_A_BLOCK\n' >&2
+        exit 1
+    fi
+    blocked_event clear-draft
+    wait_receipt 'VERIFY_RECEIVED:BLOCKED_BY_HOOK_266'
+    blocked_screen BLOCKED_BY_HOOK_266
+    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Not sent'; then
+        printf 'BLOCKED_PROMPT_SHOWED_NOT_SENT_WITHOUT_A_BLOCK\n' >&2
+        exit 1
+    fi
+    blocked_store | tee "$EVIDENCE/send-blocked-before.json"
+    shot blocked-quoted
+    blocked_event block:BLOCKED_BY_HOOK_266 | tee "$EVIDENCE/send-blocked-event.txt"
+    blocked_at=$(sudo cat /home/verifyssh/blocked-at.txt)
+    blocked_limit=8
+    if [[ "${BREAK_IT_MODE:-}" == true ]]; then blocked_limit=60; fi
+    blocked_deadline=$((SECONDS + blocked_limit))
+    detected=
+    while (( SECONDS < blocked_deadline )); do
+        dump_ui
+        if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains 'Not sent'; then
+            detected=$(date +%s%N)
+            break
+        fi
+        sleep 1
+    done
+    if [[ -z "$detected" ]]; then
+        printf 'BLOCKED_PROMPT_NOT_SENT_TOO_SLOW: the label did not appear within %s seconds of the hook block\n' "$blocked_limit" >&2
+        shot blocked-not-sent-missing
+        exit 1
+    fi
+    shot blocked-not-sent
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/send-blocked-not-sent.xml"
+    python3 - "$EVIDENCE/send-blocked-not-sent.xml" <<'BLOCKED_UI'
+import sys
+import xml.etree.ElementTree as ET
+texts = [node.get('text') for node in ET.parse(sys.argv[1]).getroot().iter('node')]
+assert texts.count('BLOCKED_BY_HOOK_266') == 1, texts.count('BLOCKED_BY_HOOK_266')
+assert texts.count('Not sent') == 1, texts.count('Not sent')
+assert 'Chat blocked this message, nothing was sent' in texts, texts
+BLOCKED_UI
+    blocked_store | tee "$EVIDENCE/send-blocked-store.json"
+    sudo cat /home/verifyssh/blocked-at.txt > "$EVIDENCE/send-blocked-host.txt"
+    sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/send-blocked-receipts.txt"
+    python3 - "$EVIDENCE" "$blocked_at" "$detected" "$blocked_limit" <<'BLOCKED_TIMING'
+import json
+import sys
+from pathlib import Path
+root = Path(sys.argv[1])
+blocked_at, detected, limit = float(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
+elapsed = round(detected / 1e6 - blocked_at * 1000)
+before = json.loads(root.joinpath('send-blocked-before.json').read_text())
+after = json.loads(root.joinpath('send-blocked-store.json').read_text())
+assert before['rows'] == 1 and before['state'] == 'sent' and not before['receipt'], before
+assert after['rows'] == 1 and after['state'] == 'failed', after
+assert after['reason'] == 'blocked_by_hook', after
+assert 0 <= elapsed <= limit * 1000, 'BLOCKED_PROMPT_NOT_SENT_TOO_SLOW: %s ms exceeds %s ms' % (elapsed, limit * 1000)
+result = dict(prompt='BLOCKED_BY_HOOK_266', blocked_at=blocked_at, visible_at_ms=round(detected / 1e6), elapsed_ms=elapsed,
+              limit_ms=limit * 1000, waiting_limit_ms=600000, store_before=before['state'], store_after=after['state'],
+              reason=after['reason'], receipt=after['receipt'])
+root.joinpath('send-blocked-state.json').write_text(json.dumps(result, indent=2) + '\n')
+print('SEND_BLOCKED_TIMING', json.dumps(result))
+BLOCKED_TIMING
+    adb shell input keyevent KEYCODE_BACK
+    wait_for_text Inbox
+    tap_text verify-session
+    blocked_screen 'Ready for queued messages.'
+    blocked_screen BLOCKED_BY_HOOK_266
+    blocked_screen 'Not sent'
+    shot blocked-reopened
+    dump_ui
+    python3 - "$EVIDENCE/current.xml" <<'BLOCKED_REOPENED'
+import sys
+import xml.etree.ElementTree as ET
+texts = [node.get('text') for node in ET.parse(sys.argv[1]).getroot().iter('node')]
+assert texts.count('BLOCKED_BY_HOOK_266') == 1, texts.count('BLOCKED_BY_HOOK_266')
+assert texts.count('Not sent') == 1, texts.count('Not sent')
+assert 'Chat blocked this message, nothing was sent' in texts, texts
+BLOCKED_REOPENED
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/send-blocked-reopened.xml"
+    printf 'FEATURE VERIFIED: %s\n' "$feature"
     exit 0
 fi
 if [[ "$feature" == native-skills.md ]]; then
