@@ -23,6 +23,7 @@ room_order_submits() {
 
 room_order_journey() {
     local attempt stage account_id
+    setup_failure=1
     export VERIFY_PACKAGE=$package
     account_id=$(python3 "$scripts/room-order-check.py" account-id)
     adb shell am force-stop "$package"
@@ -60,6 +61,7 @@ room_order_journey() {
     python3 "$scripts/mpa" screenshot room-inbox
     python3 "$scripts/mpa" tap text 'Order room'
     python3 "$scripts/mpa" read --wait-text 'No messages yet'
+    setup_failure=0
     python3 "$scripts/mpa" screenshot room-empty
     room_order_submits "$EVIDENCE/room-submits-before.txt"
     python3 "$scripts/room-order-check.py" nothing-sent "$EVIDENCE/room-submits-before.txt"
