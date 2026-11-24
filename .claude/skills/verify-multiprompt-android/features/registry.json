@@ -1549,6 +1549,20 @@
       "description": "Only host Pi login rows show a sign-in card; tapping its HTTPS link starts the browser flow, and the host login result clears the card.",
       "journey": "pi-login.md",
       "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap text 'Open sign-in link'"
+        },
+        "result": {
+          "file": "pi-login-browser.json",
+          "quote": "\"action\": \"android.intent.action.VIEW\", \"url\": \"https://pi.example/verify-device\""
+        },
+        "sideEffect": {
+          "file": "pi-login-host.json",
+          "quote": "\"item\": \"pi-login-1\""
+        }
+      },
       "match": [
         "PiLoginPrompt"
       ],
