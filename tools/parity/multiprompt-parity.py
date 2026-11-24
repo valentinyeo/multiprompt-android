@@ -9,15 +9,23 @@ import subprocess
 from datetime import datetime
 
 ROOT = Path(__file__).resolve().parents[2]
+PROJECT = "13734"
+CLI = "hypertask"
+TOKEN = Path(".config/hypertask-agents/credentials/sessions/multiprompt-android-dev-agent-token")
 LABELS = {"desktop": "Multiprompt", "android": "Multiprompt Android"}
-MARKER = re.compile(r"\bMP-PAIR:(IGSH-\d+):(desktop|android)\b")
+TICKET = r"(?:IGSH|MUBO)-\d+"
+MARKER = re.compile(rf"\bMP-PAIR:({TICKET}):(desktop|android)\b")
 GAP_MARKER = re.compile(r"\bMP-GAP:[a-z][a-z0-9-]+:(desktop|android)\b")
 STATES = {"shipped", "partial", "missing", "planned"}
 
 
 def call(*args):
-    result = subprocess.run([str(Path.home() / "projects/ceo/bin/ceo-ht"), *args, "--json"],
-                            check=True, capture_output=True, text=True, timeout=120)
+    token = (Path.home() / TOKEN).read_text().strip()
+    result = subprocess.run([CLI, "--json", "--token", token, *args],
+                            capture_output=True, text=True, timeout=120)
+    if result.returncode != 0:
+        detail = result.stderr.strip().replace(token, "<token>")
+        raise ValueError(detail or f"Hypertask exited {result.returncode}")
     data = json.loads(result.stdout)
     if data.get("success") is not True:
         raise ValueError("Hypertask did not confirm success")
@@ -28,7 +36,7 @@ def board(api=call, status="Normal"):
     rows, cursors, seen = [], set(), set()
     cursor = None
     while True:
-        args = ["task", "list", "--project", "2060", "--limit", "100", "--status", status]
+        args = ["task", "list", "--project", PROJECT, "--limit", "100", "--status", status]
         if cursor:
             args += ["--cursor", cursor]
         page = api(*args)
@@ -68,7 +76,7 @@ def validate(data):
             cell = row[platform]
             if cell["status"] not in STATES or not cell["source"].startswith("https://github.com/valentinyeo/"):
                 raise ValueError("Each status needs a source reference")
-            if cell.get("ticket") and not re.fullmatch(r"IGSH-\d+", cell["ticket"]):
+            if cell.get("ticket") and not re.fullmatch(TICKET, cell["ticket"]):
                 raise ValueError("Invalid gap ticket reference")
     if not seen:
         raise ValueError("Empty inventory")
@@ -87,7 +95,7 @@ def render(data):
             text = f"[{cell['status']}]({cell['source']})"
             if cell.get("ticket"):
                 number = cell["ticket"].split("-")[1]
-                text += f" · [gap](https://app.hypertask.ai/detail/project-2060/{number})"
+                text += f" · [gap](https://app.hypertask.ai/detail/project-{PROJECT}/{number})"
             cells.append(text)
         lines.append(f"| {row['name']} | {' | '.join(cells)} |")
     lines += ["", "## Automatic counterparts", "",
@@ -103,7 +111,7 @@ def render(data):
               "Agent operation: `python3 tools/parity/multiprompt-parity.py --apply`.",
               "Without `--apply`, only planned pairs are printed.",
               "The daily user timer is `multiprompt-parity.timer`.",
-              "Board writes use `bin/ceo-ht` as Hax Runner 14.",
+              "Board writes use the `hypertask` CLI as the Multiprompt Android agent.",
               "Update this inventory when gap tickets ship.", ""]
     return "\n".join(lines)
 
@@ -152,7 +160,7 @@ def reconcile(data, rows, apply=False, api=call):
         marker = f"MP-GAP:{source['feature']}:{target}" if source.get("feature") else f"MP-PAIR:{ticket}:{target}"
         name = "Android" if target == "android" else "desktop"
         url = ("https://github.com/valentinyeo/multiprompt-android/blob/main/docs/multiprompt-features.md"
-               if source.get("feature") else f"https://app.hypertask.ai/detail/project-2060/{ticket.split('-')[1]}")
+               if source.get("feature") else f"https://app.hypertask.ai/detail/project-{PROJECT}/{ticket.split('-')[1]}")
         feature_name = f"<p>{html.escape(source['name'])}</p>" if source.get("feature") else ""
         description = (f"<h2>Problem</h2><p>The other app has a matching request.</p>{feature_name}"
                        f"<p><a href='{url}'>Original app request</a></p>"
@@ -163,13 +171,13 @@ def reconcile(data, rows, apply=False, api=call):
                        "<h2>Risk</h2><p>Unneeded changes. Reuse anything already working.</p>"
                        f"<h2>Decision</h2><p>None.</p><p>{marker}</p>")
         if apply:
-            response = api("task", "create", "--project", "2060", "--section", "Todo",
+            response = api("task", "create", "--project", PROJECT, "--section", "Todo",
                            "--labels", LABELS[target], "--title",
                            f"{name}: {source['name']}" if source.get("feature") else f"Match the linked request on {name}",
                            "--description", description)
             tasks = response.get("tasks") or ([response["task"]] if response.get("task") else [])
-            if not tasks or not re.fullmatch(r"IGSH-\d+", tasks[0].get("ticketNumber", "")):
-                raise ValueError("Created counterpart lacks a ticket number; read board before retrying")
+            if not tasks or not re.fullmatch(r"MUBO-\d+", tasks[0].get("ticketNumber", "")):
+                raise ValueError("Created counterpart lacks a board ticket number; read board before retrying")
             created.append({"source": ticket, "target": target, "ticket": tasks[0]["ticketNumber"]})
         else:
             created.append({"source": ticket, "target": target})

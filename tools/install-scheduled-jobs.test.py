@@ -157,50 +157,66 @@ class FileTicketTest(unittest.TestCase):
         journal.write_text('#!/usr/bin/env bash\ncat "$HOME/journal.txt"\n')
         journal.chmod(0o755)
         hypertask = self.bin / 'hypertask'
-        hypertask.write_text(
-            '#!/usr/bin/env bash\n'
-            'printf "%s\\n" "$@" > "$HOME/hypertask.args"\n'
-            'while [ $# -gt 0 ]; do\n'
-            '  if [ "$1" = "--description-file" ]; then cp "$2" "$HOME/description.md"; fi\n'
-            '  shift\n'
-            'done\n'
-        )
+        hypertask.write_text('''#!/usr/bin/env bash
+count=$(( $(cat "$HOME/calls" 2>/dev/null || printf 0) + 1 ))
+printf "%s" "$count" > "$HOME/calls"
+printf "%s\\n" "$@" > "$HOME/hypertask.$count.args"
+json=no
+[ "${1:-}" = "--json" ] && json=yes
+while [ $# -gt 0 ]; do
+  if [ "$1" = "--description-file" ]; then cp "$2" "$HOME/description.md"; fi
+  shift
+done
+if [ "$json" = yes ]; then printf '{"success": true, "task": {"ticketNumber": "MUBO-401"}}\\n'; fi
+''')
         hypertask.chmod(0o755)
 
     def run_helper(self):
         env = {'HOME': str(self.home), 'PATH': str(self.bin) + os.pathsep + os.environ['PATH']}
         return subprocess.run(['bash', str(HELPER)], env=env, capture_output=True, text=True)
 
-    def args(self):
-        return (self.home / 'hypertask.args').read_text().splitlines()
+    def args(self, call=1):
+        return (self.home / f'hypertask.{call}.args').read_text().splitlines()
 
     def test_helper_files_one_high_priority_ticket_with_the_last_probe_line(self):
         result = self.run_helper()
         self.assertEqual(result.returncode, 0, result.stderr)
         args = self.args()
         self.assertEqual('--json', args[0])
-        self.assertEqual('create', args[args.index('tasks') + 1])
+        self.assertEqual('create', args[args.index('task') + 1])
         self.assertEqual('sentinel-token-one', args[args.index('--token') + 1])
         self.assertEqual('13734', args[args.index('--project') + 1])
         self.assertEqual('high', args[args.index('--priority') + 1])
         self.assertEqual(TITLE, args[args.index('--title') + 1])
         self.assertIn('--markdown', args)
         description = (self.home / 'description.md').read_text()
-        self.assertIn('CHAT_PROBE_MISMATCH chats=4 mismatch=1 skip=0', description)
-        self.assertNotIn('CHAT_PROBE_OK', description)
+        for sentence in [line for line in description.splitlines() if line.strip() and not line.startswith('**')]:
+            self.assertLessEqual(len(sentence.split()), 12, sentence)
+        self.assertNotIn('CHAT_PROBE', description)
+        self.assertNotIn('chats=', description)
+        self.assertNotIn('mismatch=', description)
         for section in ('**Problem**', '**Fix**', '**Decision**', '**Done when**', '**Risk**'):
             self.assertIn(section, description)
         self.assertNotIn('sentinel-token-one', description)
         self.assertNotIn('sentinel-token-one', result.stdout + result.stderr)
         temporary = Path(args[args.index('--description-file') + 1])
         self.assertFalse(temporary.exists())
+        log = self.args(2)
+        self.assertEqual(['activity', 'add', 'MUBO-401', '--text',
+                          'CHAT_PROBE_MISMATCH chats=4 mismatch=1 skip=0'],
+                         [arg for arg in log if arg not in ('--token', 'sentinel-token-one')])
 
     def test_helper_reads_the_token_at_run_time(self):
         self.run_helper()
         self.token_path.write_text('sentinel-token-two\n')
         self.run_helper()
-        args = self.args()
-        self.assertEqual('sentinel-token-two', args[args.index('--token') + 1])
+        self.assertEqual('sentinel-token-two', self.args(2)[self.args(2).index('--token') + 1])
+
+    def test_helper_posts_no_log_when_the_journal_holds_no_probe_line(self):
+        (self.home / 'journal.txt').write_text('disk noise\n')
+        result = self.run_helper()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual('1', (self.home / 'calls').read_text())
 
 
 if __name__ == '__main__':
