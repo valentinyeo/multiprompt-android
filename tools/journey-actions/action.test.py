@@ -442,7 +442,7 @@ adb() { printf '%s\\n' "$*" >> "$TEST_DIR/actions"; }
         self.assertEqual(action.confirm(late, 'text', 'Model ›'), 'tap 534 640')
         self.assertEqual(action.row_labels(late, 534, 540), ['Host settings ›', 'On'])
         self.assertEqual(action.row_labels(late, 534, 640), ['Model ›', 'Opus 5.5'])
-        covered = late_tree.replace('</hierarchy>', '<node class="android.view.View" text="Host settings ›" bounds="[0,600][1080,680]" /></hierarchy>')
+        covered = late_tree.replace('</node></hierarchy>', '<node class="android.view.View" text="Host settings ›" bounds="[0,600][1080,680]" /></node></hierarchy>')
         with self.assertRaisesRegex(action.Unreachable, "the label under the tap point is 'Host settings ›', not 'Model ›'"):
             action.confirm(ET.fromstring(covered), 'text', 'Model ›')
         stale = subprocess.check_output(['git', 'show', '2a913189:.claude/skills/verify-multiprompt-android/scripts/drive.sh'], cwd=ROOT, text=True)
