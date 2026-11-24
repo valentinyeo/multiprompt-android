@@ -13,6 +13,9 @@ import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 
+private const val STREAM_END = "stream-ended"
+private const val PROCESS_GROUP_PREFIX = "process-group="
+
 class TmuxExactTargetBehaviorTest {
     private lateinit var dir: Path
     private lateinit var socket: Path
@@ -71,14 +74,15 @@ class TmuxExactTargetBehaviorTest {
         val receipt = dir.resolve("receipt")
         val command = "tmux new-session -d -s '$name' 'printf CANARY_SCREEN_1230; exec cat >> $receipt'"
         assertEquals(0, run(command).status)
-        var screen = ""
-        repeat(50) {
-            if (!screen.contains("CANARY_SCREEN_1230")) {
-                screen = run("tmux capture-pane -p -t '=$name:'").output
-                if (!screen.contains("CANARY_SCREEN_1230")) Thread.sleep(100)
+        var ready = false
+        while (!ready) {
+            val capture = run("tmux capture-pane -p -t '=$name:'")
+            ready = capture.output.contains("CANARY_SCREEN_1230")
+            if (!ready) {
+                assertEquals("Neighbor must stay alive: ${capture.output}", 0, run("tmux has-session -t '=$name'").status)
+                Thread.sleep(20)
             }
         }
-        assertTrue("Neighbor must be ready", screen.contains("CANARY_SCREEN_1230"))
         return receipt
     }
 
@@ -165,8 +169,42 @@ class TmuxExactTargetBehaviorTest {
         }
     }
 
+    private fun readLines(process: Process): Pair<LinkedBlockingQueue<String>, Thread> {
+        val lines = LinkedBlockingQueue<String>()
+        val reader = thread(isDaemon = true) {
+            process.inputStream.bufferedReader().use { input ->
+                while (true) {
+                    val line = input.readLine() ?: break
+                    lines.put(line)
+                }
+            }
+            lines.put(STREAM_END)
+        }
+        return lines to reader
+    }
+
+    private fun awaitProcessGroup(lines: LinkedBlockingQueue<String>): Long {
+        val announcement = lines.take()
+        assertTrue("Stream must announce its process group: $announcement", announcement.startsWith(PROCESS_GROUP_PREFIX))
+        val announced = announcement.removePrefix(PROCESS_GROUP_PREFIX).trim().toLongOrNull()
+        assertTrue("Stream process group must be valid: $announcement", announced != null && announced > 1)
+        return announced ?: 0
+    }
+
+    private fun stopGroup(group: Long?, process: Process, reader: Thread) {
+        val killer = group?.takeIf { it > 1 && process.isAlive }?.let { ProcessBuilder("/bin/kill", "-KILL", "--", "-$it").start() }
+        killer?.waitFor()
+        if (process.isAlive) process.destroyForcibly()
+        process.waitFor()
+        reader.join()
+        if (killer != null) assertEquals("Group signal must succeed", 0, killer.exitValue())
+        assertFalse("Stream must terminate", process.isAlive)
+        assertFalse("Stream reader must terminate", reader.isAlive)
+    }
+
     @Test
     fun streamRepublishesUnchangedSnapshotWhenAlternateChanges() {
+        assumeTrue(runCatching { ProcessBuilder("python3", "--version").start().waitFor() == 0 }.getOrDefault(false))
         val state = Files.createDirectory(dir.resolve("state"))
         val producer = dir.resolve("producer.py")
         Files.write(producer, ("import pathlib, sys, time\n" +
@@ -181,40 +219,30 @@ class TmuxExactTargetBehaviorTest {
             "    time.sleep(20)\n").toByteArray(Charsets.UTF_8))
         val creation = ProcessBuilder("/usr/bin/tmux", "-S", socket.toString(), "new-session", "-d", "-s", "stream-test",
             "python3 $producer $dir").redirectErrorStream(true).start()
-        try {
-            assertTrue("Session creation timed out", creation.waitFor(5, TimeUnit.SECONDS))
-            assertEquals(0, creation.exitValue())
-        } finally {
-            if (creation.isAlive) creation.destroyForcibly()
-            assertTrue("Session creation must terminate", creation.waitFor(5, TimeUnit.SECONDS))
-        }
-        val readyDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-        while (!Files.exists(dir.resolve("ready")) && System.nanoTime() < readyDeadline) Thread.sleep(20)
-        assertTrue("Pane producer must be ready", Files.exists(dir.resolve("ready")))
+        assertEquals("Session creation must succeed", 0, creation.waitFor())
+        val ready = dir.resolve("ready")
+        while (!Files.exists(ready)) Thread.sleep(20)
         Files.write(bin.resolve("tmux"), ("#!/bin/sh\n" +
             "if [ \"\$1\" = display-message ] && [ \"\$5\" = '#{alternate_on}' ] && [ ! -e '$dir/intercepted' ]; then\n" +
             "  value=\$(/usr/bin/tmux -S '$socket' \"\$@\") || exit 1\n" +
             "  [ \"\$value\" = 0 ] || exit 2\n" +
             "  : > '$dir/intercepted'; : > '$dir/enter'\n" +
-            "  n=0\n" +
-            "  while [ \"\$n\" -lt 100 ]; do\n" +
+            "  while true; do\n" +
             "    alt=\$(/usr/bin/tmux -S '$socket' display-message -p -t '=stream-test:' '#{alternate_on}') || exit 3\n" +
             "    screen=\$(/usr/bin/tmux -S '$socket' capture-pane -p -J -t '=stream-test:') || exit 4\n" +
             "    if [ \"\$alt\" = 1 ] && printf '%s' \"\$screen\" | /bin/grep -q LIVE_1230; then\n" +
             "      printf '%s\\n' \"\$value\"; exit 0\n" +
             "    fi\n" +
-            "    n=\$((n + 1)); sleep 0.05\n" +
+            "    sleep 0.05\n" +
             "  done\n" +
-            "  exit 5\n" +
             "fi\n" +
             "exec /usr/bin/tmux -S '$socket' \"\$@\"\n").toByteArray(Charsets.UTF_8))
-        val groupFile = dir.resolve("stream-group")
         val gate = dir.resolve("stream-start")
         val process = ProcessBuilder("setsid", "bash", "-c", """
             pgid=${'$'}(/bin/ps -o pgid= -p ${'$'}${'$'} | tr -d ' ')
             parent_pgid=${'$'}(/bin/ps -o pgid= -p ${'$'}PPID | tr -d ' ')
             [ "${'$'}${'$'}" -gt 1 ] && [ "${'$'}pgid" = "${'$'}${'$'}" ] && [ -n "${'$'}parent_pgid" ] && [ "${'$'}pgid" != "${'$'}parent_pgid" ] || exit 1
-            printf '%s\n' "${'$'}pgid" > '${groupFile}.tmp' && mv '${groupFile}.tmp' '$groupFile' || exit 1
+            printf '$PROCESS_GROUP_PREFIX%s\n' "${'$'}pgid" || exit 1
             while [ ! -e '$gate' ]; do sleep 0.02; done
             exec bash -c "${'$'}1"
         """.trimIndent(), "stream", TmuxCommands.stream("stream-test")).redirectErrorStream(true).apply {
@@ -222,25 +250,16 @@ class TmuxExactTargetBehaviorTest {
             environment()["MULTIPROMPT_STATE_DIR"] = state.toString()
             environment()["TMPDIR"] = dir.toString()
         }.start()
-        val lines = LinkedBlockingQueue<String>()
-        val reader = thread(isDaemon = true) {
-            process.inputStream.bufferedReader().use { input ->
-                while (true) lines.put(input.readLine() ?: break)
-            }
-        }
+        val (lines, reader) = readLines(process)
+        var group: Long? = null
         val transcript = mutableListOf<String>()
         try {
-            val groupDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-            while (!Files.exists(groupFile) && process.isAlive && System.nanoTime() < groupDeadline) Thread.sleep(20)
-            assertTrue("Stream process group must be ready", Files.exists(groupFile))
-            val group = String(Files.readAllBytes(groupFile), Charsets.UTF_8).trim().toLongOrNull()
-            assertTrue("Stream process group must be valid", group != null && group > 1)
+            group = awaitProcessGroup(lines)
             Files.write(gate, byteArrayOf())
-            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(12)
-            while (transcript.count { it == "${TmuxCommands.ALT_PREFIX}1" } < 4) {
-                val remaining = deadline - System.nanoTime()
-                if (remaining <= 0) break
-                val line = lines.poll(remaining, TimeUnit.NANOSECONDS) ?: break
+            val alternateOne = "${TmuxCommands.ALT_PREFIX}1"
+            while (transcript.count { it == alternateOne } < 4) {
+                val line = lines.take()
+                if (line == STREAM_END) break
                 transcript.add(line)
             }
             val details = "stream transcript: $transcript"
@@ -272,17 +291,27 @@ class TmuxExactTargetBehaviorTest {
                     }
                 })
         } finally {
-            val group = if (Files.exists(groupFile)) String(Files.readAllBytes(groupFile), Charsets.UTF_8).trim().toLongOrNull() else null
-            val killer = if (group != null && group > 1) ProcessBuilder("/bin/kill", "-KILL", "--", "-$group").start() else null
-            val killerFinished = killer?.waitFor(5, TimeUnit.SECONDS) ?: true
-            if (killer != null && !killerFinished) killer.destroyForcibly()
-            if (process.isAlive) process.destroyForcibly()
-            val terminated = process.waitFor(5, TimeUnit.SECONDS)
-            reader.join(5000)
-            assertTrue("Group signal must terminate", killerFinished)
-            if (killer != null && killerFinished) assertEquals("Group signal must succeed", 0, killer.exitValue())
-            assertTrue("Stream must terminate", terminated)
-            assertFalse("Stream reader must terminate", reader.isAlive)
+            stopGroup(group, process, reader)
+        }
+    }
+
+    @Test
+    fun slowProcessGroupAnnouncementStillStartsTheStream() {
+        val gate = dir.resolve("slow-gate")
+        val process = ProcessBuilder("setsid", "bash", "-c", """
+            sleep 6
+            printf '$PROCESS_GROUP_PREFIX%s\n' "${'$'}${'$'}"
+            while [ ! -e '$gate' ]; do sleep 0.02; done
+            printf 'started\n'
+        """.trimIndent()).redirectErrorStream(true).start()
+        val (lines, reader) = readLines(process)
+        var group: Long? = null
+        try {
+            group = awaitProcessGroup(lines)
+            Files.write(gate, byteArrayOf())
+            assertEquals("Slow child must keep running", "started", lines.take())
+        } finally {
+            stopGroup(group, process, reader)
         }
     }
 
@@ -292,14 +321,15 @@ class TmuxExactTargetBehaviorTest {
         assertEquals(0, run("tmux new-session -d -s b-vanished 'printf VANISHED_SCREEN_1230; exec cat'").status)
         assertEquals(0, run("tmux new-session -d -s b-vanished-neighbor 'printf NEIGHBOR_SCREEN_1230; exec cat'").status)
         for (name in listOf("a-stable", "b-vanished-neighbor")) {
-            var screen = ""
-            repeat(50) {
-                if (!screen.contains("SCREEN_1230")) {
-                    screen = run("tmux capture-pane -p -t '=$name:'").output
-                    if (!screen.contains("SCREEN_1230")) Thread.sleep(100)
+            var ready = false
+            while (!ready) {
+                val capture = run("tmux capture-pane -p -t '=$name:'")
+                ready = capture.output.contains("SCREEN_1230")
+                if (!ready) {
+                    assertEquals("Session must stay alive: $name ${capture.output}", 0, run("tmux has-session -t '=$name'").status)
+                    Thread.sleep(20)
                 }
             }
-            assertTrue("Session must be ready: $name", screen.contains("SCREEN_1230"))
         }
         Files.write(bin.resolve("tmux"),
             ("#!/bin/sh\n" +
