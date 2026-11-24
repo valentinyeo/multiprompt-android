@@ -34,7 +34,7 @@ The fixture gives `live-cl_mention-2953` the tmux option `@mp_host_sid a1b2c3d4-
 10. `mpa fill` types `cc @Mention 2953 the build is red` and sends it. The sent bubble keeps `cc @Mention 2953 the build is red`, never shows the tmux session, and never carries the note: the phone does not annotate its own chat.
 11. The shared message store must gain a row for provider `claude` and sid `a1b2c3d4-1008-4000-8000-000000002953` whose text is exactly `Valentin mentioned you in verify-session (FYI only; read along, do not act unless asked). Context:\n\ncc @Mention 2953 the build is red`. `mention-copy-evidence.py` reads `store.sqlite3` as root and writes `mention-copy.json`; `mention-copy-sent.json` retains the phone screen. This is the desktop's own read-along note (`src/chat_mention.zig:789`) handed to the mentioned chat the way the desktop hands it over (`src/chat_send.zig:696`), through the shared message store the phone already uses for its own sends.
 
-The phone sends no wire note and never picks a recipient for the channel it is typing in. It reads the FYI/cc classification from the same shapes the desktop fixture pins in `tools/fixtures/MUBO-247/cases.json`; `MentionCopyTest` replays those 26 cases on the JVM.
+The phone sends no wire note and never picks a recipient for the channel it is typing in. It reads the FYI/cc classification from the same shapes the desktop fixture pins in `tools/fixtures/MUBO-247/cases.json`; `MentionDecisionTest` replays those 26 cases on the JVM.
 
 ## Not covered
 
