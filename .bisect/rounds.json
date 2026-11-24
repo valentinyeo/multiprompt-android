@@ -1,4 +1,5 @@
 {
+  "counters": false,
   "repeats": 3,
   "replies_per_window": 10,
   "reply_interval_s": 1.0,

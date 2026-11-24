@@ -29,6 +29,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       shas: ${{ steps.plan.outputs.shas }}
+      counters: ${{ steps.plan.outputs.counters }}
     steps:
       - uses: actions/checkout@v4
       - name: Read the revisions in this round
@@ -37,11 +38,13 @@ jobs:
           ROUNDS: ${{ github.event.inputs.rounds || '.bisect/rounds.json' }}
         run: |
           echo "shas=$(python3 -B tools/bisect-mubo-453/plan.py "$ROUNDS" --json)" >> "$GITHUB_OUTPUT"
+          echo "counters=$(python3 -B tools/bisect-mubo-453/plan.py "$ROUNDS" --counters)" >> "$GITHUB_OUTPUT"
           python3 -B tools/bisect-mubo-453/plan.py "$ROUNDS" --pairs
 
   counters:
     name: counters
     needs: plan
+    if: needs.plan.outputs.counters == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:

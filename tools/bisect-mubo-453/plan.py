@@ -27,11 +27,15 @@ def main(argv):
     parser.add_argument('--repeats', action='store_true')
     parser.add_argument('--pairs', action='store_true')
     parser.add_argument('--json', action='store_true')
+    parser.add_argument('--counters', action='store_true')
     parser.add_argument('--field', default='window_s')
     args = parser.parse_args(argv)
     rounds, data = pairs(args.rounds)
     if args.repeats:
         print(int(data.get('repeats', 3)))
+        return 0
+    if args.counters:
+        print('true' if data.get('counters', True) else 'false')
         return 0
     if args.field and not (args.pairs or args.json):
         pass
