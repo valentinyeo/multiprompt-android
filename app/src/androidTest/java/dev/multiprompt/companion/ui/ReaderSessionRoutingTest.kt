@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.multiprompt.companion.MultipromptApplication
+import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.dictation.DictationState
 import dev.multiprompt.companion.dictation.DictationStatus
 import dev.multiprompt.companion.model.TmuxSession
@@ -40,6 +42,8 @@ class ReaderSessionRoutingTest {
             historyScript = app.chatHistoryScript, historyCache = app.chatHistoryCache).apply { start() }
         val first = reader(a)
         val second = reader(b)
+        val firstVisibility = first.observe()
+        val secondVisibility = second.observe()
         var switched by mutableStateOf(false)
         val field = app.deepgramDictation.javaClass.getDeclaredField("_state").apply { isAccessible = true }
         @Suppress("UNCHECKED_CAST")
@@ -92,9 +96,16 @@ class ReaderSessionRoutingTest {
             assertEquals(listOf("TYPED_A", "VOICE_A"), first.state.value.sentPrompts)
             assertEquals(listOf("TYPED_B", "VOICE_B", "AFTER_SWITCH_B"), second.state.value.sentPrompts)
         } finally {
+            firstVisibility.close()
+            secondVisibility.close()
             first.close()
             second.close()
             app.deepgramDictation.discard()
+            app.getSharedPreferences("session_read_state", Context.MODE_PRIVATE)
+                .edit()
+                .remove("composer_draft::${SessionReadStore.key(a.hostId, a.name)}")
+                .remove("composer_draft::${SessionReadStore.key(b.hostId, b.name)}")
+                .commit()
         }
     }
 }

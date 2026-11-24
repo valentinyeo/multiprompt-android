@@ -30,14 +30,17 @@ import dev.multiprompt.companion.skills.NativeSkill
 import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.skills.SkillSpan
 
-internal class SkillPillText(private val spans: List<SkillSpan>) : VisualTransformation {
+internal class SkillPillText(
+    private val spans: List<SkillSpan>,
+    private val spanColor: Color,
+) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         if (spans.isEmpty()) return TransformedText(text, OffsetMapping.Identity)
         val styled = buildAnnotatedString {
             append(text)
             spans.forEach { span ->
                 if (span.start in 0 until span.end && span.end <= length) {
-                    addStyle(SpanStyle(color = Kit.Text), span.start, span.end)
+                    addStyle(SpanStyle(color = spanColor), span.start, span.end)
                 }
             }
         }
@@ -49,7 +52,7 @@ internal fun TextLayoutResult.scrollsInsideComposer(): Boolean =
     multiParagraph.didExceedMaxLines || lineCount > ReaderComposerMaxLines
 
 @Composable
-internal fun Modifier.skillPills(spans: List<SkillSpan>, layout: TextLayoutResult?): Modifier {
+internal fun Modifier.skillPills(spans: List<SkillSpan>, layout: TextLayoutResult?, colors: KitPalette): Modifier {
     if (spans.isEmpty() || layout == null || layout.scrollsInsideComposer()) return this
     val padX = with(LocalDensity.current) { 2.dp.toPx() }
     val padY = with(LocalDensity.current) { 1.dp.toPx() }
@@ -75,8 +78,8 @@ internal fun Modifier.skillPills(spans: List<SkillSpan>, layout: TextLayoutResul
                     bottom = maxOf(leftBox.bottom, rightBox.bottom) + padY,
                 )
                 val radius = CornerRadius(rect.height / 2f)
-                drawRoundRect(Kit.Surface, rect.topLeft, rect.size, radius)
-                drawRoundRect(Kit.Outline, rect.topLeft, rect.size, radius, style = Stroke(stroke))
+                drawRoundRect(colors.surface, rect.topLeft, rect.size, radius)
+                drawRoundRect(colors.outline, rect.topLeft, rect.size, radius, style = Stroke(stroke))
             }
         }
     }
@@ -95,12 +98,13 @@ internal fun SkillMessageText(
     matchBase: Int = 0,
     matchHits: List<ChatFind.Hit> = emptyList(),
     activeHit: ChatFind.Hit? = null,
+    colors: KitPalette = kit(),
 ) {
     val spans = remember(text, skills) { NativeSkills.spans(text, skills) }
     if (spans.isEmpty()) {
         Text(
             (if (linkColor == null) terminalLinks(text, sunlight) else terminalLinks(text, sunlight, linkColor = linkColor))
-                .marking(matchBase, matchHits, activeHit),
+                .marking(matchBase, matchHits, activeHit, colors),
             modifier = modifier,
             fontFamily = chatFontFamily(),
             fontSize = fontSize,
@@ -112,9 +116,9 @@ internal fun SkillMessageText(
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
     val fontFamily = chatFontFamily()
-    val pillStyle = TextStyle(fontFamily = fontFamily, fontSize = fontSize, lineHeight = fontSize, color = Kit.Text)
-    val annotated = remember(text, spans, sunlight, linkColor, matchBase, matchHits, activeHit) {
-        skillAnnotated(text, spans, sunlight, linkColor).marking(matchBase, matchHits, activeHit)
+    val pillStyle = TextStyle(fontFamily = fontFamily, fontSize = fontSize, lineHeight = fontSize, color = colors.text)
+    val annotated = remember(text, spans, sunlight, linkColor, matchBase, matchHits, activeHit, colors) {
+        skillAnnotated(text, spans, sunlight, linkColor).marking(matchBase, matchHits, activeHit, colors)
     }
     val padX = with(density) { 8.dp.roundToPx() }
     val padY = with(density) { 1.dp.roundToPx() }

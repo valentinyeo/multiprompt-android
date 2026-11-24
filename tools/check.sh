@@ -9,8 +9,11 @@ gradle_run() {
 source_checks() {
   python3 -B tools/kit-controls/history.test.py
   python3 -B tools/kit-controls/journeys.test.py
+  python3 -B tools/kit-controls/check.test.py
+  python3 -B tools/kit-controls/check.py
   node --test tools/verdict-reuse.test.js tools/ci/pr-workflows.test.mjs tools/ci/emulator-packages.test.mjs tools/ci/maven-mirror.test.mjs tools/parent-cache.test.js tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/ci/release-timeouts.test.mjs tools/ci/gradle-retry.test.mjs tools/ci/release-cache.test.mjs tools/ci/gradle-cache.test.mjs tools/pr-checks.test.js tools/merge-lock.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.js tools/pstack-verifier.test.js tools/feature-coverage.test.js tools/android-break-it.test.js
   python3 -B tools/release-recorder.test.py
+  python3 -B tools/recorder-exit.test.py
   python3 -B tools/maintain-verification.test.py
   python3 -B .claude/skills/verify-multiprompt-android/scripts/control_map.test.py
   python3 -B tools/control-journeys/ui.test.py
@@ -50,8 +53,11 @@ source_checks() {
   python3 -B tools/reader-ownership/observer.test.py
   python3 -B tools/reader-ownership/codex-fixture.test.py
   python3 -B tools/account-journey/ui.test.py
+  python3 -B tools/chat-search/ui.test.py
+  python3 -B tools/chat-search/settle.test.py
   python3 -B tools/check-day-theme-images.test.py
   python3 -B tools/emulator.test.py
+  python3 -B tools/network-wait.test.py
   python3 -B tools/startup-time/report.test.py
   python3 -B tools/long-chat/check.test.py
   python3 -B tools/chat-shapes/chat-shapes.test.py

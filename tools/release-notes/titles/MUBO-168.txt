@@ -1,0 +1,1 @@
+Android: live chat shows old messages, new ones never appear

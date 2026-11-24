@@ -17,8 +17,9 @@ import unicodedata
 import uuid
 from pathlib import Path
 
-SUCCESS = 'Feedback saved locally. Board submission not confirmed.'
 EMPTY_WANT = 'multibot-feedback: say what you want from Multibot'
+BOARD_QUEUE_NAME = 'feedback-board-queue.jsonl'
+ATTACHMENT_DIR_NAME = 'feedback-attachments'
 PROJECT = '2060'
 PREFIX = 'Multibot wish: '
 VOTE = 'multibot-feedback-vote:v1'
@@ -29,13 +30,31 @@ class BoardError(Exception):
     pass
 
 
+def state_root():
+    configured = os.environ.get('MULTIBOT_FEEDBACK_LOG')
+    if configured:
+        return Path(configured).expanduser().parent
+    root = os.environ.get('XDG_STATE_HOME')
+    base = Path(root).expanduser() if root else Path(os.path.expanduser('~/.local/state'))
+    return base / 'multibot'
+
+
 def state_path():
     configured = os.environ.get('MULTIBOT_FEEDBACK_LOG')
     if configured:
         return Path(configured).expanduser()
-    root = os.environ.get('XDG_STATE_HOME')
-    base = Path(root).expanduser() if root else Path(os.path.expanduser('~/.local/state'))
-    return base / 'multibot' / 'feedback.jsonl'
+    return state_root() / 'feedback.jsonl'
+
+
+def board_queue_path():
+    configured = os.environ.get('MULTIBOT_FEEDBACK_BOARD_QUEUE')
+    if configured:
+        return Path(configured).expanduser()
+    return state_root() / BOARD_QUEUE_NAME
+
+
+def attachment_dir():
+    return state_root() / ATTACHMENT_DIR_NAME
 
 
 def session_name():
@@ -58,6 +77,72 @@ def save(row):
     fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     with os.fdopen(fd, 'a', encoding='utf-8') as stream:
         stream.write(json.dumps(row, sort_keys=True) + '\n')
+
+
+def read_jsonl(path):
+    if not path.exists():
+        return []
+    rows = []
+    for line in path.read_text(encoding='utf-8').splitlines():
+        if not line.strip():
+            continue
+        try:
+            item = json.loads(line)
+        except ValueError:
+            raise BoardError('corrupt feedback queue') from None
+        if not isinstance(item, dict) or not isinstance(item.get('id'), str):
+            raise BoardError('corrupt feedback queue')
+        rows.append(item)
+    return rows
+
+
+def write_jsonl(path, rows):
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    payload = ''.join(json.dumps(row, sort_keys=True) + '\n' for row in rows)
+    tmp = path.with_suffix(path.suffix + '.tmp')
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as stream:
+        stream.write(payload)
+    os.replace(tmp, path)
+
+
+def persist_attachments(row, snapshots):
+    if not snapshots:
+        return
+    directory = attachment_dir()
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stored = []
+    for path, size in snapshots:
+        target = directory / path.name
+        if not target.exists():
+            target.write_bytes(path.read_bytes())
+        stored.append((target, size))
+    row['attachment_hashes'] = [path.stem for path, _ in snapshots]
+
+
+def load_snapshots(row):
+    hashes = row.get('attachment_hashes')
+    if not isinstance(hashes, list) or not hashes:
+        return []
+    directory = attachment_dir()
+    snapshots = []
+    for digest in hashes:
+        if not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest):
+            raise BoardError('corrupt attachment reference')
+        path = directory / (digest + '.png')
+        if not path.is_file():
+            raise BoardError('attachment missing')
+        snapshots.append((path, path.stat().st_size))
+    return snapshots
+
+
+def enqueue_board(row):
+    queue = board_queue_path()
+    entries = read_jsonl(queue)
+    if any(item.get('id') == row['id'] for item in entries):
+        return
+    entries.append(dict(row, board_pending=True))
+    write_jsonl(queue, entries)
 
 
 def normalized(text):
@@ -321,6 +406,48 @@ def submit_locked(row, agent, title, version, provider, snapshots):
     return ('submitted' if created else 'voted'), ticket_url(task)
 
 
+def drain_queue():
+    if not os.environ.get('HT_TOKEN', '').strip():
+        raise BoardError('agent token unavailable')
+    queue_path = board_queue_path()
+    log_path = state_path()
+    pending = []
+    seen = set()
+    for source in (queue_path, log_path):
+        for row in read_jsonl(source):
+            if row['id'] in seen:
+                continue
+            if row.get('filed_url') or row.get('board_pending') is False:
+                continue
+            seen.add(row['id'])
+            pending.append(row)
+    if not pending:
+        return 0, 0, []
+    queue_rows = read_jsonl(queue_path)
+    log_rows = read_jsonl(log_path)
+    filed = []
+    failures = 0
+    confirmed = set()
+    for row in pending:
+        try:
+            snapshots = load_snapshots(row)
+        except BoardError:
+            failures += 1
+            continue
+        try:
+            _, url = submit(row, snapshots)
+        except BoardError:
+            failures += 1
+            continue
+        confirmed.add(row['id'])
+        filed.append(url)
+    queue_rows = [row for row in queue_rows if row.get('id') not in confirmed]
+    log_rows = [row for row in log_rows if row.get('id') not in confirmed]
+    write_jsonl(queue_path, queue_rows)
+    write_jsonl(log_path, log_rows)
+    return len(filed), failures, filed
+
+
 def rank():
     identity()
     board_labels()
@@ -343,12 +470,29 @@ def rank():
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(prog='multibot-feedback', description='Save a wish locally and, with an agent token, submit it to the board.')
+    parser = argparse.ArgumentParser(prog='multibot-feedback', description='Save a wish locally and file it on the board when a token is available or after drain.')
     parser.add_argument('want', nargs='?')
     parser.add_argument('--why', default='')
     parser.add_argument('--attach', action='append', default=[], metavar='PNG', help='attach a reviewed PNG (up to four)')
+    parser.add_argument('--drain', action='store_true', help='file queued wishes with the current agent token')
     parser.add_argument('--rank', '--weekly', action='store_true')
     args = parser.parse_args(argv)
+    if args.drain:
+        if args.want or args.why or args.attach or args.rank:
+            parser.error('drain does not accept a wish')
+        try:
+            filed, failures, urls = drain_queue()
+        except BoardError as exc:
+            print(f'multibot-feedback: drain unavailable: {exc}', file=sys.stderr)
+            return 1
+        for url in urls:
+            print(f'filed {url}')
+        if failures and not filed:
+            print(f'multibot-feedback: {failures} queued wishes still waiting', file=sys.stderr)
+            return 1
+        if failures:
+            print(f'multibot-feedback: {failures} queued wishes still waiting', file=sys.stderr)
+        return 0
     if args.rank:
         if args.want or args.why or args.attach:
             parser.error('ranking does not accept a wish')
@@ -376,19 +520,34 @@ def main(argv):
         except (ValueError, OSError) as exc:
             print(f'multibot-feedback: {exc if isinstance(exc, ValueError) else "cannot snapshot attachment"}', file=sys.stderr)
             return 2
+        row['board_pending'] = True
         if snapshots:
-            row['attachment_hashes'] = [path.stem for path, _ in snapshots]
+            persist_attachments(row, snapshots)
         try:
             save(row)
         except OSError:
             print('multibot-feedback: could not save locally', file=sys.stderr)
             return 1
         try:
-            outcome, url = submit(row, snapshots)
+            _, url = submit(row, snapshots)
         except BoardError as exc:
-            print(f'Local-only: {SUCCESS} ({exc})')
+            try:
+                enqueue_board(row)
+            except (BoardError, OSError):
+                print(f'queued, will be filed ({exc}; queue unavailable)', file=sys.stderr)
+                return 1
+            print(f'queued, will be filed ({exc})')
             return 0
-        print(f'Feedback {outcome}: {url}')
+        row['board_pending'] = False
+        row['filed_url'] = url
+        try:
+            entries = read_jsonl(state_path())
+            if entries and entries[-1].get('id') == row['id']:
+                entries[-1] = row
+                write_jsonl(state_path(), entries)
+        except (BoardError, OSError):
+            pass
+        print(f'filed {url}')
         return 0
 
 

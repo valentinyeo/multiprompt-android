@@ -110,14 +110,44 @@ class NativeSkillsTest {
         assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("http://x/y", known))
         assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("./run", known))
         assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("/reviewer", listOf(known[0])))
-        assertEquals(listOf(SkillSpan(0, 7, "home/x")), NativeSkills.spans("/home/x", listOf(known[1])))
+        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("/home/x", listOf(known[1])))
         assertEquals("rev", NativeSkills.query("please /rev now", 11))
         assertNull(NativeSkills.query("http://x/y", "http://x/y".length))
         assertNull(NativeSkills.query("./run", "./run".length))
         assertNull(NativeSkills.query("a/b", "a/b".length))
-        assertEquals("home/x", NativeSkills.query("/home/x", "/home/x".length))
+        assertNull(NativeSkills.query("/home/x", "/home/x".length))
         val picked = NativeSkills.insert("please /rev now", "review", 11)
         assertEquals("please /review now", picked.text)
         assertEquals(15, picked.cursor)
+    }
+
+    @Test fun slashWordAnywhereOpensThePickerButAFilePathNeverDoes() {
+        val text = "run this then /rev the rest"
+        assertEquals("rev", NativeSkills.query(text, text.indexOf("/rev") + 4))
+        for (path in listOf("/home/verifyssh/notes", "mkdir /tmp/build", "see ./scripts/run", "open ~/.config/x", "C:\\Users\\x")) {
+            assertNull(path, NativeSkills.query(path, path.length))
+        }
+        assertNull(NativeSkills.query("please /rev/public now", 11))
+        assertNull(NativeSkills.query("please /rev/public now", 12))
+        assertNull(NativeSkills.query("cd /review-native/path", "cd /review-native/path".length))
+        assertEquals("rev", NativeSkills.query("please /rev now", 11))
+    }
+
+    @Test fun aSkillThatLooksLikeAPathIsNeverPilledOrOffered() {
+        val pathSkill = listOf(NativeSkill("home/x", "Path shaped name"))
+        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("/home/x here", pathSkill))
+        assertNull(NativeSkills.query("/home/x here", 7))
+        assertEquals(emptyList<NativeSkill>(), NativeSkills.menu(pathSkill, "home").filter { it.name == "home/x" })
+        assertTrue(NativeSkills.menu(pathSkill, "usage").any { it.name == "usage" })
+    }
+
+    @Test fun catalogueOffersBuiltInCommandsOnceWithSessionSkills() {
+        val catalogue = NativeSkills.catalogue(listOf(NativeSkill("clear", "User copy"), NativeSkill("review-native", "Review")))
+        assertEquals(1, catalogue.count { it.name == "clear" })
+        assertEquals("User copy", catalogue.single { it.name == "clear" }.description)
+        assertTrue(catalogue.any { it.name == "review-native" })
+        assertTrue(catalogue.any { it.name == "model" })
+        assertEquals(emptyList<SkillSpan>(), NativeSkills.spans("/home/x", catalogue))
+        assertEquals(listOf(SkillSpan(0, 14, "review-native")), NativeSkills.spans("/review-native", catalogue))
     }
 }

@@ -104,6 +104,38 @@ class RealChatFixtureTest(unittest.TestCase):
         self.assertEqual(fixture.LIVE + '.jsonl', transcript)
         self.assertEqual(fixture.REPLY_NEWEST, texts[-1])
 
+    def test_appended_rows_arrive_on_the_next_live_page(self):
+        path = Path(self.manifest['transcript'])
+        end = fixture.row_offsets(path)[-1][1]
+        info = path.stat()
+        probe = hashlib.sha256(path.read_bytes()[max(0, end - 64):end]).hexdigest()
+        fixture.append(self.home, 'user', fixture.USER_APPEND)
+        fixture.append(self.home, 'assistant', fixture.REPLY_APPEND)
+        reader = runtime(READER, self.home)
+        query = self.query(cached_sid=fixture.LIVE, inode=info.st_ino, offset=end, mtime=info.st_mtime_ns, probe=probe)
+        resolved = reader['resolve_response_path'](dict(query))
+        transcript, texts = visible(reader, query, resolved)
+        self.assertEqual(fixture.LIVE + '.jsonl', transcript)
+        self.assertEqual([fixture.USER_APPEND, fixture.REPLY_APPEND], texts[-2:])
+
+    def test_append_keeps_the_seed_check_green(self):
+        fixture.append(self.home, 'user', fixture.USER_APPEND)
+        manifest = fixture.check(self.home)
+        self.assertEqual(fixture.USER_APPEND, fixture.last_text(manifest['transcript']))
+        self.assertEqual([fixture.USER_APPEND], [row['text'] for row in manifest['appended']])
+        fixture.append(self.home, 'assistant', fixture.REPLY_APPEND)
+        self.assertEqual(fixture.REPLY_APPEND, fixture.last_text(fixture.check(self.home)['transcript']))
+        for text in fixture.screen_texts(manifest['transcript']):
+            self.assertTrue('Synthetic' in text or '_2781' in text, text)
+
+    def test_append_command_writes_a_row_the_check_accepts(self):
+        subprocess.run(['python3', '-B', str(HERE / 'fixture.py'), 'append', '--home', str(self.home),
+                        '--role', 'assistant', '--text', fixture.REPLY_APPEND], check=True, capture_output=True, text=True)
+        receipt = json.loads(subprocess.check_output(
+            ['python3', '-B', str(HERE / 'fixture.py'), 'check', '--home', str(self.home)], text=True))
+        self.assertEqual(fixture.REPLY_APPEND, fixture.last_text(receipt['transcript']))
+        self.assertEqual('assistant', receipt['appended'][-1]['role'])
+
     def test_phone_cache_file_matches_the_row_contract(self):
         payload = fixture.cache(self.home, 'host-id', '10.0.2.2', '2222', 'verifyssh', 'CLAUDE',
                                 fixture.SESSION, self.manifest['cwd'])

@@ -81,9 +81,11 @@ class CancelFixtureTest(unittest.TestCase):
         start = textwrap.dedent(block[start_at:block.index('\n    fi', start_at)])
         end_at = block.index('        remote_recording=')
         end = textwrap.dedent(block[end_at:block.index('\n    fi', end_at)])
+        reap_at = driver.index('reap_recorder() {')
+        reap = driver[reap_at:driver.index('\n}\n', reap_at) + 3]
         with tempfile.TemporaryDirectory() as temporary:
-            script = r'''
-set -euo pipefail
+            script = 'set -euo pipefail\nRECORDER_STOP_SECONDS=5\n' \
+                f'source "{ROOT / "tools/recorder-guard.sh"}"\n{reap}' + r'''
 adb() {
     case "$*" in
         *'exec screenrecord --time-limit '*) printf '%s' "$*" > "$EVIDENCE/recording-command" ;;

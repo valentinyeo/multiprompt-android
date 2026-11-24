@@ -4,6 +4,7 @@ import java.io.File
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import android.app.Application
 import dev.multiprompt.companion.data.HostStore
+import dev.multiprompt.companion.data.PinnedChatStore
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SessionCacheStore
 import dev.multiprompt.companion.data.DissolvedSessionStore
@@ -37,6 +38,7 @@ class MultipromptApplication : Application() {
     }
 
     val hostStore by lazy { HostStore(this) }
+    val pinnedChatStore by lazy { PinnedChatStore(this) }
     val sessionReadStore by lazy { SessionReadStore(this) }
     val sessionCacheStore by lazy { SessionCacheStore(this) }
     val dissolvedSessionStore by lazy { DissolvedSessionStore(this) }

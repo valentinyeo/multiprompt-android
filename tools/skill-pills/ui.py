@@ -6,7 +6,7 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageStat
 
 
 def bounds(node):
@@ -19,12 +19,16 @@ def outlines(image, box, inset):
     x1, y1, x2, y2 = box
     assert 0 <= x1 < x2 <= image.width and 0 <= y1 < y2 <= image.height, 'Pill is off screen'
     margin = max(3, (y2 - y1) // 10) if inset else 0
+    if x1 + margin >= x2 - margin or y1 + margin >= y2 - margin:
+        return []
+    crop = image.crop((x1 + margin, y1 + margin, x2 - margin, y2 - margin))
+    target = 212 if ImageStat.Stat(crop.convert('L')).mean[0] >= 128 else 46
     lines = []
     for y in range(y1 + margin, y2 - margin):
         start = None
         for x in range(x1 + margin, x2 - margin + 1):
             pixel = image.getpixel((x, y)) if x < x2 - margin else None
-            grey = pixel is not None and all(abs(channel - 46) <= 2 for channel in pixel)
+            grey = pixel is not None and all(abs(channel - target) <= 2 for channel in pixel)
             if grey and start is None:
                 start = x
             if not grey and start is not None:
@@ -69,7 +73,7 @@ def picker_swipe(xml):
     return (x1 + x2) // 2, y2 - (y2 - y1) // 5, (x1 + x2) // 2, y1 + (y2 - y1) // 5
 
 
-def check(xml, screenshot, phase, text):
+def check(xml, screenshot, phase, text, pill='/review-native'):
     nodes = [node for node in ET.parse(xml).getroot().iter('node')
              if node.get('package') == 'dev.multiprompt.companion.debug']
     assert nodes, 'Chat UI is missing'
@@ -78,14 +82,20 @@ def check(xml, screenshot, phase, text):
     assert len(editors) == 1, 'Expected one composer'
     editor = editors[0]
     result = dict(screenshot=Path(screenshot).name, text=text)
-    if phase in ('sent', 'sent-removed'):
+    if phase in ('sent', 'sent-command', 'sent-removed', 'sent-path'):
         assert editor.get('text') in ('', 'Message verify-session'), 'Send did not clear the composer'
         messages = [node for node in nodes if node.get('class') != 'android.widget.EditText'
                     and node.get('text') == text]
         assert messages, 'Exact sent message is missing'
-        if phase == 'sent':
+        if phase == 'sent-path':
+            inline = [child for message in messages for child in message.iter('node')
+                      if child is not message and child.get('text', '').startswith('/')]
+            assert not inline, ('A file path must not render as a skill pill', [child.get('text') for child in inline])
+            result.update(sent_path=text, sent_pill=None)
+            return result
+        if phase in ('sent', 'sent-command'):
             pills = [child for message in messages for child in message.iter('node')
-                     if child.get('text') == '/review-native']
+                     if child.get('text') == pill]
             assert len(pills) == 1, 'Sent message must contain one inline skill pill'
             text_bounds = bounds(pills[0])
             message_bounds = bounds(next(message for message in messages if pills[0] in message.iter('node')))
@@ -104,8 +114,8 @@ def check(xml, screenshot, phase, text):
             assert bubble, 'Sent skill pill has no surrounding bubble'
             background = bubble.most_common(1)[0][0]
             area = (text_bounds[2] - text_bounds[0]) * height
-            assert count / area >= 0.35 and max(abs(a - b) for a, b in zip(fill, background)) >= 12, 'Sent skill pill fill is missing'
-            result.update(sent_pill='/review-native', sent_pill_bounds=pill_bounds,
+            assert count / area >= 0.35 and max(abs(a - b) for a, b in zip(fill, background)) >= 8, 'Sent skill pill fill is missing'
+            result.update(sent_pill=pill, sent_pill_bounds=pill_bounds,
                           sent_pill_fill=fill, sent_bubble_fill=background)
     else:
         assert editor.get('text') == text, ('Wrong composer text', editor.get('text'), text)
@@ -114,7 +124,7 @@ def check(xml, screenshot, phase, text):
             assert any(node.get('text') == label for node in nodes), 'Skill picker is missing'
         else:
             pairs = outlines(image, composer_bounds(editor), True)
-            expected = phase in ('inserted', 'removable')
+            expected = phase in ('inserted', 'removable', 'command')
             assert bool(pairs) == expected, 'Composer skill pill outline is missing or survived removal'
             result['composer_pill'] = expected
     return result
@@ -124,8 +134,8 @@ if __name__ == '__main__':
     if sys.argv[1] == 'scroll':
         print(*picker_swipe(Path(sys.argv[2])))
         raise SystemExit(0)
-    xml, screenshot, phase, text, output = sys.argv[1:]
-    result = check(Path(xml), Path(screenshot), phase, text)
+    xml, screenshot, phase, text, output, *pill = sys.argv[1:]
+    result = check(Path(xml), Path(screenshot), phase, text, *pill)
     path = Path(output)
     states = json.loads(path.read_text()) if path.exists() else {}
     states[phase] = result

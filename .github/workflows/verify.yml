@@ -157,6 +157,7 @@ on:
           - inbox-reminders.md
           - screencast-account.md
           - host-restart.md
+          - live-chat-freshness.md
           - folder-bar.md
           - chat-shapes.md
           - session-fresh-start.md

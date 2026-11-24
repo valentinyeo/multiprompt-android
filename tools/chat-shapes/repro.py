@@ -28,7 +28,8 @@ EXPECTED = {
 
 def observed(source, home):
     payload = probe.probe(source, home)
-    return {item['shape']: {'transcript': item['transcript'], 'visible': item['visible'][-1:]} for item in payload['shapes']}
+    return {item['shape']: dict(transcript=item['transcript'], visible=item['visible'][-1:], all_visible=item['visible'])
+            for item in payload['shapes']}
 
 
 def run(pre_fix, current=CURRENT_READER):
@@ -38,7 +39,13 @@ def run(pre_fix, current=CURRENT_READER):
         before = observed(pre_fix, home)
         after = observed(current, home)
     red = all(before[shape]['visible'] == markers for shape, markers in EXPECTED['pre-fix'].items())
-    green = all(after[shape]['visible'] == markers for shape, markers in EXPECTED['current'].items())
+    green = all(
+        ('RESUMED_READY_2715' in after['resumed']['all_visible'] and
+         after['resumed']['all_visible'] and fixture.CODE_BLOCK_FIRST in after['resumed']['all_visible'][-1])
+        if shape == 'resumed'
+        else after[shape]['visible'] == markers
+        for shape, markers in EXPECTED['current'].items()
+    )
     return {'preFix': before, 'current': after, 'red': red, 'green': green}
 
 

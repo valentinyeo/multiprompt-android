@@ -42,7 +42,11 @@ Classes ranked by how often fixes, reverts, or verifier callouts recurred in com
 - #136 (`c58a41b6`) — `AlertDialog` on rename/remind/key flows.
 - #392 (`38878ce0` / `IGSH-2536`) — competing button wrappers and dropdown menus.
 
-**Prevention:** `KitControlRequired` lint in `tools/kit-controls`, shrinking symbol baseline, historical #132/#136 fixtures.
+**Prevention (phase 1):** `KitControlRequired` lint in `tools/kit-controls`, shrinking symbol baseline, historical #132/#136 fixtures.
+
+**Prevention (phase 2, blocking):** `tools/kit-controls/check.py`, run by `tools/check.sh source`, fails with `KIT_MATERIAL_BYPASSED` when any `app/src/main` file outside `ui/DesignKit.kt` and `ui/Theme.kt` mentions a Material button, `AlertDialog`, `DropdownMenu`/`DropdownMenuItem`, `Switch`, `ModalBottomSheet`, any `FilledTonal*` control, `tonalElevation` or a purple colour (palette name or template literal). Fix by moving the screen onto `KitSheet`/`KitMenu`/`KitMenuRow`, `KitToggle`, `KitPrimaryButton`/`KitSecondaryButton`/`KitRoundButton` and the `Kit` colours.
+
+**Proof:** `check.py c58a41b6` (the #136 revision before the fix) and `check.py 38878ce0^` (the #392 revision) exit non-zero with `KIT_MATERIAL_BYPASSED` naming the dialogs, menus and legacy buttons; `check.test.py` replays both. The current tree reports `KIT_MATERIAL_BYPASSED_OK: 0`, so there is no allowance list to grow.
 
 ## 4. Wrong tmux `-t` session selectors in remote SSH strings
 

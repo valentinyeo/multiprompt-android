@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/../recorder-guard.sh"
+RECORDER_STOP_SECONDS="${RECORDER_STOP_SECONDS:-60}"
 bash tools/release-choices/seed.sh
 if [[ "${VERIFY_FEATURE:-}" == session-gestures.md ]]; then
     trap 'kill "$(cat "$FIXTURE/offline-proxy.pid")"' EXIT
@@ -10,11 +12,20 @@ finish() {
     code=$?
     trap - EXIT
     set +e
+    local device
+    device=$(adb shell cat /sdcard/choices-recording.pid | tr -d '\r')
     if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
-        adb shell kill -0 "$(adb shell cat /sdcard/choices-recording.pid | tr -d '\r')" || code=1
+        adb shell kill -0 "$device" || code=1
     fi
-    adb shell kill -2 "$(adb shell cat /sdcard/choices-recording.pid | tr -d '\r')"
-    wait "$recording"
+    if [[ "$device" =~ ^[0-9]+$ ]]; then
+        adb shell kill -2 "$device"
+    fi
+    if ! recorder_wait_client "$recording" "$RECORDER_STOP_SECONDS" choices; then
+        code=1
+        if [[ "$device" =~ ^[0-9]+$ ]]; then
+            adb shell kill -9 "$device"
+        fi
+    fi
     if [[ "${VERIFY_FEATURE:-}" == session-favorites.md || "${VERIFY_FEATURE:-}" == chat-queued.md || "${VERIFY_FEATURE:-}" == session-routing.md ]]; then
         adb pull /sdcard/release-choices.mp4 "$EVIDENCE/release-choices.mp4" || code=1
         test -s "$EVIDENCE/release-choices.mp4" || code=1

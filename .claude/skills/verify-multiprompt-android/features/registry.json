@@ -523,17 +523,21 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 46 rows render.",
+      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin at the visual top of the Inbox list across replies and app restart. Does not assert all 46 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/pin-chat-drive.sh"
+        ]
       },
       "outcomes": [
         "inbox.search",
-        "legacy.igsh-414"
+        "legacy.igsh-414",
+        "inbox.pin-chat"
       ],
       "evidence": {
         "seed-counts.json": 2500,
@@ -543,7 +547,7 @@
         "seed-deep-choice.json": 900,
         "search-keyboard.json": 1200,
         "row-long-press-actions.xml": 1500,
-        "start-agent-picker.xml": 1400
+        "pin-chat-state.json": 1400
       }
     },
     "settings-navigation.md": {
@@ -741,7 +745,7 @@
     },
     "skill-pills.md": {
       "name": "Skills within messages",
-      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.",
+      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text, refuse a file path and pill a built-in command. SOFT-2543, MUBO-146.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -756,8 +760,8 @@
         "skills.pills"
       ],
       "evidence": {
-        "skill-pills-state.json": 4000,
-        "skill-pills-receipts.txt": 1000
+        "skill-pills-state.json": 6000,
+        "skill-pills-receipts.txt": 1500
       }
     },
     "chat-table.md": {
@@ -1038,6 +1042,28 @@
         "host-restart-processes.txt": 1000
       }
     },
+    "live-chat-freshness.md": {
+      "name": "Live chat shows new messages",
+      "description": "The real-size restarted chat shows its newest rows on open, and a row appended on the host reaches the phone within seconds with a host receipt.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/live-chat-freshness-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "reader.live-tail"
+      ],
+      "evidence": {
+        "live-chat-freshness.json": 2500,
+        "live-chat-host.txt": 1500,
+        "live-chat-freshness.txt": 200
+      }
+    },
     "folder-bar.md": {
       "name": "Inbox folder bar",
       "description": "Selected last/middle folders remain fully visible on selection and restart; overflow fades over a transparent bar. SOFT-2706.",
@@ -1080,10 +1106,10 @@
       "evidence": {
         "compacted-chat.json": 700,
         "compacted-chat-proof.txt": 700,
-        "resumed-chat.json": 700,
         "resumed-chat-proof.txt": 700,
-        "fresh-chat.json": 700,
         "fresh-chat-proof.txt": 700,
+        "code-block.json": 700,
+        "code-block-proof.txt": 700,
         "pre-425-reader.txt": 1500,
         "seed-counts.json": 3000
       }
@@ -1368,6 +1394,27 @@
         "SessionSearch|SessionFinder"
       ]
     },
+    "inbox.pin-chat": {
+      "description": "Pinning a chat from the chat menu puts it at the visual top of the Inbox list in both sort orders, keeps it there when another chat gets a new reply, survives app restart, and unpinning restores normal order.",
+      "journey": "sessions.md",
+      "sideEffect": false,
+      "match": [
+        "PinnedChats|PinnedChatStore|pinnedSessionKeys|setSessionPinned|Pin to top|UNPIN_LABEL|PIN_LABEL"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/data/PinnedChats\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa tap text 'Pin to top'"
+        },
+        "result": {
+          "file": "pin-chat-state.json",
+          "quote": "\"allPassed\":true"
+        }
+      }
+    },
     "settings-navigation.journey": {
       "description": "sessions-first settings, host mapping and account handoff on the signed APK.",
       "journey": "settings-navigation.md",
@@ -1481,11 +1528,11 @@
       }
     },
     "skills.pills": {
-      "description": "Insert skills mid-message and render visible skill pills.",
+      "description": "Insert skills mid-message and render visible skill pills, refuse file paths and pill built-in commands.",
       "journey": "skill-pills.md",
       "sideEffect": true,
       "match": [
-        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|NativeSkills\\.(?:token|query|spans|insert)|skills/NativeSkills\\.kt"
+        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|pillSkills|NativeSkills\\.(?:token|query|spans|insert|catalogue|menu)|skills/NativeSkills\\.kt"
       ],
       "citations": {
         "action": {
@@ -1570,10 +1617,14 @@
       "match": []
     },
     "legacy.igsh-434": {
-      "description": "Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions → More → Dictation API key**, **API key → Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates.",
+      "description": "Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions → More → Dictation API key**, **API key → Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates. MUBO-142: **Cancel dictation** drops the recording and puts the message box back to what it held before. No CI journey reaches the dictation bar: it needs a stored Deepgram key and controlled microphone audio, so the cancel behaviour is proven by `DictationDraftTest` on the JVM, not by a phone journey.",
       "journey": null,
       "sideEffect": true,
-      "match": []
+      "match": [
+        "DictationBar\\.kt",
+        "DictationDraft\\.kt",
+        "DeepgramDictation\\.kt"
+      ]
     },
     "legacy.igsh-423": {
       "description": "saving needs OTP and a pulled account layout. **Session list actions → Settings → Show Frequent split**, Back, check **Frequent**; repeat off and compare another device. Not dispatchable in CI.",
@@ -1852,6 +1903,29 @@
         "sideEffect": {
           "file": "host-restart-host.json",
           "quote": "\"reply\": \"REPLY_DESKTOP_AFTER_2681\""
+        }
+      }
+    },
+    "reader.live-tail": {
+      "description": "The live chat renders the newest host rows on open and a message appended on the host appears within seconds, proven by the phone screen and a host receipt.",
+      "journey": "live-chat-freshness.md",
+      "sideEffect": true,
+      "match": [],
+      "paths": [
+        "^tools/real-chat/fixture\\.py$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "append --role user --text LIVE_CHAT_APPEND_2781"
+        },
+        "result": {
+          "file": "live-chat-freshness.json",
+          "quote": "\"verdict\": \"LIVE_CHAT_NEWEST_WITHIN_SECONDS\""
+        },
+        "sideEffect": {
+          "file": "live-chat-host.txt",
+          "quote": "LIVE_CHAT_APPENDED:LIVE_CHAT_APPEND_2781"
         }
       }
     },
