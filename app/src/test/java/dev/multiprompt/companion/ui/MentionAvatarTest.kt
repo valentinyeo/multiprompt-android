@@ -20,7 +20,7 @@ class MentionAvatarTest {
     private val sessions = listOf(current, chat)
 
     private fun suggestion(store: SessionReadStore): BotAvatarSource {
-        val mention = ChatMention.chats(sessions, current).single()
+        val mention = ChatMention.chats(sessions, current).single { it.session == chat.name }
         return botAvatarSource(mention.session, mention.workspaceColor, store.botLook(mention.hostId, mention.session))
     }
 
