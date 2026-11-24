@@ -1286,6 +1286,7 @@ internal fun SessionsScreen(
     onDismissAiUsage: () -> Unit = {},
     onRestartIdleChats: () -> Unit = {},
     onSetPinned: (TmuxSession, Boolean) -> Unit = { _, _ -> },
+    sessionListState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1968,7 +1969,6 @@ internal fun SessionsScreen(
         group.items.size + if (SessionGroups.heading(group, sessionGroups) != null) 1 else 0
     } + (if (rooms.isNotEmpty()) 1 else 0) +
         state.hostErrors.count { (hostId, error) -> hostId !in state.cachedHostIds && !SshProblem.isKeyRejected(error) }
-    val sessionListState = rememberLazyListState()
     val listEnd = remember { InboxListEnd() }
     val openSplitId = state.selectedWorkspaceId.takeIf { it == null || it in displayedWorkspaceSplitIds }
     LaunchedEffect(sessionListState, listEnd, openSplitId, sessionListEntries) {
