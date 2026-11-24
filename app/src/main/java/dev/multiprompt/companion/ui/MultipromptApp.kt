@@ -2618,7 +2618,11 @@ private fun SessionCard(
                             )
                         }
                         Text(
-                            SessionPreview.line(session.preview),
+                            SessionPreview.line(
+                                session.preview,
+                                agent = session.agent,
+                                replyWaiting = session.replyWaiting,
+                            ),
                             modifier = Modifier.weight(1f).testTag("Session preview"),
                             fontSize = 14.sp,
                             lineHeight = 20.sp,

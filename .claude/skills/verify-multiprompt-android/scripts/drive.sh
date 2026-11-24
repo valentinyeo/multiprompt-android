@@ -173,6 +173,7 @@ tap_node() {
     for attempt in {1..24}; do
         dump_ui || return
         if [[ -n "$expected" ]] && python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text "$expected" >/dev/null 2>&1; then return 0; fi
+        if (( taps > 0 )) && [[ -z "$expected" && "$(sha256sum "$EVIDENCE/current.xml")" != "$before" ]]; then return 0; fi
         if [[ -n "$session" ]] &&
             python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Inbox >/dev/null 2>&1; then
             set -- desc "Robot $session" "${3:-tap}"
@@ -233,7 +234,8 @@ browser_handoff() {
     return 1
 }
 dismiss_system_anr() {
-    if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then
+    if grep -Fq "responding" "$EVIDENCE/current.xml" 2>/dev/null &&
+        python3 "$scripts/ui.py" "$EVIDENCE/current.xml" contains "isn't responding" >/dev/null 2>&1; then
         printf 'System ANR dialog dismissed with Wait\n' | tee -a "$EVIDENCE/system-anr.txt"
         point=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" text Wait)
         read -r x y <<< "$point"
@@ -1326,15 +1328,23 @@ if [[ "$feature" == session-summaries.md ]]; then
     select_node desc 'Robot verify-session' reveal >/dev/null || true
     wait_for_text 'Lauren Tan profile is done, checked and pushed.'
     shot summary-reply
+    sudo -u verifyssh tmux send-keys -t verify-session summary-question Enter
+    wait_for_text 'Which route should we use?'
+    shot summary-question
+    "$scripts/mpa" proof --name summary-question --require-text 'Which route should we use?' --forbid-text 'Create a new account'
     sudo -u verifyssh tmux send-keys -t verify-session summary-working Enter
     wait_for_text 'Working: Reading CI logs'
     shot summary-working
+    "$scripts/mpa" proof --name summary-working --require-text 'Working: Reading CI logs' --forbid-text 'Which route should we use?'
     started=$(date +%s%3N)
     sudo -u verifyssh tmux send-keys -t verify-session summary-next Enter
-    wait_for_text 'The release is ready.'
+    wait_for_text 'The release is ready.' 0
     elapsed=$(( $(date +%s%3N) - started ))
     test "$elapsed" -le 5000
     shot summary-updated
+    "$scripts/mpa" proof --name summary-updated --require-text 'The release is ready.' --forbid-text 'Which route should we use?'
+    sudo -u verifyssh tmux capture-pane -pt verify-session > "$EVIDENCE/summary-pane.txt"
+    grep -F 'Which route should we use?' "$EVIDENCE/summary-pane.txt"
     python3 - "$EVIDENCE/current.xml" <<'PYSUMMARY'
 import sys
 import xml.etree.ElementTree as ET

@@ -506,7 +506,7 @@
     },
     "session-summaries.md": {
       "name": "Useful inbox summaries",
-      "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
+      "description": "Android inbox rows show the waiting question, current work, or the first sentence of the last assistant reply. Model footers and shell prompts never become summaries.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -1379,10 +1379,12 @@
       ]
     },
     "inbox.summaries": {
-      "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
+      "description": "Android inbox rows show the waiting question, current work, or the first sentence of the last assistant reply. Model footers and shell prompts never become summaries.",
       "journey": "session-summaries.md",
       "sideEffect": false,
-      "match": []
+      "match": [
+        "SessionPreview"
+      ]
     },
     "inbox.search": {
       "description": "authenticated tmux discovery and search.",

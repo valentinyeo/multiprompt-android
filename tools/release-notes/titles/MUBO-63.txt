@@ -1,0 +1,1 @@
+Android: chat rows show the waiting question or current step
