@@ -15,7 +15,7 @@ class BlockedByHookTest {
         File("app/src/test/resources/reader/MUBO-246/blocked-by-hook.jsonl"),
     ).first { it.isFile }.readLines().filter { it.isNotBlank() }.map(::JSONObject)
 
-    private val blocked = fixture.first { it.getJSONObject("promptSubmitEnding").optBoolean("promptKept") == false }
+    private val blocked = fixture.first { it.optJSONObject("promptSubmitEnding")?.optBoolean("promptKept") == false }
     private val prompt = blocked.getString("content").substringAfterLast("Original prompt:").trim()
     private val reason = blocked.getJSONObject("promptSubmitEnding").getJSONObject("ending").getString("kind")
 
