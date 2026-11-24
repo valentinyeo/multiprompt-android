@@ -1,5 +1,19 @@
 {
   "smoke": "native-skills.md",
+  "speedCheck": {
+    "paths": [
+      "^tools/speed-check/",
+      "^\\.github/workflows/speed-check\\.yml$",
+      "^app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/ui/(?:MultipromptApp|ChatHistoryList|ChatBubble|SessionPreview|SessionGroups|SessionActivity|InboxListEnd|TopFade|NewBelow|ReaderScroll|ChatOpenAnchor|MarkdownText)\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/(?:MainViewModel|MainActivity)\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/reader/",
+      "app/src/main/java/dev/multiprompt/companion/ssh/SshRepository\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/data/(?:SessionCacheStore|SessionReadStore|InboxOrder|PinnedChats)\\.kt$",
+      "app/src/main/assets/chat_history_reader\\.py$",
+      "^tools/vendor/chat-reader/"
+    ]
+  },
   "journeys": {
     "ai-switch.md": {
       "name": "Switch AI",

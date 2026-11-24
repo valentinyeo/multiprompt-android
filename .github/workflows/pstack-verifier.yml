@@ -37,6 +37,7 @@ jobs:
       merge_base: ${{ steps.pick-retry.outputs.merge_base || steps.pick.outputs.merge_base || steps.pick-request.outputs.merge_base }}
       changed_outcomes: ${{ steps.pick-retry.outputs.changed_outcomes || steps.pick.outputs.changed_outcomes || steps.pick-request.outputs.changed_outcomes }}
       change_kind: ${{ steps.pick-retry.outputs.change_kind || steps.pick.outputs.change_kind || steps.pick-request.outputs.change_kind }}
+      speed: ${{ steps.pick-retry.outputs.speed || steps.pick.outputs.speed || steps.pick-request.outputs.speed }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -138,9 +139,20 @@ jobs:
       ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+  speed:
+    name: chat list remeasures
+    needs: pick
+    if: needs.pick.outputs.speed == 'yes'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/speed-check.yml
+    with:
+      base_sha: ${{ needs.pick.outputs.merge_base }}
+      head_sha: ${{ needs.pick.outputs.head_sha }}
+
   pstack-verifier:
     name: pstack-verifier
-    needs: [pick, journeys]
+    needs: [pick, journeys, speed]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -177,6 +189,8 @@ jobs:
           CHANGE_KIND: ${{ needs.pick.outputs.change_kind }}
           COVERAGE_REPORT: ${{ runner.temp }}/feature-coverage.json
           SMOKE: ${{ needs.pick.outputs.smoke }}
+          SPEED_REQUIRED: ${{ needs.pick.outputs.speed }}
+          SPEED_RESULT: ${{ needs.speed.result }}
           PICK_REASON: ${{ needs.pick.outputs.reason }}
           PICK_RESULT: ${{ needs.pick.result }}
           RUN_ID: ${{ github.run_id }}
