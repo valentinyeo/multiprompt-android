@@ -39,7 +39,7 @@ frame_line() {
     if [ "${FAKE_SLOW:-1}" = 1 ] && [ "$side" = head ]; then
         case "$metric" in
             open) printf 'Total frames rendered: 200\nJanky frames: 18 (9.00%%)\n90th percentile: %sms\n' "$((45 + jitter))" ;;
-            scroll) printf 'Total frames rendered: 200\nJanky frames: 18 (9.00%%)\n90th percentile: %sms\n' "$((45 + jitter))" ;;
+            scroll) printf 'Total frames rendered: 120\nJanky frames: 18 (15.00%%)\n90th percentile: %sms\n' "$((45 + jitter))" ;;
             chat) printf 'Total frames rendered: 200\nJanky frames: 18 (9.00%%)\n90th percentile: %sms\n' "$((70 + jitter))" ;;
         esac
     else
@@ -139,7 +139,7 @@ class CompareTest(unittest.TestCase):
         result = report.compare(self.samples(
             inbox_open_ms=([900, 901, 902], [900, 901, 902]),
             inbox_open_p90_ms=([10, 10, 11], [10, 11, 11]),
-            inbox_scroll_janky_percent=([2, 2, 2], [2, 2, 2]),
+            inbox_scroll_frames=([76, 76, 76], [76, 76, 76]),
             inbox_scroll_p90_ms=([14, 14, 15], [14, 15, 15]),
             chat_open_p90_ms=([12, 12, 13], [12, 12, 13]),
         ))
@@ -150,21 +150,21 @@ class CompareTest(unittest.TestCase):
         result = report.compare(self.samples(
             inbox_open_ms=([900, 901, 902], [1400, 1401, 1402]),
             inbox_open_p90_ms=([10, 10, 11], [45, 46, 47]),
-            inbox_scroll_janky_percent=([2, 2, 2], [9, 9, 9]),
+            inbox_scroll_frames=([76, 76, 76], [40, 40, 40]),
             inbox_scroll_p90_ms=([14, 14, 15], [45, 45, 46]),
             chat_open_p90_ms=([12, 12, 13], [70, 70, 71]),
         ))
         self.assertFalse(result['passed'])
         self.assertEqual(
             [entry['metric'] for entry in result['failures']],
-            ['inbox_open_ms', 'inbox_open_p90_ms', 'inbox_scroll_janky_percent', 'inbox_scroll_p90_ms', 'chat_open_p90_ms'],
+            ['inbox_open_ms', 'inbox_open_p90_ms', 'inbox_scroll_frames', 'inbox_scroll_p90_ms', 'chat_open_p90_ms'],
         )
 
     def test_a_change_inside_the_absolute_floor_is_noise(self):
         result = report.compare(self.samples(
             inbox_open_ms=([900, 900, 900], [1000, 1000, 1000]),
             inbox_open_p90_ms=([10, 10, 10], [30, 30, 30]),
-            inbox_scroll_janky_percent=([2, 2, 2], [5, 5, 5]),
+            inbox_scroll_frames=([76, 76, 76], [70, 70, 70]),
             inbox_scroll_p90_ms=([14, 14, 14], [16, 16, 16]),
             chat_open_p90_ms=([12, 12, 12], [14, 14, 14]),
         ))
@@ -174,7 +174,7 @@ class CompareTest(unittest.TestCase):
         result = report.compare(self.samples(
             inbox_open_ms=([900, 900, 900], [900, 900]),
             inbox_open_p90_ms=([10, 10, 10], [10, 10, 10]),
-            inbox_scroll_janky_percent=([2, 2, 2], [2, 2, 2]),
+            inbox_scroll_frames=([76, 76, 76], [76, 76, 76]),
             inbox_scroll_p90_ms=([14, 14, 14], [14, 14, 14]),
             chat_open_p90_ms=([12, 12, 12], [12, 12, 12]),
         ))
@@ -185,7 +185,7 @@ class CompareTest(unittest.TestCase):
         result = report.compare(self.samples(
             inbox_open_ms=([900, 900, 900], [1500, 1500, 1500]),
             inbox_open_p90_ms=([10, 10, 10], [10, 10, 10]),
-            inbox_scroll_janky_percent=([2, 2, 2], [2, 2, 2]),
+            inbox_scroll_frames=([76, 76, 76], [76, 76, 76]),
             inbox_scroll_p90_ms=([14, 14, 14], [14, 14, 14]),
             chat_open_p90_ms=([12, 12, 12], [12, 12, 12]),
         ))
@@ -238,7 +238,8 @@ class ReplayTest(unittest.TestCase):
             report_md = repo / 'build/speed-check/report.md'
             document = json.loads(report_json.read_text()) if report_json.exists() else None
             text = report_md.read_text() if report_md.exists() else None
-            samples = (repo / 'build/speed-check/samples.csv').read_text()
+            samples = (repo / 'build/speed-check/samples.csv')
+            samples = samples.read_text() if samples.exists() else ''
             return result, text, document, samples
 
     def test_the_planted_slow_down_replay_fails_the_check(self):

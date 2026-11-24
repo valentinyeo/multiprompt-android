@@ -10,21 +10,21 @@ ROUNDS = 3
 RULES = {
     'inbox_open_ms': {'percent': 25, 'floor': 150},
     'inbox_open_p90_ms': {'percent': 25, 'floor': 25},
-    'inbox_scroll_janky_percent': {'percent': 25, 'floor': 4},
+    'inbox_scroll_frames': {'percent': 25, 'floor': 10, 'worse': 'down'},
     'inbox_scroll_p90_ms': {'percent': 25, 'floor': 20},
     'chat_open_p90_ms': {'percent': 25, 'floor': 20},
 }
 LABELS = {
     'inbox_open_ms': 'Cold open of the app, first frame',
     'inbox_open_p90_ms': 'Inbox open, 90th percentile frame',
-    'inbox_scroll_janky_percent': 'Fling scroll of the inbox, janky frames',
+    'inbox_scroll_frames': 'Fling scroll of the inbox, frames rendered',
     'inbox_scroll_p90_ms': 'Fling scroll of the inbox, 90th percentile frame',
     'chat_open_p90_ms': 'Open the long chat, 90th percentile frame',
 }
 UNITS = {
     'inbox_open_ms': 'ms',
     'inbox_open_p90_ms': 'ms',
-    'inbox_scroll_janky_percent': '%',
+    'inbox_scroll_frames': ' frames',
     'inbox_scroll_p90_ms': 'ms',
     'chat_open_p90_ms': 'ms',
 }
@@ -102,7 +102,11 @@ def compare(samples, rounds=ROUNDS):
             change = round((head_median - base_median) * 100.0 / base_median, 1)
         else:
             change = 0.0 if head_median <= 0 else 100.0
-        worse = head_median > limit and delta > rule['floor']
+        if rule.get('worse') == 'down':
+            limit = base_median * (1 - rule['percent'] / 100.0)
+            worse = head_median < limit and -delta > rule['floor']
+        else:
+            worse = head_median > limit and delta > rule['floor']
         entry = {
             'metric': metric,
             'label': LABELS[metric],
@@ -112,6 +116,7 @@ def compare(samples, rounds=ROUNDS):
             'change_percent': change,
             'allowed_percent': rule['percent'],
             'allowed_floor': rule['floor'],
+            'worse_direction': rule.get('worse', 'up'),
             'base_samples': base,
             'head_samples': head,
             'worse': worse,
@@ -131,9 +136,11 @@ def markdown(result, rounds=ROUNDS):
     ]
     for entry in result['metrics']:
         unit = entry['unit']
+        bound = 'under' if entry['worse_direction'] == 'down' else 'over'
+        word = 'fewer' if entry['worse_direction'] == 'down' else 'worse'
         lines.append(
             f"| {entry['label']} | {entry['base_median']:g}{unit} | {entry['head_median']:g}{unit} | "
-            f"{entry['change_percent']:+.1f}% | over {entry['allowed_percent']}% and {entry['allowed_floor']:g}{unit} worse |"
+            f"{entry['change_percent']:+.1f}% | {bound} {entry['allowed_percent']}% and {entry['allowed_floor']:g}{unit} {word} |"
         )
     if result['errors']:
         lines.extend(['', 'Missing measurements:'] + [f'- {error}' for error in result['errors']])

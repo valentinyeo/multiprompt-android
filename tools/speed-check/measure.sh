@@ -104,7 +104,7 @@ measure_round() {
     "$mpa" swipe --axis vertical --direction forward > /dev/null
   done
   frames "scroll-$side-$round"
-  field "scroll-$side-$round" janky-percent > "$out/scroll-janky-$side-$round.txt"
+  field "scroll-$side-$round" total-frames > "$out/scroll-frames-$side-$round.txt"
   field "scroll-$side-$round" p90-ms > "$out/scroll-p90-$side-$round.txt"
   "$adb" shell dumpsys gfxinfo "$package" reset > /dev/null 2>&1 || true
   "$mpa" tap text "$chat" > /dev/null
@@ -123,7 +123,7 @@ measure_round() {
   if [ "$record" = record ]; then
     sample "$side" "$round" inbox_open_ms "$(cat "$out/cold-open-$side-$round.txt")"
     sample "$side" "$round" inbox_open_p90_ms "$(cat "$out/open-p90-$side-$round.txt")"
-    sample "$side" "$round" inbox_scroll_janky_percent "$(cat "$out/scroll-janky-$side-$round.txt")"
+    sample "$side" "$round" inbox_scroll_frames "$(cat "$out/scroll-frames-$side-$round.txt")"
     sample "$side" "$round" inbox_scroll_p90_ms "$(cat "$out/scroll-p90-$side-$round.txt")"
     sample "$side" "$round" chat_open_p90_ms "$(cat "$out/chat-p90-$side-$round.txt")"
   fi

@@ -13,17 +13,19 @@ The app is signed out on every cold start of a debug build, so each round taps *
 
 ## Fails when head is clearly worse
 
-A metric fails when the head median is worse than the base median by more than the percentage **and** by more than the absolute floor, so emulator noise inside the floor cannot fail a merge:
+A metric fails when the head median is worse than the base median by more than the percentage **and** by more than the absolute floor, so emulator noise inside the floor cannot fail a merge. Frames rendered on the fixed scroll is the one metric where fewer is worse: a stalling app renders fewer frames in the same six swipes.
 
 | Journey | Worse by more than | And more than |
 |---|---|---|
 | Cold open of the app, first frame | 25% | 150 ms |
 | Inbox open, 90th percentile frame | 25% | 25 ms |
-| Fling scroll of the inbox, janky frames | 25% | 4 points |
+| Fling scroll of the inbox, frames rendered | 25% fewer | 10 frames |
 | Fling scroll of the inbox, 90th percentile frame | 25% | 20 ms |
 | Open the long chat, 90th percentile frame | 25% | 20 ms |
 
-Any failing metric exits 3 with `SPEED_CHECK_SLOW`. Missing rounds exit 4 with `SPEED_CHECK_INCOMPLETE`, which is never green. An equal result exits 0 with `SPEED_CHECK_OK`. A base and head that are the same revision, the same file or unreadable APKs exit 2 with a setup message. Thresholds live in `report.py` and the numbers land in `info.txt`, `samples.csv`, `report.json`, `report.md` and the per-round `frames-*.txt` in the `speed-check-<run id>` artifact.
+Any failing metric exits 3 with `SPEED_CHECK_SLOW`. Missing rounds exit 4 with `SPEED_CHECK_INCOMPLETE`, which is never green. An equal result exits 0 with `SPEED_CHECK_OK`. When the base and head builds are byte identical the job reports `SPEED_CHECK_IDENTICAL` and times nothing, because no reading could differ. The same revision, the same APK file or missing APKs exit 2 with a setup message.
+
+`dumpsys gfxinfo` on the shared CI emulator renders about 5 frames a second, so the 90th percentile sits on that floor and the janky percentage reads 100% on both sides. Those two readings are kept per round because a real stall lifts them further, but the frame count and the launch time are the readings with usable headroom: the noise between two builds of the same source measured 2-4%. Thresholds live in `report.py` and the numbers land in `info.txt`, `samples.csv`, `report.json`, `report.md` and the per-round `frames-*.txt` in the `speed-check-<run id>` artifact.
 
 ## When it runs
 
