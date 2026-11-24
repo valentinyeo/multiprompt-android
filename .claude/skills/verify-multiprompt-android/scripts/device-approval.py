@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 
 class ApprovalFixture:
-    def __init__(self, fixture, home, screencast=False):
+    def __init__(self, fixture, home, screencast=False, layout=None):
         self.home = home
         self.screencast = screencast
         self.upload_key = secrets.token_urlsafe(32)
@@ -21,10 +21,19 @@ class ApprovalFixture:
         self.refresh = secrets.token_urlsafe(32)
         self.keys = [dict(device_id="fixture-approve", name="Fixture laptop", public_key=" ".join((fixture / "pending-device.pub").read_text().split()[:2]), status="pending"),
                      dict(device_id="fixture-deny", name="Stale laptop", public_key=" ".join((fixture / "denied-device.pub").read_text().split()[:2]), status="waiting")]
-        if screencast:
+        if screencast or layout is not None:
             self.keys = []
         self.phone = None
-        self.layout = dict(schema=1, revision=0, workspaces=[], tabs=[])
+        self.recorded = layout is not None
+        self.layout = layout if layout is not None else dict(schema=1, revision=0, workspaces=[], tabs=[])
+        if self.recorded:
+            self.save_layout()
+
+    def save_layout(self):
+        target = self.home / "account-layout.json"
+        temporary = target.with_suffix(".tmp")
+        temporary.write_text(json.dumps(self.layout))
+        temporary.replace(target)
 
     def receipt(self, **event):
         with (self.home / "device-approval-receipts.jsonl").open("a") as output:
@@ -57,6 +66,9 @@ class ApprovalFixture:
                 if body.get("base_revision") != self.layout["revision"]:
                     return 409, dict(layout=self.layout, revision=self.layout["revision"])
                 self.layout = {**body["layout"], "revision": self.layout["revision"] + 1}
+                if self.recorded:
+                    self.save_layout()
+                    self.receipt(action="layout_put", layout=self.layout)
             return 200, dict(layout=self.layout, revision=self.layout["revision"])
         if path == "/v1/device-key" and method == "PUT":
             key = body.get("public_key", "")
@@ -86,8 +98,8 @@ class ApprovalFixture:
         return 404, dict(error="not_found")
 
 
-def serve(fixture, home, port, screencast=False):
-    state = ApprovalFixture(fixture, home, screencast=screencast)
+def serve(fixture, home, port, screencast=False, layout=None):
+    state = ApprovalFixture(fixture, home, screencast=screencast, layout=layout)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_):
@@ -140,5 +152,18 @@ def serve(fixture, home, port, screencast=False):
     HTTPServer(("0.0.0.0", port), Handler).serve_forever()
 
 
+CONTROL_LAYOUT = dict(
+    schema=1,
+    revision=0,
+    workspaces=[dict(name="Studio")],
+    tabs=[
+        dict(kind="tmux", name="verify-session", tmux_session="verify-session", tmux_host=1, workspace="Studio", group="Original"),
+        dict(kind="tmux", name="pin-00", tmux_session="pin-00", tmux_host=1, workspace="Studio", group="Other"),
+    ],
+)
+
+
 if __name__ == "__main__":
-    serve(Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), screencast=sys.argv[4:] == ["screencast-account.md"])
+    feature = sys.argv[4] if len(sys.argv) > 4 else None
+    serve(Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), screencast=feature == "screencast-account.md",
+          layout=CONTROL_LAYOUT if feature == "workspace-group-controls.md" else None)

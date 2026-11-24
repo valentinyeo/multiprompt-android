@@ -308,8 +308,7 @@
         ]
       },
       "outcomes": [
-        "claude.skills-model-effort",
-        "reader.follow-newest"
+        "claude.skills-model-effort"
       ],
       "evidence": {
         "native-menu-state.txt": 5000,
@@ -1232,6 +1231,33 @@
         "room-existing.json": 1500,
         "room-existing-submits.txt": 1500
       }
+    },
+    "workspace-group-controls.md": {
+      "name": "Workspace and group controls",
+      "description": "Create a workspace through the inbox menu, cancel and dismiss it, then long-press a chat group to rename and ungroup it, with the stored account layout checked. MUBO-288.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Local authenticated account fixture; live production email OTP is not exercised."
+        ],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/workspace-group-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "inbox.workspace-groups"
+      ],
+      "evidence": {
+        "group-headings.json": 1200,
+        "new-workspace-open.json": 800,
+        "workspace-created.json": 1200,
+        "rename-group-open.json": 1200,
+        "group-renamed.json": 1200,
+        "group-renamed-host.json": 1200
+      }
     }
   },
   "outcomes": {
@@ -2139,13 +2165,28 @@
         }
       }
     },
-    "reader.follow-newest": {
-      "description": "A chat already showing its newest reply keeps incoming replies on screen through the working indicator and message layout changes, without tapping Jump to newest. The native-skills journey requires each model and effort reply on screen after its independent host receipt.",
-      "journey": "native-skills.md",
+    "inbox.workspace-groups": {
+      "description": "Create a workspace from the inbox menu and rename or ungroup a chat group through a long press on its heading, with the stored account layout checked. MUBO-288.",
+      "journey": "workspace-group-controls.md",
       "sideEffect": true,
       "match": [
-        "requestScrollToItem"
-      ]
+        "workspaceDialogVisible|onCreateWorkspace|createWorkspace",
+        "renameGroupPrompt|onRenameGroup|onUngroup|groupDraft|renameAccountGroup"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa hold text ORIGINAL"
+        },
+        "result": {
+          "file": "group-renamed.json",
+          "quote": "\"group\":\"Renamed\""
+        },
+        "sideEffect": {
+          "file": "group-renamed-receipts.txt",
+          "quote": "\"group\": \"Renamed\""
+        }
+      }
     }
   }
 }

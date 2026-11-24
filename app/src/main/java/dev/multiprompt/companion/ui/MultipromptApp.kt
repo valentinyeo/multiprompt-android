@@ -1286,6 +1286,7 @@ internal fun SessionsScreen(
     onDismissAiUsage: () -> Unit = {},
     onRestartIdleChats: () -> Unit = {},
     onSetPinned: (TmuxSession, Boolean) -> Unit = { _, _ -> },
+    sessionListState: androidx.compose.foundation.lazy.LazyListState = rememberLazyListState(),
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1956,25 +1957,50 @@ internal fun SessionsScreen(
     val pinnedSessions = if (state.pinnedSessionKeys.isEmpty()) emptyList() else visibleSessions.filter {
         SessionReadStore.key(it.hostId, it.name) in state.pinnedSessionKeys
     }
-    val sessionGroups = SessionGroups.withPinned(
-        SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
-            val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
-            tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
-        },
-        pinnedSessions,
-        reversedSessions,
-    )
+    val sessionGroups = remember(visibleSessions, state.accountLayout, state.accountHosts, state.selectedWorkspaceId, pinnedSessions, reversedSessions) {
+        SessionGroups.withPinned(
+            SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+                val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+                tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+            },
+            pinnedSessions,
+            reversedSessions,
+        )
+    }
     val sessionListEntries = sessionGroups.sumOf { group ->
         group.items.size + if (SessionGroups.heading(group, sessionGroups) != null) 1 else 0
     } + (if (rooms.isNotEmpty()) 1 else 0) +
         state.hostErrors.count { (hostId, error) -> hostId !in state.cachedHostIds && !SshProblem.isKeyRejected(error) }
-    val sessionListState = rememberLazyListState()
     val listEnd = remember { InboxListEnd() }
     val openSplitId = state.selectedWorkspaceId.takeIf { it == null || it in displayedWorkspaceSplitIds }
     LaunchedEffect(sessionListState, listEnd, openSplitId, sessionListEntries) {
         if (listEnd.revealsNewest(openSplitId, sessionListEntries, sessionListState.firstVisibleItemIndex)) {
             sessionListState.scrollToItem(0)
         }
+    }
+    val listHostErrors = remember(state.hostErrors) { state.hostErrors }
+    val listCachedHostIds = remember(state.cachedHostIds) { state.cachedHostIds }
+    val listAccountLayout = remember(state.accountLayout) { state.accountLayout }
+    val listAccountHosts = remember(state.accountHosts) { state.accountHosts }
+    val listWorkspaces = remember(state.workspaces, state.archivedWorkspaceIds) { state.activeWorkspaces }
+    val listUnreadKeys = remember(state.unreadSessionKeys) { state.unreadSessionKeys }
+    val listUnreadCounts = remember(state.unreadCounts) { state.unreadCounts }
+    val listArchivedKeys = remember(state.archivedSessionKeys) { state.archivedSessionKeys }
+    val listPinnedKeys = remember(state.pinnedSessionKeys) { state.pinnedSessionKeys }
+    val listOpenSession = state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) }
+    val listSignedIn = state.signedIn
+    val listBucket = state.sessionBucket
+    val listFavorites = state.selectedWorkspaceId == FAVORITES_SPLIT_ID
+    val listDissolved = remember(visibleDissolvedSessions) { visibleDissolvedSessions }
+    val listEmpty = visibleSessions.isEmpty() && listDissolved.isEmpty() && !state.refreshing
+    val listEmptyLabel = when {
+        normalizedQuery.isNotBlank() -> "No sessions match “$normalizedQuery”"
+        listFavorites -> "No starred sessions"
+        state.selectedWorkspaceId == FREQUENT_SPLIT_ID -> "No frequent sessions"
+        listBucket == SessionBucket.ARCHIVE -> "No archived sessions"
+        listBucket == SessionBucket.WAITING -> "No waiting sessions"
+        state.unreadOnly -> "No unread sessions"
+        else -> "This split is clear"
     }
     var lastPinnedKeys by remember { mutableStateOf(state.pinnedSessionKeys) }
     LaunchedEffect(state.pinnedSessionKeys, reversedSessions, sessionListEntries) {
@@ -2232,8 +2258,8 @@ internal fun SessionsScreen(
             if (rooms.isNotEmpty()) {
                 item(key = "rooms") { roomStrip() }
             }
-            state.hostErrors.forEach { (hostId, error) ->
-                if (hostId !in state.cachedHostIds && !SshProblem.isKeyRejected(error)) {
+            listHostErrors.forEach { (hostId, error) ->
+                if (hostId !in listCachedHostIds && !SshProblem.isKeyRejected(error)) {
                     item(key = "error-$hostId") { InlineError(error) }
                 }
             }
@@ -2261,10 +2287,12 @@ internal fun SessionsScreen(
                 if (!reversedSessions) heading()
                 items(group.items, key = { "${it.hostId}:${it.name}" }) { session ->
                     val key = SessionReadStore.key(session.hostId, session.name)
-                    val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+                    val tab = listAccountLayout?.let { AccountHostMap.tabFor(session, it, listAccountHosts) }
                     val starred = tab?.favorite == true
+                    val pinned = key in listPinnedKeys
+                    val archived = key in listArchivedKeys
                     CompositionLocalProvider(
-                        LocalOpenSession provides state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) },
+                        LocalOpenSession provides listOpenSession,
                         LocalBotSelection provides if (selectingBots) BotSelection(chosenBots.toSet()) { session ->
                             val key = SessionReadStore.key(session.hostId, session.name)
                             if (key in chosenBots) chosenBots.remove(key) else chosenBots.add(key)
@@ -2278,20 +2306,20 @@ internal fun SessionsScreen(
                     ) {
                         SessionCard(
                             session = session,
-                            workspaces = state.activeWorkspaces,
-                            unread = key in state.unreadSessionKeys,
-                            unreadCount = state.unreadCounts[key] ?: 1,
-                            archived = key in state.archivedSessionKeys,
-                            pinned = key in state.pinnedSessionKeys,
-                            pinEnabled = key in state.pinnedSessionKeys || state.sessionBucket != SessionBucket.ARCHIVE,
-                            onTogglePin = { onSetPinned(session, key !in state.pinnedSessionKeys) },
+                            workspaces = listWorkspaces,
+                            unread = key in listUnreadKeys,
+                            unreadCount = listUnreadCounts[key] ?: 1,
+                            archived = archived,
+                            pinned = pinned,
+                            pinEnabled = pinned || listBucket != SessionBucket.ARCHIVE,
+                            onTogglePin = { onSetPinned(session, !pinned) },
                             starred = starred,
                             hasDraft = key in draftKeys,
-                            onToggleFavorite = if (tab != null && state.signedIn) {
+                            onToggleFavorite = if (tab != null && listSignedIn) {
                                 { onSetFavorite(tab, !starred) }
                             } else null,
                             muted = tab?.muted == true,
-                            onToggleMute = if (tab != null && state.signedIn) {
+                            onToggleMute = if (tab != null && listSignedIn) {
                                 { onSetMuted(tab, tab.muted != true) }
                             } else null,
                             onClick = { onOpen(session) },
@@ -2299,7 +2327,7 @@ internal fun SessionsScreen(
                             onArchive = { onArchive(session) },
                             onRemind = { reminderPromptSession = session },
                             onArchiveToggle = {
-                                if (key in state.archivedSessionKeys) onRestore(session) else onArchive(session)
+                                if (archived) onRestore(session) else onArchive(session)
                             },
                             onMarkUnread = { onMarkUnread(session) },
                             onMove = { moveSessionTarget = session },
@@ -2311,34 +2339,23 @@ internal fun SessionsScreen(
                             onDissolve = { onDissolve(session) },
                             onEnd = { endPromptSession = session },
                             onForget = { onForgetSession(session) },
-                            onMoveToGroup = if (tab != null && state.signedIn) ({ groupMoveTarget = tab }) else null,
-                            inFavoritesView = state.selectedWorkspaceId == FAVORITES_SPLIT_ID,
+                            onMoveToGroup = if (tab != null && listSignedIn) ({ groupMoveTarget = tab }) else null,
+                            inFavoritesView = listFavorites,
                         )
                     }
                 }
                 if (reversedSessions) heading()
             }
-            items(visibleDissolvedSessions, key = { "dissolved:${it.key}" }) { session ->
+            items(listDissolved, key = { "dissolved:${it.key}" }) { session ->
                 DissolvedSessionCard(
                     session = session,
                     onRestore = { onRestoreDissolved(session) },
                     onForget = { onForgetDissolved(session) },
                 )
             }
-            if (visibleSessions.isEmpty() && visibleDissolvedSessions.isEmpty() && !state.refreshing) {
+            if (listEmpty) {
                 item(key = "empty-sessions") {
-                    Text(
-                        when {
-                            normalizedQuery.isNotBlank() -> "No sessions match “$normalizedQuery”"
-                            state.selectedWorkspaceId == FAVORITES_SPLIT_ID -> "No starred sessions"
-                            state.selectedWorkspaceId == FREQUENT_SPLIT_ID -> "No frequent sessions"
-                            state.sessionBucket == SessionBucket.ARCHIVE -> "No archived sessions"
-                            state.sessionBucket == SessionBucket.WAITING -> "No waiting sessions"
-                            state.unreadOnly -> "No unread sessions"
-                            else -> "This split is clear"
-                        },
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(listEmptyLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
