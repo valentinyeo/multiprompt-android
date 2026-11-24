@@ -460,7 +460,7 @@ class ChatHistoryConnection(
                                         val carried = hostCarry?.takeIf { it.first == page.sid }?.second?.takeIf { it.epoch == fresh.epoch && it.cursor <= fresh.cursor }
                                         var built = fresh.copy(host = carried?.host ?: HostStream())
                                         var after = carried?.cursor ?: maxOf(0L, built.cursor - HOST_REPLAY_TAIL)
-                                        while (provider == "claude" && after < built.cursor) {
+                                        while ((provider == "claude" || provider == "pi") && after < built.cursor) {
                                             requestId++
                                             val replay = MessageProtocol.events(exchange(MessageProtocol.request(requestId, messageScope, "message_events", JSONObject().put("after", after))), requestId, messageScope, after)
                                             if (generation != cycleGeneration || !owns(page.sid)) { replica = null; continue@poll }

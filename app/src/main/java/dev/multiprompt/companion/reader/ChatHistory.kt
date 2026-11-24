@@ -15,6 +15,7 @@ data class ChatHistoryMessage(
     val notSentDetail: String? = null,
     val unknownId: String? = null,
     val cancellable: Boolean = false,
+    val hostItem: String? = null,
 ) {
     fun transcript(): TranscriptMessage = TranscriptMessage(role, timestamp.ifEmpty { null }, text)
 }
@@ -175,7 +176,9 @@ data class ChatHistory(
             }
             if (index != null) {
                 matchedReplies.add(index)
-                block.messageId?.let { anchors[it] = transcript[index].key }
+                val key = transcript[index].key
+                projected[key] = projected.getValue(key).copy(hostItem = block.item)
+                block.messageId?.let { anchors[it] = key }
             } else {
                 val anchor = block.messageId?.let { anchors[it] }
                 if (anchor == null) unmatched.add(block) else replies.getOrPut(anchor) { mutableListOf() }.add(block)
@@ -183,7 +186,7 @@ data class ChatHistory(
         }
         fun appendReply(block: HostBlock) {
             val key = MessageIdentity.live(block.turn, block.item)
-            projected[key] = ChatHistoryMessage(key, "assistant", block.text, "", 0, 0, pending = !block.done)
+            projected[key] = ChatHistoryMessage(key, "assistant", block.text, "", 0, 0, pending = !block.done, hostItem = block.item)
         }
         val ordered = projected.values.toList()
         projected.clear()
