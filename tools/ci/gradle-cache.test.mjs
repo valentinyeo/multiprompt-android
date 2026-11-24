@@ -116,6 +116,28 @@ test('the signed candidate build rides out Maven Central rate limits like every 
   );
 });
 
+test('the historical message projection replay rides out Maven Central rate limits', () => {
+  const replay = readFileSync(new URL('../../tools/message-projection/replay.sh', import.meta.url), 'utf8');
+  assert.match(
+    replay,
+    /^gradle=\("\$\{GRADLE:-\$root\/tools\/ci\/gradle-retry\.sh\}"\)$/m,
+    'replay.sh must default to tools/ci/gradle-retry.sh, because an old revision resolves its whole graph from Central'
+  );
+  assert.doesNotMatch(
+    replay,
+    /^\s+"\$\{GRADLE:-gradle\}" /m,
+    'replay.sh must not call gradle directly, because a bare call gives up on the first 429'
+  );
+  assert.match(
+    replay,
+    /MESSAGE_PROJECTION_REPLAY_INVALID: .* never ran /,
+    'a replay that never reaches its assertion must say so instead of dying on a missing result file'
+  );
+  const workflow = read('message-projection.yml');
+  assert.match(workflow, /^\s+GRADLE: tools\/ci\/gradle-retry\.sh$/m, 'the replay job must hand the harness the retry wrapper');
+  assert.doesNotMatch(workflow, /^\s+GRADLE: gradle$/m);
+});
+
 test('a cold build can still fetch the Compose plugin from the plugin repositories', () => {
   const pluginRepositories = settings.match(/pluginManagement\s*\{[\s\S]*?repositories\s*\{([\s\S]*?)\n    \}/);
   assert.ok(pluginRepositories, 'missing pluginManagement.repositories in settings.gradle.kts');
