@@ -97,7 +97,8 @@ cp "$EVIDENCE/current.xml" "$EVIDENCE/pin-archive-next.xml"
 "$mpa" tap text 'Return to open'
 "$mpa" tap desc 'Switch session bucket'
 "$mpa" tap text Inbox
-"$mpa" read --wait-text "$deep_target"
+sleep 2
+prove_pinned_on_top pin-after-restore
 "$mpa" hold desc "$deep_description"
 "$mpa" read --wait-text Unpin
 "$mpa" read --select absent --value 'Pin to top'
@@ -117,7 +118,7 @@ import sys
 
 root = Path(sys.argv[1])
 pinned_chat, other_chat = sys.argv[2], sys.argv[3]
-names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-archive-next", "pin-unpinned"]
+names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-archive-next", "pin-after-restore", "pin-unpinned"]
 phases = {}
 for name in names:
     phase = json.loads((root / f"{name}.json").read_text())
