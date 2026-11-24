@@ -570,13 +570,10 @@ private fun PiLoginPromptCard(prompt: PiLoginPrompt.Prompt) {
     ) {
         Text("Sign in to Pi", style = Kit.BodyStrong, color = Kit.Text)
         Text(
-            if (prompt.link != null) "Open the link to finish signing in. Your next reply uses that login."
-            else "Pi needs an answer. Your next reply uses that login.",
+            "Open the link to finish signing in. Your next reply uses that login.",
             style = Kit.Hint,
             color = Kit.TextMuted,
         )
-        prompt.link?.let { link ->
-            KitPrimaryButton("Open sign-in link", { openMarkdownUrl(context, link) }, Modifier.fillMaxWidth())
-        }
+        KitPrimaryButton("Open sign-in link", { openMarkdownUrl(context, prompt.link) }, Modifier.fillMaxWidth())
     }
 }

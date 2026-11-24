@@ -36,6 +36,29 @@ ui = load('queue_ui', SCRIPTS / 'queued.py')
 
 
 class FixtureJourneyTest(unittest.TestCase):
+    def test_pi_login_browser_handoff_requires_the_exact_foreground_intent_from_the_app(self):
+        package = 'dev.multiprompt.companion.debug'
+        browser = 'com.android.chrome/com.google.android.apps.chrome.Main'
+        url = 'https://pi.example/verify-device'
+        activity = f"""topResumedActivity=ActivityRecord{{abc u0 {browser} t42}}
+* Hist #0: ActivityRecord{{abc u0 {browser} t42}}
+  launchedFromPackage={package}
+  Intent {{ act=android.intent.action.VIEW dat={url} flg=0x10000000 }}
+"""
+        for source, accepted in (
+            (activity, True),
+            (activity.replace('topResumedActivity', 'mLastPausedActivity'), False),
+            (activity.replace(f'launchedFromPackage={package}', 'launchedFromPackage=com.other.app'), False),
+            (activity.replace(url, 'https://example.com/unrelated'), False),
+            (activity.replace(url, 'http://pi.example/verify-device'), False),
+        ):
+            with self.subTest(source=source):
+                result = subprocess.run([sys.executable, str(SCRIPTS / 'pi-login-browser.py'), browser, package, url],
+                    input=source, capture_output=True, text=True, timeout=10)
+                self.assertEqual(accepted, result.returncode == 0, result.stderr)
+                if accepted:
+                    self.assertEqual(dict(browser=browser, launched_from=package, action='android.intent.action.VIEW', url=url), json.loads(result.stdout))
+
     def test_host_restart_seeds_the_runtime_from_the_apk_source(self):
         source = (SCRIPTS / 'host-restart-setup.sh').read_text()
         setup = source[source.index('reader_source='):source.index('\nsudo -u verifyssh mkdir')]

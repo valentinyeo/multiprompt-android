@@ -9,7 +9,7 @@ A product change must name every changed outcome. The second-AI verifier require
 ## Features
 
 - [Switch AI](ai-switch.md): Claude-to-Pi handover, reattached chat, and a new phone message with independent provider receipts.
-  - Outcomes: `ai.switch`, `chat.pi-login`. Runner: `verify.yml` (debug). Priority evidence: `ai-switch-state.json` (3500 characters), `ai-switch-host.json` (3000 characters), `ai-switch-pi-login.json` (2000 characters).
+  - Outcomes: `ai.switch`. Runner: `verify.yml` (debug). Priority evidence: `ai-switch-state.json` (3500 characters), `ai-switch-host.json` (3000 characters).
 - [App name and update](app-name.md): published signed Android in-app update proof.
   - Outcomes: `app-name.journey`. Runner: `app-name.yml` (dedicated). Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Late account bot pictures](bot-photo-refresh.md): hosted ViewModel and Compose regressions; seeded picture, not live account sync.
@@ -118,6 +118,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `crash-report.exits`. Runner: `verify.yml` (debug). Priority evidence: `crash-reports-received.txt` (3200 characters), `crash-exit-summaries.json` (900 characters), `crash-exits.txt` (1600 characters).
 - [Cleared chat](chat-clear.md): A transcribed chat that starts fresh after /clear shows only what came after the clear, keeps a message typed after it, and never shows or sends an unsent or failed message from before it.
   - Outcomes: `chat-clear.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-clear-before-unsent.xml` (1500 characters), `00-clear-after.xml` (1500 characters), `00-clear-reopened.xml` (1500 characters), `00-clear-state.json` (1500 characters), `clear-store-after.json` (1500 characters), `clear-store-final.json` (1500 characters).
+- [Sign in to Pi from a chat](pi-login.md): Open a Pi chat with a pending host login, tap its card, prove the HTTPS browser handoff, and clear the card on the host result. Uses the ai-switch driver.
+  - Outcomes: `chat.pi-login`. Runner: `verify.yml` (debug). Inputs: `{"feature":"ai-switch.md"}`. Priority evidence: `pi-login-pending.json` (2000 characters), `pi-login-host.json` (2000 characters), `pi-login-browser.json` (1000 characters), `pi-login-completed.json` (2000 characters), `pi-login-after.json` (1000 characters).
 
 ## Initial coverage gaps
 

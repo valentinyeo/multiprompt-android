@@ -48,22 +48,8 @@ print(json.dumps(dict(sid=sid, replayed=[started, done])))
 PYCATCHUP
 wait_for_text PI_HISTORY_CAUGHT_UP_2569
 shot ai-switch-reply
-fill 'Message verify-session' PI_LOGIN_PROMPT_2276
-tap_desc 'Send prompt'
-wait_for_text 'Sign in to Pi to continue'
-wait_for_text 'https://pi.example/verify-device'
-wait_for_text 'Sign in to Pi'
-wait_for_text 'Open sign-in link'
-shot ai-switch-pi-login
-fill 'Message verify-session' PI_LOGIN_DONE_2276
-tap_desc 'Send prompt'
-wait_for_text 'Logged in to anthropic. The next reply uses that login.'
-wait_for_absence 'Open sign-in link'
-shot ai-switch-pi-logged-in
-fill 'Message verify-session' PI_LOGIN_AFTER_2276
-tap_desc 'Send prompt'
-wait_for_text PI_REPLY_PI_LOGIN_AFTER_2276
-shot ai-switch-pi-after-login
+source "$scripts/pi-login-drive.sh"
+step=$((step + 4))
 python3 - "$EVIDENCE" <<'PYPI'
 import json
 from pathlib import Path
