@@ -25,6 +25,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -73,6 +74,16 @@ import dev.multiprompt.companion.reader.QueuedEdit
 private data class ReplyJump(val message: ChatHistoryMessage, val reply: ReplyQuote.Reply)
 
 private val FAILURE_LABELS = setOf("Failed", "Confirmation unknown", "Local · unconfirmed", ChatHistory.NOT_SENT)
+
+internal class NewestFollower(private val listState: LazyListState) {
+    var requests = 0
+        private set
+
+    suspend fun follow() {
+        requests += 1
+        listState.scrollToItem(0)
+    }
+}
 
 @Composable
 internal fun ChatHistoryView(
@@ -251,6 +262,7 @@ internal fun ChatHistoryList(
     onQuestionChoice: ((PendingQuestion, Set<Int>, String) -> Boolean)? = null,
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
+    newestFollower: NewestFollower = remember(listState) { NewestFollower(listState) },
     followRequest: Int = 0,
     onNewBelow: (Int) -> Unit = {},
     sessionName: String = "",
@@ -334,12 +346,20 @@ internal fun ChatHistoryList(
             highlightedKey = null
         }
     }
-    val atBottom = !listState.canScrollBackward && pendingJump == null
+    val newestVisible by remember(listState) {
+        derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == 0 } }
+    }
+    val atBottom = (!listState.canScrollBackward || newestVisible) && pendingJump == null
     val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, questions.size, showDots)
     val holdingForUnread = openHold && anchorPosition != null
-    val newest = messages.lastOrNull()
-    LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
-        if (atBottom && !holdingForUnread && findQuery.isBlank()) listState.scrollToItem(0)
+    val newest = presentation.messages.lastOrNull()
+    val newestKey = when {
+        showDots -> "working"
+        questions.isNotEmpty() -> "question:${questions.last().callId}:${questions.last().index}"
+        else -> newest?.key
+    }
+    LaunchedEffect(newestKey, newest?.text, newest?.pending) {
+        if (atBottom && !holdingForUnread && findQuery.isBlank()) newestFollower.follow()
     }
     LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, showDots, questions.size) {
         val hit = activeFind ?: return@LaunchedEffect
