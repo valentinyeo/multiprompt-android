@@ -107,7 +107,7 @@ def render(outcome, reasons, base, head):
     markdown = [
         f'## SPEED_CHECK_{outcome}',
         '',
-        ' '.join(reasons) or 'Head stays inside the chat list and inbox budget of the base revision.',
+        '\n'.join(f'- {reason}' for reason in reasons) or 'Head stays inside the chat list and inbox budget of the base revision.',
         '',
         *rows,
         '',
