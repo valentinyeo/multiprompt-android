@@ -55,8 +55,6 @@ grep -Fx '@Mention 2953{live-cl_mention-2953}' "$EVIDENCE/mention-receipts.txt"
 "$mpa" read --wait-text '@Mention 2953'
 "$mpa" screenshot mention-sent
 "$mpa" proof --name mention-sent --require-text '@Mention 2953' --forbid-text 'live-cl_mention-2953' --forbid-text '{live-cl_mention-2953}' --note MENTION_ROUTES_TO_SESSION --proof-file "$EVIDENCE/mention-sent-proof.txt"
-"$mpa" fill 'Message verify-session' '@'
-"$mpa" read --select contains --value 'Bot' --timeout 15
 "$mpa" fill 'Message verify-session' '@verify-session'
 "$mpa" read --select text --value 'verify-session' --inside Bot --timeout 15
 "$mpa" screenshot self-mention-list
