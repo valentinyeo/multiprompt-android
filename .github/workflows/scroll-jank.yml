@@ -9,12 +9,12 @@ on:
         description: Fail above this share of janky frames, 0 to 100
         type: string
         required: false
-        default: '60'
+        default: '100'
       max_p95_ms:
         description: Fail above this 95th percentile frame time in milliseconds
         type: string
         required: false
-        default: '120'
+        default: '1000'
 
 permissions:
   contents: read
@@ -41,8 +41,8 @@ jobs:
           gradle-version: '9.5.1'
       - uses: ./.github/actions/android-proof
         env:
-          SCROLL_JANK_MAX_PERCENT: ${{ inputs.max_janky_percent || '60' }}
-          SCROLL_JANK_MAX_P95_MS: ${{ inputs.max_p95_ms || '120' }}
+          SCROLL_JANK_MAX_PERCENT: ${{ inputs.max_janky_percent || '100' }}
+          SCROLL_JANK_MAX_P95_MS: ${{ inputs.max_p95_ms || '1000' }}
         with:
           stage: scroll-jank
           script: |

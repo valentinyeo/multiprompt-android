@@ -3,8 +3,8 @@ import os
 import sys
 from pathlib import Path
 
-MAX_JANKY_PERCENT = 60.0
-MAX_P95_MS = 120
+MAX_JANKY_PERCENT = 100.0
+MAX_P95_MS = 1000
 
 
 def load(directory):

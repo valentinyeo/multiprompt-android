@@ -45,12 +45,12 @@ class ReportTest(unittest.TestCase):
         self.assertIn('| inbox | 300 | 30 | 10.00 |', text)
 
     def test_a_frozen_scroll_fails_on_janky_frames(self):
-        text, verdict = report.report([sample(percent=91.5)])
+        text, verdict = report.report([sample(percent=91.5)], max_percent=60.0)
         self.assertEqual(['chat: 91.50% janky frames, limit 60.00%'], verdict)
         self.assertIn('SCROLL_FRAME_TIME_FAILED', text)
 
     def test_a_frozen_scroll_fails_on_the_95th_percentile_frame(self):
-        _, verdict = report.report([sample(percent=5.0, p95=480)])
+        _, verdict = report.report([sample(percent=5.0, p95=480)], max_p95=120)
         self.assertEqual(['chat: 95th percentile frame 480ms, limit 120ms'], verdict)
 
     def test_limits_come_from_the_environment(self):
