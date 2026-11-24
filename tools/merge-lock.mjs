@@ -98,12 +98,12 @@ export function writeLockCommit(holder, expiresAt, run = execFileSync) {
 
 export function installLockRef(sha, expectedSha, run = execFileSync) {
   if (expectedSha) {
-    ghApi('PATCH', `repos/${repo}/git/refs/${lockRef}`, { sha, force: 'false' }, run);
+    ghApi('PATCH', `repos/${repo}/git/refs/${lockRef}`, { sha, force: false }, run);
     return 'updated';
   }
   const created = ghApiMaybe(run, 'POST', `repos/${repo}/git/refs`, { ref: lockRefFull, sha });
   if (created.ok) return 'created';
-  ghApi('PATCH', `repos/${repo}/git/refs/${lockRef}`, { sha, force: 'false' }, run);
+  ghApi('PATCH', `repos/${repo}/git/refs/${lockRef}`, { sha, force: false }, run);
   return 'updated';
 }
 
