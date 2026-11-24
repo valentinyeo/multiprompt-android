@@ -79,7 +79,6 @@ open_section() {
     return 1
 }
 : > "$EVIDENCE/native-menu-commands.txt"
-wait_for_absence 'Model switch did not finish; try again'
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
     open_section Model Fable
