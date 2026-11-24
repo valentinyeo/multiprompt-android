@@ -241,7 +241,13 @@ if [[ "${VERIFY_FEATURE:-}" == message-reply.md ]]; then
     sudo -u verifyssh tmux new-session -d -s live-cl_mention-2953 -x 100 -y 32 'exec sleep infinity'
     sudo -u verifyssh tmux set-window-option -t live-cl_mention-2953 automatic-rename off
     sudo -u verifyssh tmux rename-window -t live-cl_mention-2953 'Mention 2953'
+    mention_sid=a1b2c3d4-1008-4000-8000-000000002953
+    sudo -u verifyssh tmux set-option -t live-cl_mention-2953 @mp_host_sid "$mention_sid"
+    sudo -u verifyssh mkdir -p /home/verifyssh/.local/state/multiprompt/agent-host
+    printf '{"enabled":true,"provider":"claude","tmux":"live-cl_mention-2953"}\n' |
+        sudo -u verifyssh tee /home/verifyssh/.local/state/multiprompt/agent-host/mention-2953.config.json >/dev/null
     sudo -u verifyssh tmux display-message -p -t '=live-cl_mention-2953:' '#{session_name}|#{window_name}' > "$EVIDENCE/mention-session.txt"
+    printf 'live-cl_mention-2953|claude|%s\n' "$mention_sid" > "$EVIDENCE/mention-copy-session.txt"
 fi
 if [[ "${VERIFY_FEATURE:-}" == copy-chat-id.md ]]; then
     sudo -u verifyssh tmux set-option -t verify-session @mp_host_sid copy-chat-id-2371

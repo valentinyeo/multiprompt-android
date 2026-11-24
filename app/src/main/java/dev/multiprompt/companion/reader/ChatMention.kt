@@ -7,6 +7,9 @@ data class MentionChat(
     val session: String,
     val hostId: String = "",
     val workspaceColor: Int = 0,
+    val liveChat: Boolean = false,
+    val hostProvider: String = "",
+    val hostSessionId: String = "",
 )
 
 data class MentionQuery(val start: Int, val text: String)
@@ -19,7 +22,15 @@ object ChatMention {
         .filter { it.hostId == current.hostId && it.name != current.name && SESSION.matches(it.name) }
         .mapNotNull { session ->
             session.displayName.trim().takeIf { it.isNotEmpty() && it.length < MAX_NAME }?.let {
-                MentionChat(it, session.name, session.hostId, session.workspaceColor)
+                MentionChat(
+                    it,
+                    session.name,
+                    session.hostId,
+                    session.workspaceColor,
+                    liveChat = session.liveChat,
+                    hostProvider = session.hostProvider,
+                    hostSessionId = session.hostSessionId,
+                )
             }
         }
         .distinct()

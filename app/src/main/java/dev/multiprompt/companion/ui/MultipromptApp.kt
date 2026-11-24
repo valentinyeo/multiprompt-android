@@ -3617,6 +3617,12 @@ internal fun ReaderScreen(
                             replyTo = null
                         }
                         sendMarkPending = true
+                        if (editing == null) {
+                            val copySource = session.displayName
+                            connection.sendMentionCopies(composedPrompt, mentionChats, copySource).firstOrNull()?.let { name ->
+                                android.widget.Toast.makeText(context, "Could not send the FYI copy to $name", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
                         onSessionInteraction()
                         onSessionInput()
                     }

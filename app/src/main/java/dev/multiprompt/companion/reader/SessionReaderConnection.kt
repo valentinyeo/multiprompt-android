@@ -318,6 +318,29 @@ class SessionReaderConnection(
         return if (sent) PromptAdmission.LegacyEnqueued else PromptAdmission.Rejected("Could not send")
     }
 
+    suspend fun sendMentionCopies(marked: String, live: List<MentionChat>, sourceName: String): List<String> {
+        val targets = MentionCopy.deliveries(marked, live, tmuxSessionName)
+        if (targets.isEmpty()) return emptyList()
+        val note = MentionCopy.note(sourceName, ChatMention.visible(marked))
+        val failed = mutableListOf<String>()
+        for (target in targets) {
+            val scope = runCatching { MessageProtocol.Scope(target.provider, target.hostSessionId, target.session) }.getOrNull()
+            if (scope == null) {
+                failed += target.name
+                continue
+            }
+            val delivered = try {
+                withFreshClient { client -> repository.submitMentionCopy(client, historyScript, scope, MentionCopySend.messageId(), note) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                false
+            }
+            if (!delivered) failed += target.name
+        }
+        return failed
+    }
+
     suspend fun editWaiting(messageId: String, text: String): QueuedEdit.Outcome =
         historyConnection?.editWaiting(messageId, text) ?: QueuedEdit.Outcome.TooLate
 

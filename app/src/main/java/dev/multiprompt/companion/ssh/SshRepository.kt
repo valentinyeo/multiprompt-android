@@ -516,6 +516,21 @@ class SshRepository(private val secrets: SecretStorage) {
         return outcome
     }
 
+    suspend fun submitMentionCopy(
+        client: SshClient,
+        script: ByteArray,
+        scope: dev.multiprompt.companion.reader.MessageProtocol.Scope,
+        messageId: String,
+        text: String,
+    ): Boolean {
+        var accepted = false
+        streamChatHistory(client, script) { exchange ->
+            val wire = exchange(dev.multiprompt.companion.reader.MentionCopySend.request(1, scope, messageId, text))
+            accepted = dev.multiprompt.companion.reader.MentionCopySend.accepted(wire, 1, scope, messageId, text)
+        }
+        return accepted
+    }
+
     suspend fun restartNewest(
         client: SshClient,
         script: ByteArray,

@@ -2,6 +2,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -564,6 +565,8 @@ def xml_for(data):
             return window(REPLY_CHAT + REPLY_BAR + composer(data))
         if screen == "mention-sent":
             return window(REPLY_CHAT + text('@Mention 2953', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data))
+        if screen == "mention-copy":
+            return window(REPLY_CHAT + text('cc @Mention 2953 the build is red', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data))
         if screen == "sent":
             return window(REPLY_CHAT + text('REPLY_BODY_418', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data)
                           + (MENTION if mention_open(data) else ''))
@@ -611,12 +614,15 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
             data["focused"] = True
         elif "Send prompt" in descs:
             mention = mode == "reply" and data["text"].startswith("@Mention 2953")
-            data["screen"] = "mention-sent" if mention else "sent"
+            copy = mode == "reply" and data["text"].startswith("cc @Mention 2953")
+            data["screen"] = "mention-sent" if mention else "mention-copy" if copy else "sent"
             with receipts.open("a") as stream:
                 if mode == "ranking":
                     stream.write("VERIFY_RECEIVED:/clear\\n")
                 elif mention:
                     stream.write("> REPLY_BUBBLE_418\\n@Mention 2953{live-cl_mention-2953}\\n")
+                elif copy:
+                    stream.write("> REPLY_BUBBLE_418\\n" + data["text"] + "\\n")
                 else:
                     stream.write("> REPLY_BUBBLE_418\\n" + data["text"] + "\\n")
             data["text"] = ""
@@ -702,15 +708,22 @@ class MigratedScreenJourneyTest(unittest.TestCase):
 
     def run_journey(self, name, mode):
         env = dict(os.environ)
-        env.update({'PATH': str(self.bin) + os.pathsep + os.environ['PATH'], 'EVIDENCE': str(self.evidence), 'ADB': str(self.binary), 'VERIFY_PACKAGE': 'dev.multiprompt.companion.debug', 'FAKE_ADB_MODE': mode, 'FAKE_ADB_STATE': str(self.state), 'FAKE_ADB_CACHE': str(self.cache), 'FAKE_ADB_LOG': str(self.log), 'FAKE_RECEIPTS': str(self.usage_receipts if mode == 'usage' else self.receipts), 'FAKE_HOST': str(self.host)})
+        env.update({'PATH': str(self.bin) + os.pathsep + os.environ['PATH'], 'EVIDENCE': str(self.evidence), 'ADB': str(self.binary), 'VERIFY_PACKAGE': 'dev.multiprompt.companion.debug', 'FAKE_ADB_MODE': mode, 'FAKE_ADB_STATE': str(self.state), 'FAKE_ADB_CACHE': str(self.cache), 'FAKE_ADB_LOG': str(self.log), 'FAKE_RECEIPTS': str(self.usage_receipts if mode == 'usage' else self.receipts), 'FAKE_HOST': str(self.host), 'MP_MENTION_STORE': str(self.root / 'store.sqlite3')})
         script = f'set -euo pipefail\nscripts={SCRIPTS}\nstep=0\nsource {SCRIPTS / name}\nprintf "%s" "$step"'
         return subprocess.run(['bash', '-c', script], capture_output=True, text=True, env=env)
 
     def test_the_message_reply_journey_runs_end_to_end_through_the_cli(self):
         (self.evidence / 'mention-session.txt').write_text('live-cl_mention-2953|Mention 2953\n')
+        (self.evidence / 'mention-copy-session.txt').write_text('live-cl_mention-2953|claude|a1b2c3d4-1008-4000-8000-000000002953\n')
+        with sqlite3.connect(self.root / 'store.sqlite3') as db:
+            db.execute('CREATE TABLE shared_messages (id TEXT PRIMARY KEY, provider TEXT, sid TEXT, text TEXT, position INTEGER, attempt TEXT, state TEXT, deadline REAL, receipt TEXT, epoch INTEGER, created REAL, origin TEXT)')
+            db.execute('INSERT INTO shared_messages VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', (
+                'fixturementioncopy000000000001', 'claude', 'a1b2c3d4-1008-4000-8000-000000002953',
+                'Valentin mentioned you in verify-session (FYI only; read along, do not act unless asked). Context:\n\ncc @Mention 2953 the build is red',
+                1, 'attempt', 'queued', None, None, 0, 0.0, 'human'))
         result = self.run_journey('message-reply-drive.sh', 'reply')
         self.assertEqual(0, result.returncode, result.stderr + result.stdout)
-        self.assertEqual('4', result.stdout.splitlines()[-1])
+        self.assertEqual('5', result.stdout.splitlines()[-1])
         opened = json.loads((self.evidence / 'reply-open.json').read_text())
         self.assertTrue(opened['passed'])
         self.assertEqual(['present', 'present', 'present'], [check['kind'] for check in opened['checks']])
@@ -734,6 +747,14 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertEqual(['present', 'absent', 'absent'], [check['kind'] for check in mention_sent['checks']])
         self.assertEqual(['@Mention 2953', 'live-cl_mention-2953', '{live-cl_mention-2953}'], [check['value'] for check in mention_sent['checks']])
         self.assertEqual('MENTION_ROUTES_TO_SESSION', (self.evidence / 'mention-sent-proof.txt').read_text().splitlines()[0])
+        copy_sent = json.loads((self.evidence / 'mention-copy-sent.json').read_text())
+        self.assertTrue(copy_sent['passed'])
+        self.assertEqual(['present', 'absent', 'absent'], [check['kind'] for check in copy_sent['checks']])
+        self.assertEqual(['cc @Mention 2953 the build is red', 'live-cl_mention-2953', 'FYI only'], [check['value'] for check in copy_sent['checks']])
+        self.assertEqual('MENTION_COPY_READ_ALONG', (self.evidence / 'mention-copy-proof.txt').read_text().splitlines()[0])
+        copy = json.loads((self.evidence / 'mention-copy.json').read_text())
+        self.assertEqual('a1b2c3d4-1008-4000-8000-000000002953', copy['sid'])
+        self.assertEqual(copy['expected'], copy['copies'][0]['text'])
         for name in ('01-reply-menu.xml', '02-reply-open.xml', '03-reply-cancelled.xml', '04-reply-sent.xml'):
             self.assertTrue((self.evidence / name).is_file(), name)
 

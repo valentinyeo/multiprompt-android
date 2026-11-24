@@ -55,4 +55,19 @@ grep -Fx '@Mention 2953{live-cl_mention-2953}' "$EVIDENCE/mention-receipts.txt"
 "$mpa" read --wait-text '@Mention 2953'
 "$mpa" screenshot mention-sent
 "$mpa" proof --name mention-sent --require-text '@Mention 2953' --forbid-text 'live-cl_mention-2953' --forbid-text '{live-cl_mention-2953}' --note MENTION_ROUTES_TO_SESSION --proof-file "$EVIDENCE/mention-sent-proof.txt"
-step=$((step + 4))
+IFS='|' read -r copy_session copy_provider copy_sid < "$EVIDENCE/mention-copy-session.txt"
+"$mpa" fill 'Message verify-session' 'cc @Mention 2953 the build is red'
+"$mpa" read --wait-text '@Mention 2953'
+"$mpa" tap desc 'Send prompt'
+for attempt in {1..30}; do
+    if sudo python3 "$scripts/mention-copy-evidence.py" "$copy_provider" "$copy_sid" 'cc @Mention 2953 the build is red' > "$EVIDENCE/mention-copy.json" 2>/dev/null; then break; fi
+    sleep 1
+done
+sudo python3 "$scripts/mention-copy-evidence.py" "$copy_provider" "$copy_sid" 'cc @Mention 2953 the build is red' > "$EVIDENCE/mention-copy.json"
+grep -F 'FYI only; read along, do not act unless asked' "$EVIDENCE/mention-copy.json"
+grep -F '"sid":"'"$copy_sid"'"' "$EVIDENCE/mention-copy.json"
+grep -F 'the build is red' "$EVIDENCE/mention-copy.json"
+"$mpa" read --select editor-value --value composer --extra ''
+"$mpa" screenshot mention-copy-sent
+"$mpa" proof --name mention-copy-sent --require-text 'cc @Mention 2953 the build is red' --forbid-text 'live-cl_mention-2953' --forbid-text 'FYI only' --note MENTION_COPY_READ_ALONG --proof-file "$EVIDENCE/mention-copy-proof.txt"
+step=$((step + 5))

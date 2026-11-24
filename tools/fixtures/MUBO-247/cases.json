@@ -1,0 +1,210 @@
+[
+  {
+    "id": "addr_start_question",
+    "kind": "address",
+    "text": "@Verifier{live-verifier} why did this bug get live where answers post above questions in the chat and all chats are out of sync? did the check fail?",
+    "address": ["live-verifier"],
+    "fyi": [],
+    "has_wire_note": true
+  },
+  {
+    "id": "addr_start_vocative_comma",
+    "kind": "address",
+    "text": "@Builder{live-builder}, please check if the patch built cleanly",
+    "address": ["live-builder"],
+    "fyi": [],
+    "has_wire_note": true
+  },
+  {
+    "id": "addr_start_short_question",
+    "kind": "address",
+    "text": "@Ops{live-ops} is this session dead?",
+    "address": ["live-ops"],
+    "fyi": [],
+    "has_wire_note": true
+  },
+  {
+    "id": "addr_start_chained_two",
+    "kind": "address",
+    "text": "@Builder{live-builder} @Maintainer{live-maintainer} sessions should use bypass mode not auto mode",
+    "address": ["live-builder", "live-maintainer"],
+    "fyi": [],
+    "has_wire_note": true
+  },
+  {
+    "id": "addr_after_reply_quote",
+    "kind": "address",
+    "text": "> Not fully yet. The board exists, but the tickets have not moved.\n\n@Reviewer{live-reviewer} what is the problem here? why cant these sessions add themselves?",
+    "address": ["live-reviewer"],
+    "fyi": [],
+    "has_wire_note": true
+  },
+  {
+    "id": "addr_start_plus_mid_reference",
+    "kind": "address",
+    "text": "> Fresh start failed. The handover is saved, but reading it failed.\n\n@Maintainer{live-maintainer} i want sessions to report broken handovers to @Cleaner{live-cleaner} pls so we can improve the script for it",
+    "address": ["live-maintainer"],
+    "fyi": [],
+    "has_wire_note": true
+  },
+  {
+    "id": "ref_please_contact",
+    "kind": "reference",
+    "text": "please contact @Builder{live-builder}",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_ask_about",
+    "kind": "reference",
+    "text": "ask @Reviewer{live-reviewer} about the release checklist",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_why_is_working",
+    "kind": "reference",
+    "text": "Why is @Verifier{live-verifier} working on that its role is to fix checks not work on features... Just explain dont act",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_saw_in_two",
+    "kind": "reference",
+    "text": "i already saw the mode in @Builder{live-builder} but not in @Reviewer{live-reviewer} for some reason",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_lacking_from",
+    "kind": "reference",
+    "text": "telemetry is out of date. lets fix it properly its also lacking all sources from @Router{live-router} lets add all sources",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_already_on",
+    "kind": "reference",
+    "text": "file ticket we need an always visible version number we have that already on @Mobile{live-mobile} but not for desktop",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_like_two_sessions",
+    "kind": "reference",
+    "text": "make a clean list of all sessions and if they are working normally or in the broken state like @Builder{live-builder}  and @Reviewer{live-reviewer} now",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_do_you_not_use",
+    "kind": "reference",
+    "text": "/mode board is completely out of sync do you not use @Reconciler{live-reconciler} ?",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_use_proper",
+    "kind": "reference",
+    "text": "/mode but use the proper @Router{live-router} so that we save tokens at least",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "ref_inside_quote_only",
+    "kind": "reference",
+    "text": "> @Builder{live-builder} started the deploy\n\ncan you check the logs?",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "fyi_end_of_line_real",
+    "kind": "fyi",
+    "text": "> The board watcher is running again and my loop is armed.\n\n/correct  why was it not running? you are responsible for it always running... FYI  @Reconciler{live-reconciler}  ",
+    "address": [],
+    "fyi": ["live-reconciler"],
+    "has_wire_note": false
+  },
+  {
+    "id": "fyi_start_of_line",
+    "kind": "fyi",
+    "text": "fyi @Reviewer{live-reviewer} we switched the branch to the new runner",
+    "address": [],
+    "fyi": ["live-reviewer"],
+    "has_wire_note": false
+  },
+  {
+    "id": "cc_start_of_line_colon",
+    "kind": "fyi",
+    "text": "CC: @Builder{live-builder}, @Reviewer{live-reviewer} - staging deploy finished",
+    "address": [],
+    "fyi": ["live-builder", "live-reviewer"],
+    "has_wire_note": false
+  },
+  {
+    "id": "cc_end_of_line_parens",
+    "kind": "fyi",
+    "text": "please run the migration tonight (cc @Ops{live-ops})",
+    "address": [],
+    "fyi": ["live-ops"],
+    "has_wire_note": false
+  },
+  {
+    "id": "fyi_mixed_with_address",
+    "kind": "mixed",
+    "text": "@Builder{live-builder} please land the patch\nFYI @Reviewer{live-reviewer}",
+    "address": ["live-builder"],
+    "fyi": ["live-reviewer"],
+    "has_wire_note": true
+  },
+  {
+    "id": "unsure_trailing_bare_mention",
+    "kind": "unsure",
+    "text": "Used to have a session called Reconciler, where is it? @Builder{live-builder}",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "unsure_mid_clause_imperative",
+    "kind": "unsure",
+    "text": "plan is used up @Router{live-router} pls act accordingly",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "unsure_after_question_mark",
+    "kind": "unsure",
+    "text": "what safety check? @Maintainer{live-maintainer} what is that? MERGE!",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "unsure_after_slash_command",
+    "kind": "unsure",
+    "text": "/correct @Maintainer{live-maintainer} this constant deviation is painful",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  },
+  {
+    "id": "unsure_negated_cc",
+    "kind": "unsure",
+    "text": "please do not cc @Builder{live-builder}",
+    "address": [],
+    "fyi": [],
+    "has_wire_note": false
+  }
+]
