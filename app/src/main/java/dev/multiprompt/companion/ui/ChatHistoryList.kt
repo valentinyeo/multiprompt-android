@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.skills.NativeSkill
+import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
 import dev.multiprompt.companion.reader.ChatReactions
@@ -274,6 +275,9 @@ internal fun ChatHistoryList(
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
         else ChatReactions.Presentation(messages, emptyMap())
     }
+    val pillSkills = remember(skills, agent) {
+        if (agent == AgentKind.CLAUDE) NativeSkills.catalogue(skills) else skills
+    }
     val findHits = remember(presentation.messages, findQuery) {
         if (findQuery.isBlank()) emptyList() else ChatFind.find(presentation.messages.map { ChatFind.display(it.role, it.text) }, findQuery)
     }
@@ -404,7 +408,7 @@ internal fun ChatHistoryList(
                 val previous = presentation.messages.getOrNull(presentation.messages.lastIndex - index - 1)
                 if (LocalReaderStyle.current && previous != null && previous.role != message.role) Spacer(Modifier.height(10.dp))
                 val messageIndex = presentation.messages.lastIndex - index
-                HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, skills,
+                HistoryBubble(if (message.role == "user") ChatMention.visible(message.text) else message.text, message.role, message.pending, fontScale, sunlight, replyGate, onReply, pillSkills,
                     mentionChats = mentionChats, onSessionLink = onSessionLink,
                     messageId = message.requestId, sessionName = sessionName, onMarkUnread = { openHold = false; onMarkUnread(message.key) },
                     key = message.key, highlighted = highlightedKey == message.key,

@@ -3135,6 +3135,9 @@ internal fun ReaderScreen(
         promptFocusRequester.requestFocus()
     }
     val prompt = promptField.text
+    val pillSkills = remember(reader.nativeSkills, session.agent) {
+        if (session.agent == AgentKind.CLAUDE) NativeSkills.catalogue(reader.nativeSkills) else reader.nativeSkills
+    }
     val skillQuery = if (session.agent == AgentKind.CLAUDE && promptField.selection.collapsed) {
         NativeSkills.query(prompt, promptField.selection.start)
     } else null
@@ -3148,7 +3151,8 @@ internal fun ReaderScreen(
         ChatMention.query(prompt, promptField.selection.start)
     } else null
     val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
-    var dictationPrefix by remember(connection) { mutableStateOf("") }
+    var dictationBefore by remember(connection) { mutableStateOf(DictationDraft.captured("")) }
+    var dictationCanceled by remember(connection) { mutableStateOf(false) }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var recordingPrompt by remember(connection) { mutableStateOf(false) }
@@ -3438,9 +3442,7 @@ internal fun ReaderScreen(
             }
         }
     }
-    val dictationActive = dictationState.status == DictationStatus.CONNECTING ||
-        dictationState.status == DictationStatus.LISTENING ||
-        dictationState.status == DictationStatus.FINISHING
+    val dictationActive = dictationState.status.active
     val readerView = LocalView.current
     DisposableEffect(readerView, dictationActive) {
         val previousKeepScreenOn = readerView.keepScreenOn
@@ -3460,7 +3462,8 @@ internal fun ReaderScreen(
         }
     }
     val startDictation = {
-        dictationPrefix = prompt.trimEnd()
+        dictationBefore = DictationDraft.captured(prompt)
+        dictationCanceled = false
         dictationSubmissionStarted.set(false)
         microphoneError = null
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -3470,6 +3473,14 @@ internal fun ReaderScreen(
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    val cancelDictation = {
+        dictationCanceled = true
+        dictationSubmissionStarted.set(false)
+        sendAfterDictation = false
+        dictation.discard()
+        setPrompt(dictationBefore.restored())
     }
 
     LaunchedEffect(acceptedQueuedPrompts, queuedDraft) {
@@ -3502,15 +3513,16 @@ internal fun ReaderScreen(
         }
     }
     LaunchedEffect(dictationState.transcript) {
-        val spoken = dictationState.transcript.trim()
-        if (spoken.isNotBlank()) {
-            setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
-        }
+        val live = dictation.state.value.takeIf { it.sessionKey == sessionKey }?.status
+            ?: DictationStatus.IDLE
+        val next = DictationDraft.spokenPrompt(dictationBefore, dictationState.transcript, live, dictationCanceled)
+            ?: return@LaunchedEffect
+        setPrompt(next)
     }
     DisposableEffect(connection) {
         onDispose {
             if (dictation.state.value.sessionKey == sessionKey) {
-                if (dictation.state.value.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)) {
+                if (dictation.state.value.status.active) {
                     android.widget.Toast.makeText(context, "Dictation stopped: session changed", android.widget.Toast.LENGTH_SHORT).show()
                 }
                 dictation.discard()
@@ -3643,10 +3655,7 @@ internal fun ReaderScreen(
         when (dictationState.status) {
             DictationStatus.IDLE -> {
                 if (!dictationSubmissionStarted.compareAndSet(true, false)) return@LaunchedEffect
-                val finalPrompt = PromptComposer.appendDictation(
-                    dictationPrefix,
-                    dictationState.transcript,
-                )
+                val finalPrompt = dictationBefore.withSpoken(dictationState.transcript)
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
                 sendDraft(finalPrompt)
@@ -4416,6 +4425,7 @@ internal fun ReaderScreen(
                     DictationBar(
                         level = dictation.level,
                         sending = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
+                        onCancel = cancelDictation,
                         onStop = { dictation.stop() },
                         onSend = submitPrompt,
                     )
@@ -4664,7 +4674,7 @@ internal fun ReaderScreen(
                             draftEmpty = prompt.isEmpty() && imageAttachments.isEmpty(),
                         ) == ComposerSlot.STOP
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
-                        val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
+                        val skillSpans = remember(prompt, pillSkills) { NativeSkills.spans(prompt, pillSkills) }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
@@ -5046,7 +5056,7 @@ internal fun ReaderScreen(
                                 ChatLinkText(message.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
-                                        skills = reader.nativeSkills,
+                                        skills = pillSkills,
                                         color = bodyColor,
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
@@ -5139,7 +5149,7 @@ internal fun ReaderScreen(
                                 ChatLinkText(block.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
-                                        skills = reader.nativeSkills,
+                                        skills = pillSkills,
                                         color = chatTextColor(sunlightMode),
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),

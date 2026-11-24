@@ -3,6 +3,7 @@ package dev.multiprompt.companion.dictation
 import android.Manifest
 import android.app.Application
 import dev.multiprompt.companion.security.SecretStorage
+import dev.multiprompt.companion.ui.DictationDraft
 import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -208,6 +209,51 @@ class DeepgramDictationTest {
     }
 
     @Test
+    fun discardStopsTheMicrophoneAndSocketAndDropsALateFinal() {
+        val fixture = Fixture()
+        fixture.dictation.use { dictation ->
+            dictation.start("test-session")
+            fixture.mic.feed(10, voiced = true)
+            val stream = fixture.sockets.single()
+            stream.open()
+            stream.transcript("buy milk")
+            assertEquals("buy milk", dictation.state.value.transcript)
+            dictation.discard()
+            assertEquals(1, fixture.mic.stops)
+            assertEquals(1, fixture.mic.releases)
+            assertEquals(1, stream.cancels)
+            assertEquals(DictationStatus.IDLE, dictation.state.value.status)
+            assertEquals("", dictation.state.value.transcript)
+            stream.transcript("late final")
+            assertEquals("", dictation.state.value.transcript)
+            stream.listener.onClosed(stream, 1000, "late")
+            assertEquals(DictationStatus.IDLE, dictation.state.value.status)
+            dictation.stop()
+            assertEquals(DictationStatus.IDLE, dictation.state.value.status)
+        }
+    }
+
+    @Test
+    fun discardLeavesTheComposerDraftExactlyAsItWasBeforeDictation() {
+        val fixture = Fixture()
+        fixture.dictation.use { dictation ->
+            val before = DictationDraft.captured("Fix the failing test\n")
+            dictation.start("test-session")
+            fixture.mic.feed(10, voiced = true)
+            val stream = fixture.sockets.single()
+            stream.open()
+            stream.transcript("buy milk")
+            assertEquals(
+                "Fix the failing test buy milk",
+                before.withSpoken(dictation.state.value.transcript),
+            )
+            dictation.discard()
+            assertEquals("", dictation.state.value.transcript)
+            assertEquals("Fix the failing test\n", before.restored())
+        }
+    }
+
+    @Test
     fun savesOnlyACleanKeyThatDeepgramAccepts() {
         val stored = mutableMapOf<String, ByteArray>()
         val answers = ArrayDeque(listOf(401, 400))
@@ -323,12 +369,13 @@ class DeepgramDictationTest {
         val text = CopyOnWriteArrayList<String>()
         val audio = CopyOnWriteArrayList<ByteString>()
         var closes = 0
+        var cancels = 0
         override fun request(): Request = request
         override fun queueSize(): Long = 0
         override fun send(text: String): Boolean { this.text += text; return true }
         override fun send(bytes: ByteString): Boolean { audio += bytes; return true }
         override fun close(code: Int, reason: String?): Boolean { closes++; return true }
-        override fun cancel() = Unit
+        override fun cancel() { cancels++ }
         fun open() {
             listener.onOpen(this, Response.Builder().request(request).protocol(Protocol.HTTP_1_1)
                 .code(101).message("Switching Protocols").build())
