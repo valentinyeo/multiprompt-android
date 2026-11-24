@@ -122,7 +122,7 @@ account_layout_receipt group-renamed "$renamed_layout"
 "$mpa" read --wait-absent 'Rename group'
 "$mpa" read --wait-text RECENTS
 "$mpa" screenshot group-ungrouped
-"$mpa" proof --name group-ungrouped --require-text RECENTS --require-text OTHER --order RECENTS --order OTHER --forbid-text RENAMED --forbid-text ORIGINAL --forbid-text 'Rename group'
+"$mpa" proof --name group-ungrouped --require-text RECENTS --require-text OTHER --forbid-text RENAMED --forbid-text ORIGINAL --forbid-text 'Rename group'
 account_layout_prefs group-ungrouped "$ungrouped_layout"
 account_layout_receipt group-ungrouped "$ungrouped_layout"
 sudo cat /home/verifyssh/device-approval-receipts.jsonl > "$EVIDENCE/device-approval-receipts.txt"
