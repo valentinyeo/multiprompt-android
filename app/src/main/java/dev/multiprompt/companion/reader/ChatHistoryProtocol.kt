@@ -43,7 +43,8 @@ object ChatHistoryProtocol {
     data class Identity(val agent: AgentKind, val tmux: String, val cwd: String = "", val sid: String = "")
 
     enum class QueueOperation(val wire: String) {
-        ENQUEUE("enqueue"), REMOVE("remove"), DEQUEUE("dequeue"), POP_ALL("popAll"), REJECTED("rejected");
+        ENQUEUE("enqueue"), REMOVE("remove"), DEQUEUE("dequeue"), POP_ALL("popAll"), REJECTED("rejected"),
+        BLOCKED("blocked");
     }
 
     data class Settlement(val operation: QueueOperation, val content: String)
