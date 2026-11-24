@@ -13,7 +13,6 @@ export const usage = 'Usage: node tools/merge-lock.mjs acquire|release|status [h
 
 export const chatHolderVars = ['MERGE_LOCK_HOLDER', 'MULTIBOT_SESSION', 'ZSB_SESSION', 'MULTIBOT_SID', 'CLAUDE_CODE_SESSION_ID', 'PI_SESSION_ID', 'TMUX_PANE'];
 
-// One holder name per chat, so a later call in the same chat can renew or release its own lock.
 export function defaultHolder(env = process.env) {
   const chat = chatHolderVars.map(name => env?.[name]).find(value => typeof value === 'string' && value.trim());
   return chat ? chat.trim() : hostname();
@@ -59,7 +58,6 @@ export function ghApiMaybe(run, method, path, fields) {
   }
 }
 
-// GitHub can serve a just-released ref from a short cache, so every read asks for a fresh one.
 export function refReadPath(nonce = Date.now()) {
   return `repos/${repo}/git/ref/${lockRef}?t=${nonce}`;
 }
