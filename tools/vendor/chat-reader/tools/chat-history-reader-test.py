@@ -5502,7 +5502,7 @@ const {run} = await import(process.argv[1]);
 const temp = {};
 for (const key of ['TMPDIR', 'TMP', 'TEMP']) if (process.env[key]) temp[key] = process.env[key];
 const runtimeEnv = {HOME: process.argv[2], PATH: process.env.PATH, LANG: 'C.UTF-8', ...temp};
-process.exitCode = await run(['spawn', '--name', 'Headless fixture', '--folder', process.argv[2], '--workspace', 'Work', '--mode', 'headless', '--task', process.argv[4]], {
+process.exitCode = await run(['spawn', '--name', 'Headless fixture', '--folder', process.argv[2], '--workspace', 'Work', '--host', '0', '--mode', 'headless', '--task', process.argv[4]], {
   env: {...runtimeEnv, MULTIPROMPT_KEY: 'fixture-key', MULTIPROMPT_READER: process.argv[3]},
   runtime: (args, input) => spawnSync('python3', [process.argv[3], ...args], {input, encoding: 'utf8', timeout: 30000, env: runtimeEnv, maxBuffer: 1048576}),
   fetch: async () => ({status: 200, json: async () => ({revision: 0, layout: {workspaces: [{name: 'Work'}], tabs: []}})}),
@@ -8764,6 +8764,46 @@ class SOFT2272HostedClearTest(unittest.TestCase):
     def test_an_owner_read_never_switches_session(self):
         wire = reader.response(dict(self.query), reader.READER_SOURCE, as_owner=True)
         self.assertIn('PINEAPPLE', wire)
+
+
+class MUBO_239_DisplayHistoryReplyIdTest(unittest.TestCase):
+    provider = 'claude'
+    sid = 'mubo-239-history'
+    tmux = 'mubo-239-chat'
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(patch.stopall)
+        self.home = Path(self.temp.name)
+        patch.object(reader, 'HOME', self.home).start()
+        self.session = dict(state=dict(display_history=True))
+        reader.host_session_reset(self.session, types.SimpleNamespace(stdin=io.BytesIO()))
+
+    def history_rows(self):
+        history = reader.host_paths(self.provider, self.sid)['history']
+        if not history.exists():
+            return []
+        return [json.loads(line)['row'] for line in history.read_text().splitlines() if line.strip()]
+
+    def test_text_done_reuses_the_live_item_id_in_display_history(self):
+        reader.host_event(self.provider, self.sid, None, self.session, 'text.done',
+                          dict(text='Hello once'), item='msg_X:text:0')
+        rows = self.history_rows()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['id'], 'msg_X:text:0')
+        self.assertEqual(rows[0]['text'], 'Hello once')
+
+    def test_legacy_history_rows_still_decode(self):
+        history = reader.host_paths(self.provider, self.sid)['history']
+        history.parent.mkdir(parents=True, exist_ok=True)
+        legacy = dict(type='multiprompt_history',
+                      row=dict(role='assistant', id='history-deadbeef', text='Older reply', timestamp='2026-01-01T00:00:00'))
+        history.write_text(json.dumps(legacy, separators=(',', ':')) + '\n')
+        rows = reader.conversation_rows(legacy, self.provider)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['id'], 'history-deadbeef')
+        self.assertEqual(rows[0]['text'], 'Older reply')
 
 
 class SOFT_2348_PiLoginAnswerTest(unittest.TestCase):

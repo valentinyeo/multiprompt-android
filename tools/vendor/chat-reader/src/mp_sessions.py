@@ -33,7 +33,9 @@ def display_name(name):
 
 
 def host_slot(text=None):
-    text = (text if text is not None else os.environ.get("MULTIPROMPT_HOST") or "0").strip()
+    text = (text if text is not None else os.environ.get("MULTIPROMPT_HOST") or "").strip()
+    if not text:
+        raise ValueError("set MULTIPROMPT_HOST to this server's account slot: 0, 1 or 2")
     try:
         slot = int(text)
     except ValueError:
@@ -126,6 +128,8 @@ def session_catalog(send, listing):
             host=row.get("host"),
             workspace=row.get("workspace") or config.get("spawn_workspace"),
             group=row.get("group") if "group" in row else config.get("spawn_group"),
+            recorded_host=config.get("spawn_host"),
+            recorded_host_name=config.get("spawn_host_name"),
         )
         row["running"] = config.get("enabled") is True and alive
         row["busy"] = bool(state.get("inflight")) and alive
@@ -188,7 +192,11 @@ def ensure_visible(send, listing, target, display):
     workspace = target.get("workspace")
     if not workspace:
         workspace = default_workspace(listing)
-    host = target.get("host") or host_name(listing, host_slot())
+    host = target.get("host") or target.get("recorded_host_name")
+    if not host and isinstance(target.get("recorded_host"), int):
+        host = host_name(listing, target["recorded_host"])
+    if not host:
+        raise ValueError("this chat has no recorded host; start it again to record the server it runs on")
     present = send.find_tab(listing, target["tmux"])[2]
     if target.get("tab_open") or present:
         return dict(ok=True, tab=(present or {}).get("id") or target.get("tab_id"), existing=True)
