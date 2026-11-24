@@ -23,32 +23,54 @@ def inventory():
     return {"track_since": "2026-10-29T22:55:59Z", "features": [], "catch_up_tickets": []}
 
 
+def relation(number="MUBO-165", direction="incoming"):
+    other = {"id": 93381, "title": "Reader keeps the old offset", "status": "Normal",
+             "projectId": 13734, "uniqueIndex": 165}
+    if number is not None:
+        other["ticketNumber"] = number
+    return {"relationType": "RelatedTo", "direction": direction, "otherTask": other}
+
+
+def stub(links=None, twin="MUBO-2001", calls=None, direction="incoming"):
+    links = links or {}
+    def api(*args):
+        if args[:2] == ("task", "relations"):
+            return {"relations": [{"relationType": "RelatedTo", "direction": direction,
+                                   "otherTask": {"ticketNumber": other}}
+                                  for other in links.get(args[2], [])]}
+        if calls is not None:
+            calls.append(args)
+        return {"tasks": [task(twin, "Multiprompt Android")]}
+    return api
+
+
 class ParityTests(unittest.TestCase):
     def test_unlinked_inventory_gap_gets_a_ticket_once(self):
         data = inventory()
         data["features"] = [{"id": "voice", "name": "Spoken replies", "desktop": {"status": "shipped"}, "android": {"status": "missing"}}]
         calls = []
-        def api(*args):
-            calls.append(args)
-            return {"task": task("MUBO-2001", "Multiprompt Android", description=args[-1])}
-        result = parity.reconcile(data, [], True, api)
+        result = parity.reconcile(data, [], True, stub(twin="MUBO-2001", calls=calls))
         self.assertEqual(result, [{"source": "feature:voice", "target": "android", "ticket": "MUBO-2001"}])
         self.assertIn("MP-GAP:voice:android", calls[0][-1])
+        self.assertEqual(len(calls), 1)
         twin = task("MUBO-2001", "Multiprompt Android", description=calls[0][-1])
-        self.assertEqual(parity.reconcile(data, [twin], True, api), [])
+        self.assertEqual(parity.reconcile(data, [twin], True, stub(calls=calls)), [])
         self.assertEqual(len(calls), 1)
 
     def test_new_desktop_feature_gets_android_twin(self):
         calls = []
-        def api(*args):
-            calls.append(args)
-            return {"tasks": [task("MUBO-2001", "Multiprompt Android")]}
-        result = parity.reconcile(inventory(), [task()], True, api)
+        result = parity.reconcile(inventory(), [task()], True, stub(calls=calls))
         self.assertEqual(result, [{"source": "MUBO-2000", "target": "android", "ticket": "MUBO-2001"}])
         self.assertEqual(calls[0][calls[0].index("--labels") + 1], "Multiprompt Android")
         self.assertEqual(calls[0][calls[0].index("--project") + 1], "13734")
         self.assertIn("MP-PAIR:MUBO-2000:android", calls[0][-1])
         self.assertIn("https://app.hypertask.ai/detail/project-13734/2000", calls[0][-1])
+
+    def test_created_twin_is_linked_to_its_source(self):
+        calls = []
+        parity.reconcile(inventory(), [task()], True, stub(calls=calls))
+        self.assertEqual(calls[1], ("task", "link", "MUBO-2000", "MUBO-2001", "--type", "RelatedTo"))
+        self.assertEqual(len(calls), 2)
 
     def test_feature_row_links_each_ticket_to_its_own_board(self):
         data = {"reviewed": "2026-10-29", "track_since": "2026-10-29T22:55:59Z", "catch_up_tickets": [], "features": [
@@ -64,20 +86,79 @@ class ParityTests(unittest.TestCase):
         for source, link in (("IGSH-2000", "project-2060/2000"), ("MUBO-2000", "project-13734/2000")):
             with self.subTest(source=source):
                 calls = []
-                def recording(*args):
-                    calls.append(args)
-                    return {"tasks": [task("MUBO-2001", "Multiprompt Android")]}
-                parity.reconcile(inventory(), [task(source)], True, recording)
+                parity.reconcile(inventory(), [task(source)], True, stub(calls=calls))
                 self.assertIn(f"https://app.hypertask.ai/detail/{link}", calls[0][-1])
 
     def test_android_request_gets_desktop_counterpart(self):
-        result = parity.reconcile(inventory(), [task(label="Multiprompt Android")])
+        result = parity.reconcile(inventory(), [task(label="Multiprompt Android")], False, stub())
         self.assertEqual(result, [{"source": "MUBO-2000", "target": "desktop"}])
+
+    def test_24_nov_duplicates_are_paired_by_real_links(self):
+        rows = [task("MUBO-3000", createdAt="2026-11-24T09:00:00Z"),
+                task("MUBO-3001", "Multiprompt Android", createdAt="2026-11-24T09:00:00Z"),
+                task("MUBO-3002", createdAt="2026-11-24T09:10:00Z"),
+                task("MUBO-3003", "Multiprompt Android", createdAt="2026-11-24T09:10:00Z")]
+        linked = {"MUBO-3000": ["MUBO-3001"], "MUBO-3001": ["MUBO-3000"],
+                  "MUBO-3002": ["MUBO-3003"], "MUBO-3003": ["MUBO-3002"]}
+        self.assertEqual(parity.pairs(inventory(), rows, stub(links=linked)), [])
+        self.assertEqual(len(parity.pairs(inventory(), rows, stub())), 4)
+
+    def test_link_pairs_in_either_direction(self):
+        desktop = task("MUBO-3000")
+        android = task("MUBO-3001", "Multiprompt Android")
+        linked = {"MUBO-3000": ["MUBO-3001"], "MUBO-3001": ["MUBO-3000"]}
+        for direction in ("incoming", "outgoing"):
+            with self.subTest(direction=direction):
+                self.assertEqual(parity.pairs(inventory(), [desktop, android],
+                                              stub(links=linked, direction=direction)), [])
+        self.assertEqual(parity.pairs(inventory(), [android], stub(links={"MUBO-3001": ["IGSH-2000"]})), [])
+        self.assertEqual(parity.pairs(inventory(), [desktop], stub(links={"MUBO-3000": ["IGSH-2000"]})),
+                         [(desktop, "android")])
+        self.assertEqual(parity.pairs(inventory(), [desktop], stub(links={"MUBO-3000": ["MUBO-3002"]})), [])
+
+    def test_relation_to_another_board_is_skipped(self):
+        desktop = task("MUBO-3000")
+        def api(*args):
+            return {"success": True, "relations": [relation("SOFT-12")]}
+        self.assertEqual(parity.links("MUBO-3000", api), [])
+        self.assertEqual(parity.pairs(inventory(), [desktop], api), [(desktop, "android")])
+
+    def test_relation_without_a_ticket_number_is_skipped(self):
+        def api(*args):
+            return {"success": True, "relations": [relation(None)]}
+        self.assertEqual(parity.links("MUBO-3000", api), [])
+
+    def test_cap_refuses_a_big_plan_and_creates_nothing(self):
+        rows = [task(f"MUBO-{3000 + index}") for index in range(6)]
+        calls = []
+        with self.assertRaises(parity.CapExceeded) as raised:
+            parity.reconcile(inventory(), rows, True, stub(calls=calls))
+        self.assertEqual(raised.exception.cap, 5)
+        self.assertEqual(len(raised.exception.plan), 6)
+        self.assertEqual(calls, [])
+
+    def test_explicit_max_create_allows_a_bigger_run(self):
+        rows = [task(f"MUBO-{3000 + index}") for index in range(6)]
+        calls = []
+        result = parity.reconcile(inventory(), rows, True, stub(calls=calls), max_create=6)
+        self.assertEqual(len(result), 6)
+        self.assertEqual(len([item for item in calls if item[:2] == ("task", "create")]), 6)
+        self.assertEqual(len([item for item in calls if item[:2] == ("task", "link")]), 6)
+
+    def test_closed_tickets_are_never_sources_or_pairs(self):
+        done = task("MUBO-2001", "Multiprompt Android", section="Done", sectionIsDone=True)
+        not_now = task("MUBO-2002", "Multiprompt Android", section="Not now",
+                       description="<p>MP-PAIR:MUBO-2000:android</p>")
+        self.assertEqual(parity.pairs(inventory(), [done, not_now]), [])
+        planned = parity.pairs(inventory(), [task(), not_now], stub(links={"MUBO-2000": ["MUBO-2002"]}))
+        self.assertEqual([row["ticketNumber"] for row, _ in planned], ["MUBO-2000"])
 
     def test_replay_after_create_response_lost_does_not_duplicate(self):
         rows = [task()]
         calls = []
         def lost(*args):
+            if args[:2] == ("task", "relations"):
+                return {"relations": []}
             calls.append(args)
             rows.append(task("MUBO-2001", "Multiprompt Android", description=args[-1]))
             raise TimeoutError("Response lost after server created ticket")
@@ -104,7 +185,7 @@ class ParityTests(unittest.TestCase):
     def test_initial_catch_up_is_explicit(self):
         data = inventory()
         data["catch_up_tickets"] = ["MUBO-2000"]
-        self.assertEqual(len(parity.pairs(data, [task(createdAt="2026-10-01T00:00:00Z")])), 1)
+        self.assertEqual(len(parity.pairs(data, [task(createdAt="2026-10-01T00:00:00Z")], stub())), 1)
 
     def test_linked_gap_ticket_is_reused(self):
         data = inventory()
@@ -120,6 +201,8 @@ class ParityTests(unittest.TestCase):
 
     def test_dry_run_never_writes(self):
         def forbidden(*args):
+            if args[:2] == ("task", "relations"):
+                return {"relations": []}
             self.fail("Dry run wrote a ticket")
         self.assertEqual(len(parity.reconcile(inventory(), [task()], False, forbidden)), 1)
 
@@ -148,13 +231,20 @@ class ParityTests(unittest.TestCase):
                 parity.board(lambda *args: page)
 
     def test_creation_response_needs_real_ticket(self):
+        def api(*args):
+            if args[:2] == ("task", "relations"):
+                return {"relations": []}
+            return {"success": True}
         with self.assertRaises(ValueError):
-            parity.reconcile(inventory(), [task()], True, lambda *args: {"success": True})
+            parity.reconcile(inventory(), [task()], True, api)
 
     def test_creation_on_the_old_board_is_rejected(self):
+        def api(*args):
+            if args[:2] == ("task", "relations"):
+                return {"relations": []}
+            return {"success": True, "tasks": [task("IGSH-2001", "Multiprompt Android")]}
         with self.assertRaises(ValueError):
-            parity.reconcile(inventory(), [task()], True,
-                             lambda *args: {"success": True, "tasks": [task("IGSH-2001", "Multiprompt Android")]})
+            parity.reconcile(inventory(), [task()], True, api)
 
     def test_inventory_and_generated_reference(self):
         data = json.loads((ROOT / "tools/parity/multiprompt-features.json").read_text())

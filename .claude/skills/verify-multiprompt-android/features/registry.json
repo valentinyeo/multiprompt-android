@@ -1,5 +1,20 @@
 {
   "smoke": "native-skills.md",
+  "speedCheck": {
+    "paths": [
+      "^tools/speed-check/",
+      "^\\.github/workflows/speed-check\\.yml$",
+      "^app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest\\.kt$",
+      "^app/src/test/java/dev/multiprompt/companion/ui/ChatListSnapshotTest\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/ui/(?:MultipromptApp|ChatHistoryList|ChatBubble|SessionPreview|SessionGroups|SessionActivity|InboxListEnd|TopFade|NewBelow|ReaderScroll|ChatOpenAnchor|MarkdownText)\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/(?:MainViewModel|MainActivity)\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/reader/",
+      "app/src/main/java/dev/multiprompt/companion/ssh/SshRepository\\.kt$",
+      "app/src/main/java/dev/multiprompt/companion/data/(?:SessionCacheStore|SessionReadStore|InboxOrder|PinnedChats)\\.kt$",
+      "app/src/main/assets/chat_history_reader\\.py$",
+      "^tools/vendor/chat-reader/"
+    ]
+  },
   "journeys": {
     "ai-switch.md": {
       "name": "Switch AI",
@@ -11,7 +26,8 @@
         "prerequisites": [],
         "driver": true,
         "scripts": [
-          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh"
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-fixture.py"
         ]
       },
       "outcomes": [
@@ -308,7 +324,8 @@
         ]
       },
       "outcomes": [
-        "claude.skills-model-effort"
+        "claude.skills-model-effort",
+        "reader.follow-newest"
       ],
       "evidence": {
         "native-menu-state.txt": 5000,
@@ -1232,6 +1249,33 @@
         "room-existing-submits.txt": 1500
       }
     },
+    "pi-login.md": {
+      "name": "Sign in to Pi from a chat",
+      "description": "Open a Pi chat with a pending host login, tap its card, prove the HTTPS browser handoff, and clear the card on the host result. Uses the ai-switch driver.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {
+          "feature": "ai-switch.md"
+        },
+        "prerequisites": [],
+        "driver": false,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/pi-login-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/pi-login-browser.py"
+        ]
+      },
+      "outcomes": [
+        "chat.pi-login"
+      ],
+      "evidence": {
+        "pi-login-pending.json": 2000,
+        "pi-login-host.json": 2000,
+        "pi-login-browser.json": 1000,
+        "pi-login-completed.json": 2000,
+        "pi-login-after.json": 1000
+      }
+    },
     "workspace-group-controls.md": {
       "name": "Workspace and group controls",
       "description": "Create a workspace through the inbox menu, cancel and dismiss it, then long-press a chat group to rename and ungroup it, with the stored account layout checked. MUBO-288.",
@@ -1540,6 +1584,31 @@
       "sideEffect": true,
       "match": [
         "switchAi|SwitchAi|Switch AI|switchAgent|SwitchAgent|host_switch_|HOST_SWITCH_|switch_ai"
+      ]
+    },
+    "chat.pi-login": {
+      "description": "Only host Pi login rows show a sign-in card; tapping its HTTPS link starts the browser flow, and the host login result clears the card.",
+      "journey": "pi-login.md",
+      "sideEffect": true,
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap text 'Open sign-in link'"
+        },
+        "result": {
+          "file": "pi-login-browser.json",
+          "quote": "\"action\": \"android.intent.action.VIEW\", \"url\": \"https://pi.example/verify-device\""
+        },
+        "sideEffect": {
+          "file": "pi-login-host.json",
+          "quote": "\"item\": \"pi-login-1\""
+        }
+      },
+      "match": [
+        "PiLoginPrompt"
+      ],
+      "paths": [
+        "^app/src/(?:main|test)/java/dev/multiprompt/companion/reader/PiLoginPrompt(?:Test)?\\.kt$"
       ]
     },
     "pi.model-switch": {
@@ -2187,6 +2256,14 @@
           "quote": "\"group\": \"Renamed\""
         }
       }
+    },
+    "reader.follow-newest": {
+      "description": "A chat already showing its newest reply keeps incoming replies on screen through the working indicator and message layout changes, without tapping Jump to newest. The native-skills journey requires each model and effort reply on screen after its independent host receipt.",
+      "journey": "native-skills.md",
+      "sideEffect": true,
+      "match": [
+        "NewestFollower"
+      ]
     }
   }
 }
