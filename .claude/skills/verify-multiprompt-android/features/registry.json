@@ -523,17 +523,21 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 46 rows render.",
+      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin at the visual top of the Inbox list across replies and app restart. Does not assert all 46 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/pin-chat-drive.sh"
+        ]
       },
       "outcomes": [
         "inbox.search",
-        "legacy.igsh-414"
+        "legacy.igsh-414",
+        "inbox.pin-chat"
       ],
       "evidence": {
         "seed-counts.json": 2500,
@@ -543,7 +547,7 @@
         "seed-deep-choice.json": 900,
         "search-keyboard.json": 1200,
         "row-long-press-actions.xml": 1500,
-        "start-agent-picker.xml": 1400
+        "pin-chat-state.json": 1400
       }
     },
     "settings-navigation.md": {
@@ -1387,6 +1391,27 @@
       "match": [
         "SessionSearch|SessionFinder"
       ]
+    },
+    "inbox.pin-chat": {
+      "description": "Pinning a chat from the chat menu puts it at the visual top of the Inbox list in both sort orders, keeps it there when another chat gets a new reply, survives app restart, and unpinning restores normal order.",
+      "journey": "sessions.md",
+      "sideEffect": false,
+      "match": [
+        "PinnedChats|PinnedChatStore|pinnedSessionKeys|setSessionPinned|Pin to top|UNPIN_LABEL|PIN_LABEL"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/data/PinnedChats\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa tap text 'Pin to top'"
+        },
+        "result": {
+          "file": "pin-chat-state.json",
+          "quote": "\"allPassed\":true"
+        }
+      }
     },
     "settings-navigation.journey": {
       "description": "sessions-first settings, host mapping and account handoff on the signed APK.",

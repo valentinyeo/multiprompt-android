@@ -263,6 +263,7 @@ import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.UnreadOnlyFilter
+import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SnippetStore
 import dev.multiprompt.companion.data.Snippets
@@ -460,6 +461,12 @@ private fun AppScreens(viewModel: MainViewModel) {
             onOpenMentionedSession = viewModel::openMentionedSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
+            pinned = PinnedChats.isPinned(state.pinnedSessionKeys, readerSession),
+            pinEnabled = PinnedChats.isPinned(state.pinnedSessionKeys, readerSession) ||
+                state.sessionBucket != SessionBucket.ARCHIVE,
+            onTogglePin = {
+                viewModel.setSessionPinned(readerSession, !PinnedChats.isPinned(state.pinnedSessionKeys, readerSession))
+            },
             initialFontScale = viewModel.readerFontScale(readerSession),
             onBack = viewModel::closeReader,
             onReleaseNotes = viewModel::openReleaseNotes,
@@ -594,6 +601,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onMoveSession = viewModel::moveSession,
                     onRenameSession = viewModel::renameSession,
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
+                    onSetPinned = viewModel::setSessionPinned,
                     onSetMuted = { tab, value -> viewModel.editAccountLayout { it.setMuted(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onRefreshRooms = { viewModel.refreshRooms() },
@@ -1273,6 +1281,7 @@ internal fun SessionsScreen(
     onUngroup: (String, Boolean) -> String? = { _, _ -> null },
     onShowAiUsage: () -> Unit = {},
     onDismissAiUsage: () -> Unit = {},
+    onSetPinned: (TmuxSession, Boolean) -> Unit = { _, _ -> },
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1895,9 +1904,11 @@ internal fun SessionsScreen(
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
                 )
         }
-    val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
+    val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
+    val visibleSessions = (if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
-    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
+    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts))
+        .let { PinnedChats.order(it, state.pinnedSessionKeys, atEnd = reversedSessions) }
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
@@ -1938,7 +1949,6 @@ internal fun SessionsScreen(
             }
         }
     }
-    val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
     val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
         val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
         tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
@@ -1953,6 +1963,14 @@ internal fun SessionsScreen(
     LaunchedEffect(sessionListState, listEnd, openSplitId, sessionListEntries) {
         if (listEnd.revealsNewest(openSplitId, sessionListEntries, sessionListState.firstVisibleItemIndex)) {
             sessionListState.scrollToItem(0)
+        }
+    }
+    var lastPinnedKeys by remember { mutableStateOf(state.pinnedSessionKeys) }
+    LaunchedEffect(state.pinnedSessionKeys, reversedSessions, sessionListEntries) {
+        val added = state.pinnedSessionKeys - lastPinnedKeys.toSet()
+        lastPinnedKeys = state.pinnedSessionKeys
+        if (added.isNotEmpty() && sessionListEntries > 0) {
+            sessionListState.scrollToItem(if (reversedSessions) sessionListEntries - 1 else 0)
         }
     }
     Scaffold(
@@ -2252,6 +2270,9 @@ internal fun SessionsScreen(
                             unread = key in state.unreadSessionKeys,
                             unreadCount = state.unreadCounts[key] ?: 1,
                             archived = key in state.archivedSessionKeys,
+                            pinned = key in state.pinnedSessionKeys,
+                            pinEnabled = key in state.pinnedSessionKeys || state.sessionBucket != SessionBucket.ARCHIVE,
+                            onTogglePin = { onSetPinned(session, key !in state.pinnedSessionKeys) },
                             starred = starred,
                             hasDraft = key in draftKeys,
                             onToggleFavorite = if (tab != null && state.signedIn) {
@@ -2505,6 +2526,9 @@ private fun SessionCard(
     onToggleMute: (() -> Unit)? = null,
     onMoveToGroup: (() -> Unit)? = null,
     inFavoritesView: Boolean = false,
+    pinned: Boolean = false,
+    pinEnabled: Boolean = false,
+    onTogglePin: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2632,6 +2656,17 @@ private fun SessionCard(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
+                    if (pinEnabled) {
+                        onTogglePin?.let { toggle ->
+                            KitMenuRow(
+                                label = if (pinned) PinnedChats.UNPIN_LABEL else PinnedChats.PIN_LABEL,
+                                onClick = {
+                                    menuExpanded = false
+                                    toggle()
+                                },
+                            )
+                        }
+                    }
                     onToggleFavorite?.let { toggle ->
                         KitMenuRow(
                             label = if (starred) "Unfavorite" else "Favorite",
@@ -3047,6 +3082,9 @@ internal fun ReaderScreen(
     mentionChats: List<MentionChat> = emptyList(),
     onOpenMentionedSession: (String) -> Unit = {},
     unreadSinceEpochSeconds: Long? = null,
+    pinned: Boolean = false,
+    pinEnabled: Boolean = false,
+    onTogglePin: (() -> Unit)? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
@@ -4050,6 +4088,17 @@ internal fun ReaderScreen(
                                             android.widget.Toast.makeText(context, dev.multiprompt.companion.model.ChatId.COPIED, android.widget.Toast.LENGTH_SHORT).show()
                                         },
                                     )
+                                }
+                                if (pinEnabled) {
+                                    onTogglePin?.let { toggle ->
+                                        KitMenuRow(
+                                            label = if (pinned) PinnedChats.UNPIN_LABEL else PinnedChats.PIN_LABEL,
+                                            onClick = {
+                                                menuExpanded = false
+                                                toggle()
+                                            },
+                                        )
+                                    }
                                 }
                                 KitMenuRow(
                                     label = "Remind Me…",

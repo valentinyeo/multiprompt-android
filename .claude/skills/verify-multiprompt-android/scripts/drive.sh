@@ -1687,6 +1687,7 @@ if [[ "$feature" == sessions.md ]]; then
     cp "$EVIDENCE/current.xml" "$EVIDENCE/row-long-press-actions.xml"
     adb shell input keyevent KEYCODE_BACK
     wait_for_absence 'End tmux session'
+    source "$scripts/pin-chat-drive.sh"
     sudo -u verifyssh tmux list-sessions -F '#{session_name}' > "$EVIDENCE/sessions-before-agent-picker.txt"
     tap_desc 'New session'
     wait_for_text 'Use this folder'
