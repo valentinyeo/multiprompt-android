@@ -816,7 +816,7 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         bot_face = json.loads((self.evidence / 'mention-bot-face.json').read_text())
         self.assertTrue(bot_face['passed'])
         self.assertEqual(['same-bot', 'look-changed'], [check['kind'] for check in bot_face['checks']])
-        self.assertEqual([(128, 128)], [tuple(avatar['crop']) for avatar in bot_face['avatars'].values()])
+        self.assertEqual([(128, 128)] * 3, [tuple(avatar['crop']) for avatar in bot_face['avatars'].values()])
         self.assertEqual('MENTION_LIST_NAMED_BY_CHAT', (self.evidence / 'mention-proof.txt').read_text().splitlines()[0])
         self.assertEqual('@Mention 2953{live-cl_mention-2953}', (self.evidence / 'mention-receipts.txt').read_text().splitlines()[-1])
         mention_sent = json.loads((self.evidence / 'mention-sent.json').read_text())
