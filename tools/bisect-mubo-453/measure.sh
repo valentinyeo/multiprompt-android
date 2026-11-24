@@ -21,6 +21,14 @@ marker=$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["latest"
 
 mpa() { python3 -B "$scripts/mpa" "$@"; }
 
+current_sha=${current_sha:-none}
+
+capture_anr() {
+    local tag=$1 dir="$out/anr/$current_sha"
+    mkdir -p "$dir"
+    bash tools/bisect-mubo-453/anr.sh "$dir" "$tag" 2>&1 | tee -a "$out/anr.txt" >> "$dir/run-$tag.txt"
+}
+
 adb shell settings put global hide_error_dialogs 1 > /dev/null 2>&1 || true
 adb shell dumpsys window > "$out/window.txt" 2>&1 || true
 
@@ -28,6 +36,7 @@ dismiss_anr() {
     local xml="$out/anr.xml" point x y
     mpa read --out "$xml" > /dev/null 2>&1 || return 0
     python3 "$scripts/ui.py" "$xml" contains "isn't responding" > /dev/null 2>&1 || return 0
+    capture_anr dialog
     point=$(python3 "$scripts/ui.py" "$xml" text Wait) || return 0
     read -r x y <<< "$point"
     adb shell input tap "$x" "$y"
@@ -44,6 +53,7 @@ wait_text() {
         sleep 2
     done
     printf 'MISSING_TEXT %s\n' "$label" >> "$out/setup-failures.txt"
+    capture_anr "wait-$label"
     return 1
 }
 
@@ -80,6 +90,7 @@ launch_inbox() {
         sleep 5
     done
     printf 'MISSING_TEXT Inbox\n' >> "$out/setup-failures.txt"
+    capture_anr launch
     return 1
 }
 
@@ -100,18 +111,21 @@ open_chat() {
 
 window() {
     local pair=$1 side=$2 sha=$3 trial=$4 pid start end begin finish rendered=missing delivered=0
+    current_sha=$sha
     if ! install_side "$sha"; then
         printf '%s,%s,%s,%s,,,,install-failed\n' "$pair" "$side" "$sha" "$trial" >> "$readings"
         return 1
     fi
     if ! open_chat; then
         printf '%s,%s,%s,%s,,,,open-failed\n' "$pair" "$side" "$sha" "$trial" >> "$readings"
+        capture_anr open-failed
         return 1
     fi
     sleep 5
     pid=$(adb shell pidof "$package" 2> /dev/null | tr -d '\r ' | awk '{print $1}')
     if [ -z "$pid" ]; then
         printf '%s,%s,%s,%s,,,,no-pid\n' "$pair" "$side" "$sha" "$trial" >> "$readings"
+        capture_anr no-pid
         return 1
     fi
     start=$(ticks "$pid")
@@ -128,6 +142,7 @@ window() {
         rendered=ok
     fi
     mpa screenshot "bisect-$pair-$side-$trial" > /dev/null 2>&1 || true
+    capture_anr window
     printf '%s,%s,%s,%s,%s,%.2f,%s,%s\n' "$pair" "$side" "$sha" "$trial" \
         "$((end - start))" "$(python3 -c "print($finish - $begin)")" "$delivered" "$rendered" >> "$readings"
     printf 'WINDOW pair=%s side=%s sha=%s trial=%s ticks=%s rendered=%s\n' \
@@ -136,6 +151,7 @@ window() {
 
 sudo install -m 755 tools/bisect-mubo-453/stream.py /home/verifyssh/bisect-stream.py
 first=$(python3 -B tools/bisect-mubo-453/plan.py "$rounds" | head -1)
+current_sha=$first
 if ! install_side "$first"; then
     printf 'SETUP_FAILED install %s\n' "$first" | tee "$out/setup-failures.txt"
     exit 1
