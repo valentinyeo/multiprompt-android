@@ -36,7 +36,13 @@ timeout 120 adb shell dumpsys dropbox --print data_app_anr > "$dir/dropbox-$tag.
 timeout 120 adb logcat -d -b all 2> /dev/null \
     | grep -i -E 'ANR in |Reason: |Input dispatching timed out|not responding' > "$dir/logcat-$tag.txt" 2>&1 || true
 
-if [ "$files" -eq 0 ] && [ ! -f "$dir/bugreport-tried" ]; then
+anr_signs=0
+if grep -qiE 'ANR in |not responding|Input dispatching timed out' "$dir/logcat-$tag.txt" 2> /dev/null; then anr_signs=1; fi
+if grep -qE 'ANR in |Cmd line: ${VERIFY_PACKAGE:-multiprompt}' "$dir/dropbox-$tag.txt" 2> /dev/null; then anr_signs=1; fi
+if grep -q . "$dir/ls-$tag.txt" 2> /dev/null && grep -q 'anr_' "$dir/ls-$tag.txt" 2> /dev/null; then anr_signs=1; fi
+say "files=$files signs=$anr_signs"
+
+if [ "$anr_signs" -eq 1 ] && [ "$files" -eq 0 ] && [ ! -f "$dir/bugreport-tried" ]; then
     touch "$dir/bugreport-tried"
     say 'no traces, falling back to bugreport'
     timeout 900 adb bugreport "$dir/bugreport.zip" >> "$dir/bugreport-$tag.txt" 2>&1 || true

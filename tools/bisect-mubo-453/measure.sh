@@ -170,7 +170,9 @@ printf 'SETUP_READY long_chat=%s marker=%s repeats=%s window_s=%s replies=%s\n' 
     cl-long-chat "$marker" "$repeats" "$window_s" "$replies"
 
 pair_index=0
-while read -r base suspect; do
+mapfile -t pair_lines < <(python3 -B tools/bisect-mubo-453/plan.py "$rounds" --pairs)
+for line in "${pair_lines[@]}"; do
+    read -r base suspect <<< "$line"
     pair_index=$((pair_index + 1))
     trial=1
     while [ "$trial" -le "$repeats" ]; do
@@ -186,7 +188,7 @@ while read -r base suspect; do
         done
         trial=$((trial + 1))
     done
-done < <(python3 -B tools/bisect-mubo-453/plan.py "$rounds" --pairs)
+done
 
 adb logcat -d > "$out/logcat.txt" 2>&1 || true
 python3 -B tools/bisect-mubo-453/report.py --readings "$readings" --versions .bisect/versions.json --out "$out" | tee "$out/report.txt"
