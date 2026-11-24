@@ -5,16 +5,16 @@ Desktop also owns the test files.
 Source: [Desktop master](https://github.com/valentinyeo/multiprompt/tree/4e43135910fd38cb8939506a29a07c2ea62c1066).
 
 `tools/sync-chat-reader.sh` holds the one pin: the desktop revision and the SHA-256 of every bundled file.
-It copies those files into `app/src/main/assets/` and writes `app/src/main/assets/chat_history_reader.sha`, which holds the revision on its first line and the bundle length and SHA-256 on its second.
+It copies those files into `app/src/main/assets/` and writes two pin files from that one revision: `app/src/main/assets/chat_history_reader.sha` for the app, and `app/src/androidTest/assets/chat_reader_pin.txt` with the revision and the bundle length and SHA-256 for the phone test.
 `tools/chat-reader-bundle.py` computes that fingerprint from the bundled bytes.
-Never edit the bundled files or the pin by hand: re-pin by changing the revision in the script and running it.
+Never edit the bundled files or the pin files by hand: re-pin by changing the revision in the script and running it.
 
 `tools/sync-chat-reader.sh --check` verifies every asset and the pin against Desktop.
 Locally, set `MULTIPROMPT_DESKTOP_REPO` to the Desktop repository.
 GitHub Actions can download the pinned files.
 Without `--check`, the script restores those files and the pin.
 `tools/check-canonical-chat-reader.sh` runs it on every pull request.
-`ChatReaderBundleTest` compares the reader bundle the app assembles against the pin on a phone.
+`ChatReaderBundleTest` compares the reader bundle the app assembles against those pin files on a phone.
 `tools/vendor/chat-reader/SHA256SUMS` lists the vendored test corpus hashes.
 
 The bundled reader supplies generation 126.

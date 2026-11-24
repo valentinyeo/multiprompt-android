@@ -7,7 +7,7 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 TOOL = pathlib.Path(__file__).resolve().parent / 'chat-reader-bundle.py'
-PIN = ROOT / 'app/src/main/assets/chat_history_reader.sha'
+PIN = ROOT / 'app/src/androidTest/assets/chat_reader_pin.txt'
 REVISION = 'fb1e1b1e0b7b5b7f4cbe57d0a6b87a2e1f5cf0c2'
 FIXTURE_FINGERPRINT = '203 96241174ad31e5885d071163c9861d66540155d9eaa948d29021e6eb8c72d930'
 
@@ -34,8 +34,8 @@ class ChatReaderBundlePinTest(unittest.TestCase):
             assets = write_assets(root)
             written = run(root, 'write')
             self.assertEqual(written.returncode, 0, written.stderr)
-            lines = (assets / 'chat_history_reader.sha').read_text().splitlines()
-            self.assertEqual(lines, [REVISION, FIXTURE_FINGERPRINT])
+            self.assertEqual((assets / 'chat_history_reader.sha').read_text(), f'{REVISION}\n')
+            self.assertEqual((root / 'app/src/androidTest/assets/chat_reader_pin.txt').read_text().splitlines(), [REVISION, FIXTURE_FINGERPRINT])
             self.assertEqual(run(root, 'check').returncode, 0)
 
     def test_a_hand_edited_reader_fails_the_check_and_names_the_sync_script(self):
@@ -49,12 +49,12 @@ class ChatReaderBundlePinTest(unittest.TestCase):
             self.assertEqual(checked.returncode, 1)
             self.assertIn('tools/sync-chat-reader.sh', checked.stderr)
 
-    def test_a_stale_pin_fails_the_check(self):
+    def test_a_stale_pin_or_revision_fails_the_check(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            assets = write_assets(root)
+            write_assets(root)
             run(root, 'write')
-            pin = assets / 'chat_history_reader.sha'
+            pin = root / 'app/src/androidTest/assets/chat_reader_pin.txt'
             pin.write_text(f'{REVISION}\n506327 b490b690099bf6438fe0cfa6f0bf5172500299dcaaa59864cf4251227e44aaaa\n')
             self.assertEqual(run(root, 'check').returncode, 1)
             self.assertEqual(run(root, 'check', revision='0' * 40).returncode, 1)

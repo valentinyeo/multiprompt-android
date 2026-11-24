@@ -6,7 +6,8 @@ import pathlib
 import sys
 
 ASSETS = pathlib.Path('app/src/main/assets')
-PIN = 'chat_history_reader.sha'
+REVISION_FILE = ASSETS / 'chat_history_reader.sha'
+PIN = pathlib.Path('app/src/androidTest/assets/chat_reader_pin.txt')
 PREFIX = (
     "CONNECTOR_SOURCES = {{'claude':'{claude}','codex':'{codex}'}}\n"
     "MP_SEND_SOURCE = '{mp_send}'\n"
@@ -34,23 +35,30 @@ def pin_text(assets, revision):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='Pin the bundled chat reader to the desktop revision and record its fingerprint.')
+    parser = argparse.ArgumentParser(description='Record the desktop revision and the fingerprint of the bundled chat reader.')
     parser.add_argument('mode', choices=['write', 'check'])
     parser.add_argument('--root', type=pathlib.Path, default=pathlib.Path(__file__).resolve().parents[1])
     parser.add_argument('--revision', required=True)
     args = parser.parse_args(argv)
-    assets = args.root / ASSETS
-    pin = assets / PIN
-    expected = pin_text(assets, args.revision)
+    root = args.root
+    revision_file = root / REVISION_FILE
+    pin = root / PIN
+    expected = {revision_file: f'{args.revision}\n', pin: pin_text(root / ASSETS, args.revision)}
     if args.mode == 'write':
-        pin.write_text(expected, encoding='utf-8')
-        sys.stdout.write(f'{pin} holds {args.revision} and the bundle fingerprint\n')
+        for path, text in expected.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding='utf-8')
+            sys.stdout.write(f'{path} now holds the pin for {args.revision}\n')
         return 0
-    actual = pin.read_text(encoding='utf-8') if pin.exists() else ''
-    if actual != expected:
-        sys.stderr.write(f'{pin} is stale for the bundled reader.\nRun tools/sync-chat-reader.sh to regenerate it.\nexpected:\n{expected}actual:\n{actual}')
+    stale = []
+    for path, text in expected.items():
+        actual = path.read_text(encoding='utf-8') if path.exists() else ''
+        if actual != text:
+            stale.append(f'{path}\nexpected:\n{text}actual:\n{actual}')
+    if stale:
+        sys.stderr.write('The bundled reader pin is stale.\nRun tools/sync-chat-reader.sh to regenerate it.\n' + '\n'.join(stale))
         return 1
-    sys.stdout.write(f'{pin} matches the bundled reader fingerprint\n')
+    sys.stdout.write('The bundled reader pin matches the bundled assets\n')
     return 0
 
 
