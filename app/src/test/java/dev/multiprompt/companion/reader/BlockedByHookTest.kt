@@ -20,7 +20,7 @@ class BlockedByHookTest {
     private val reason = blocked.getJSONObject("promptSubmitEnding").getJSONObject("ending").getString("kind")
 
     @Test fun blockedSettlementFromTheFixtureParsesAndAddsNoBubble() {
-        val row = ChatHistoryProtocol.parseRow(JSONObject()
+        val row = requireNotNull(ChatHistoryProtocol.parseRow(JSONObject()
             .put("role", "assistant").put("text", "").put("id", "").put("timestamp", blocked.getString("timestamp"))
             .put("offset", 0).put("end", 1)
             .put("settlement", JSONObject().put("operation", "blocked").put("content", prompt)))
