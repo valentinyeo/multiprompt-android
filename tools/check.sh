@@ -58,6 +58,7 @@ source_checks() {
   python3 -B tools/chat-search/settle.test.py
   python3 -B tools/check-day-theme-images.test.py
   python3 -B tools/emulator.test.py
+  python3 -B tools/install-scheduled-jobs.test.py
   python3 -B tools/network-wait.test.py
   python3 -B tools/startup-time/report.test.py
   python3 -B tools/long-chat/check.test.py
