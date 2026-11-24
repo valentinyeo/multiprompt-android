@@ -263,6 +263,7 @@ import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.UnreadOnlyFilter
+import dev.multiprompt.companion.data.InboxOrder
 import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SnippetStore
@@ -1911,7 +1912,7 @@ internal fun SessionsScreen(
     val visibleSessions = (if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
     } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts))
-        .let { PinnedChats.order(it, state.pinnedSessionKeys, atEnd = reversedSessions) }
+        .let { InboxOrder.display(it, state.pinnedSessionKeys, reversedSessions) }
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
@@ -1952,10 +1953,17 @@ internal fun SessionsScreen(
             }
         }
     }
-    val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
-        val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
-        tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+    val pinnedSessions = if (state.pinnedSessionKeys.isEmpty()) emptyList() else visibleSessions.filter {
+        SessionReadStore.key(it.hostId, it.name) in state.pinnedSessionKeys
     }
+    val sessionGroups = SessionGroups.withPinned(
+        SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+            val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+            tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+        },
+        pinnedSessions,
+        reversedSessions,
+    )
     val sessionListEntries = sessionGroups.sumOf { group ->
         group.items.size + if (SessionGroups.heading(group, sessionGroups) != null) 1 else 0
     } + (if (rooms.isNotEmpty()) 1 else 0) +
@@ -2233,8 +2241,8 @@ internal fun SessionsScreen(
                 val heading: () -> Unit = {
                     val title = SessionGroups.heading(group, sessionGroups)
                     if (title != null) {
-                        item(key = group.name?.let { "group:$it" } ?: "recents") {
-                            val name = group.name
+                        item(key = SessionGroups.key(group)) {
+                            val name = SessionGroups.renameTarget(group)
                             KitSectionLabel(
                                 title,
                                 if (name == null) Modifier else Modifier.combinedClickable(

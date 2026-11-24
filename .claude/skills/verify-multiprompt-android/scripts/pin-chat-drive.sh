@@ -87,6 +87,40 @@ cp "$EVIDENCE/current.xml" "$EVIDENCE/pin-unpinned.xml"
 relaunch_app Inbox
 "$mpa" read --wait-text Inbox
 "$mpa" proof --name pin-unpinned --order "$deep_target" --order "$other_target"
+"$mpa" hold desc "$deep_description"
+"$mpa" read --wait-text 'Pin to top'
+"$mpa" tap text 'Pin to top'
+"$mpa" read --wait-absent 'Pin to top'
+sleep 2
+prove_pinned_on_top pin-archive-top
+row_below=$(python3 - "$EVIDENCE/pin-top-rows-pin-archive-top.json" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1]))[1])
+PY
+)
+"$mpa" tap text "$deep_target"
+"$mpa" read --wait-text "Message $deep_target"
+"$mpa" tap desc 'Session actions'
+"$mpa" screenshot pin-archive-next-menu
+"$mpa" tap text Waiting
+"$mpa" read --wait-text "Message $row_below"
+"$mpa" proof --name pin-archive-next --require-text "Message $row_below" --forbid-text "Message $deep_target"
+cp "$EVIDENCE/current.xml" "$EVIDENCE/pin-archive-next.xml"
+"$mpa" tap desc Back
+"$mpa" read --wait-text Inbox
+"$mpa" tap desc 'Switch session bucket'
+"$mpa" tap text Waiting
+"$mpa" hold desc "$deep_description"
+"$mpa" tap text 'Return to open'
+"$mpa" tap desc 'Switch session bucket'
+"$mpa" tap text Inbox
+sleep 2
+prove_pinned_on_top pin-after-restore
+"$mpa" hold desc "$deep_description"
+"$mpa" read --wait-text Unpin
+"$mpa" tap text Unpin
+"$mpa" read --wait-absent Unpin
 python3 - "$EVIDENCE" "$deep_target" "$other_target" <<'PY'
 import json
 from pathlib import Path
@@ -94,7 +128,7 @@ import sys
 
 root = Path(sys.argv[1])
 pinned_chat, other_chat = sys.argv[2], sys.argv[3]
-names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-unpinned"]
+names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-unpinned", "pin-archive-top", "pin-archive-next", "pin-after-restore"]
 phases = {}
 for name in names:
     phase = json.loads((root / f"{name}.json").read_text())

@@ -3,16 +3,21 @@ package dev.multiprompt.companion.ui
 import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import dev.multiprompt.companion.AppUiState
 import dev.multiprompt.companion.SessionBucket
+import dev.multiprompt.companion.account.AccountLayout
+import dev.multiprompt.companion.account.AccountTab
 import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.HostProfile
@@ -177,5 +182,49 @@ class PinnedChatsUiTest {
         compose.waitForIdle()
 
         assertEquals(listOf(PinnedChats.key(second)), state.value.pinnedSessionKeys)
+    }
+
+    private fun grouped(vararg groups: String) = AccountLayout(
+        revision = 1,
+        workspaces = listOf("Other"),
+        tabs = listOf(
+            AccountTab("alpha", "alpha", 0, "Other", group = groups[0]),
+            AccountTab("beta", "beta", 0, "Other", group = groups[1]),
+        ),
+    )
+
+    @Test
+    fun aRealGroupNamedPinnedKeepsItsOwnRowFromTheSyntheticPinnedSection() {
+        state.value = state.value.copy(
+            signedIn = true,
+            accountLayout = grouped("Pinned", "Runners"),
+            accountHosts = mapOf(0 to host),
+            pinnedSessionKeys = listOf(PinnedChats.key(second)),
+        )
+        render()
+
+        compose.onAllNodesWithText("PINNED").assertCountEquals(2)
+        compose.onAllNodesWithText("RUNNERS").assertCountEquals(0)
+    }
+
+    @Test
+    fun theSyntheticPinnedHeadingOffersNoRenameOrUngroupSheet() {
+        state.value = state.value.copy(
+            signedIn = true,
+            accountLayout = grouped("Runners", "Runners"),
+            accountHosts = mapOf(0 to host),
+            pinnedSessionKeys = listOf(PinnedChats.key(second)),
+        )
+        render()
+
+        compose.onAllNodesWithText("PINNED").onFirst().performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Rename group").assertDoesNotExist()
+        compose.onNodeWithText("Ungroup").assertDoesNotExist()
+
+        compose.onAllNodesWithText("RUNNERS").onFirst().performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Rename group").assertIsDisplayed()
+        compose.onNodeWithText("Ungroup").assertIsDisplayed()
     }
 }

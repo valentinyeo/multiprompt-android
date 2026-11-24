@@ -28,7 +28,7 @@ import dev.multiprompt.companion.room.RoomLoadPolicy
 import dev.multiprompt.companion.room.RoomLoadTrigger
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
-import dev.multiprompt.companion.data.PinnedChats
+import dev.multiprompt.companion.data.InboxOrder
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -1170,9 +1170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openReader(session: TmuxSession, userInitiated: Boolean = false) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
-            visibleInboxSessions(_state.value)
-                .let { if (_state.value.newestSessionsAtBottom) it.asReversed() else it }
-                .map { SessionReadStore.key(it.hostId, it.name) }
+            inboxTopToBottom(_state.value).map { SessionReadStore.key(it.hostId, it.name) }
         }
         noteSessionInteraction(session)
         val unreadMessageKey = sessionReads.unreadMessageKey(session)
@@ -1983,39 +1981,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun archiveReaderUntilAndOpenNext(resumeAtEpochSeconds: Long?) {
         val current = _state.value.readerSession ?: return
-        val visible = visibleInboxSessions(_state.value)
+        val visible = inboxTopToBottom(_state.value)
         val currentIndex = visible.indexOfFirst {
             it.hostId == current.hostId && it.name == current.name
         }
         archiveSessionUntil(current, resumeAtEpochSeconds)
-        val remaining = visible.filterNot {
-            it.hostId == current.hostId && it.name == current.name
-        }
-        if (remaining.isEmpty()) {
-            closeReader()
-        } else {
-            val nextIndex = if (currentIndex in remaining.indices) currentIndex else 0
-            openReader(remaining[nextIndex])
-        }
+        val next = InboxOrder.nextAfterRemoving(visible, currentIndex)
+        if (next == null) closeReader() else openReader(next)
     }
 
     private fun neighbourAfterRemoving(key: String): TmuxSession? {
         val state = _state.value
-        val live = visibleInboxSessions(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
+        val live = inboxTopToBottom(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
         val order = state.readerSwipeOrder.ifEmpty { live.keys.toList() }
-        val index = order.indexOf(key)
-        if (index < 0) return null
-        val remaining = order.filterNot { it == key }
-        if (remaining.isEmpty()) return null
-        return live[remaining.getOrNull(index - 1) ?: remaining.getOrNull(index) ?: remaining.first()]
+        val successor = InboxOrder.nextAfterRemoving(order, order.indexOf(key)) ?: return null
+        return live[successor]
     }
 
     fun openAdjacentReaderSession(delta: Int) {
         val state = _state.value
         val current = state.readerSession ?: return
-        val live = visibleInboxSessions(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
+        val live = inboxTopToBottom(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
         val sessions = state.readerSwipeOrder.mapNotNull { live[it] }
-            .ifEmpty { visibleInboxSessions(state) }
+            .ifEmpty { inboxTopToBottom(state) }
         if (sessions.size < 2) return
         val index = sessions.indexOfFirst { it.hostId == current.hostId && it.name == current.name }
         if (index < 0) return
@@ -2412,7 +2400,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hostKey: PresentedHostKey? = null,
     )
 
-    private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.inboxSessions
+    private fun inboxTopToBottom(state: AppUiState): List<TmuxSession> = state.inboxSessions
         .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
@@ -2434,7 +2422,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
             } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
         }
-        .let { PinnedChats.order(it, state.pinnedSessionKeys) }
+        .let { InboxOrder.topToBottom(it, state.pinnedSessionKeys, state.newestSessionsAtBottom) }
 
     private companion object {
         const val ROOM_POLL_MS = 4_000L

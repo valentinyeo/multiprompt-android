@@ -523,7 +523,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin at the visual top of the Inbox list across replies and app restart. Does not assert all 46 rows render.",
+      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin at the visual top of the Inbox list across replies and app restart, plus archiving the pinned chat opening the row below it. Does not assert all 46 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -1398,14 +1398,17 @@
       ]
     },
     "inbox.pin-chat": {
-      "description": "Pinning a chat from the chat menu puts it at the visual top of the Inbox list in both sort orders, keeps it there when another chat gets a new reply, survives app restart, and unpinning restores normal order.",
+      "description": "Pinning a chat from the chat menu puts it at the visual top of the Inbox list in both sort orders, above every group when grouping is on, keeps it there when another chat gets a new reply, survives app restart, and unpinning restores normal order. Archiving the pinned chat opens the chat that sits below it rather than the newest chat.",
       "journey": "sessions.md",
       "sideEffect": false,
       "match": [
-        "PinnedChats|PinnedChatStore|pinnedSessionKeys|setSessionPinned|Pin to top|UNPIN_LABEL|PIN_LABEL"
+        "PinnedChats|PinnedChatStore|pinnedSessionKeys|setSessionPinned|Pin to top|UNPIN_LABEL|PIN_LABEL",
+        "InboxOrder|SessionGroups|withPinned|nextAfterRemoving|PINNED"
       ],
       "paths": [
-        "^app/src/main/java/dev/multiprompt/companion/data/PinnedChats\\.kt$"
+        "^app/src/main/java/dev/multiprompt/companion/data/PinnedChats\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/data/InboxOrder\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/ui/SessionGroups\\.kt$"
       ],
       "citations": {
         "action": {
