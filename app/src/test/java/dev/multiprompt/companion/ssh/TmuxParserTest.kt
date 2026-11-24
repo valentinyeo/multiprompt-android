@@ -144,6 +144,20 @@ class TmuxParserTest {
         assertEquals("hello\nworld", TmuxParser.parse("de", output).single().preview)
     }
 
+    @Test
+    fun keepsOneRowWhenTheRegistryRepeatsASessionTheTerminalListAlreadyHad() {
+        val sid = "721fb507-2781-4e48-8b6d-debd6e2da3f3"
+        val terminal = row("live-mubo2", "1", "0", "200", "98", "51", "/srv/work", "box", "sleep", "", sid, "300", "") +
+            "${TmuxParser.PREVIEW_PREFIX}7265616479\n"
+        val registry = row("live-mubo2", "1", "0", "200", "0", "0", "/srv/work", "", "sleep", "", sid, "300", "")
+
+        val session = TmuxParser.parse("de", terminal + registry).single()
+
+        assertEquals(sid, session.hostSessionId)
+        assertEquals("ready", session.preview)
+        assertEquals(98, session.columns)
+    }
+
     private fun row(vararg fields: String) = fields.joinToString(TmuxParser.FIELD_SEPARATOR) + "\n"
 
     @Test

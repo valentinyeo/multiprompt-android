@@ -1034,12 +1034,15 @@
         ]
       },
       "outcomes": [
-        "reader.host-restart"
+        "reader.host-restart",
+        "chat.restart-newest"
       ],
       "evidence": {
         "host-restart-state.json": 2500,
         "host-restart-host.json": 6000,
-        "host-restart-processes.txt": 1000
+        "host-restart-processes.txt": 1000,
+        "phone-restart-state.json": 1500,
+        "phone-restart-host.json": 500
       }
     },
     "live-chat-freshness.md": {
@@ -1903,6 +1906,31 @@
         "sideEffect": {
           "file": "host-restart-host.json",
           "quote": "\"reply\": \"REPLY_DESKTOP_AFTER_2681\""
+        }
+      }
+    },
+    "chat.restart-newest": {
+      "description": "Restart one hosted chat on the newest version from the chat menu while keeping its history and name, and restart every idle chat from the Inbox menu while skipping working chats. MUBO-2.",
+      "journey": "host-restart.md",
+      "sideEffect": true,
+      "match": [
+        "RestartNewest|restartNewest|restartIdleChats|Restart on newest version|Restart all idle chats|host_restart"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/RestartNewest\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "Restart all idle chats"
+        },
+        "result": {
+          "file": "phone-restart-state.json",
+          "quote": "Restart on newest version"
+        },
+        "sideEffect": {
+          "file": "phone-restart-host.json",
+          "quote": "\"working_untouched\": true"
         }
       }
     },

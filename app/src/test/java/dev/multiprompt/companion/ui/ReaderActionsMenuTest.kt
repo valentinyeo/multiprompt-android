@@ -52,6 +52,7 @@ class ReaderActionsMenuTest {
     private var archives = 0
     private var ends = 0
     private var waits = 0
+    private var restarts = 0
     private val reminders = mutableListOf<Long?>()
     private val archived = mutableStateOf(false)
 
@@ -69,17 +70,25 @@ class ReaderActionsMenuTest {
 
     @After fun cleanup() { connection.close(); f.close() }
 
-    private fun render(material3: Boolean = false, sending: Boolean = false) {
+    private fun render(
+        material3: Boolean = false,
+        sending: Boolean = false,
+        hostSessionId: String = "",
+        paneCommand: String = "claude",
+        hostProvider: String = "",
+    ) {
         f.field<MutableStateFlow<ReaderState>>(connection, "_state").value = ReaderState(status = ReaderStatus.Live, sending = sending)
         compose.setContent {
             ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
                 screencast = f.app.screencastUploader,
-                signedIn = true, onSignIn = {}, onSignOut = {}, session = f.session.copy(paneCommand = "claude"),
+                signedIn = true, onSignIn = {}, onSignOut = {},
+                session = f.session.copy(paneCommand = paneCommand, hostSessionId = hostSessionId, hostProvider = hostProvider),
                 unread = false, archived = archived.value, initialFontScale = 1f,
                 onBack = {}, onMarkRead = {}, onArchiveToggle = { waits++; archived.value = !archived.value },
                 onRemind = { reminders.add(it) }, onOpenTerminal = {},
                 onFontScaleChanged = {}, onRename = { null }, onDissolve = { archives++ }, onEnd = { ends++ },
+                onRestartNewest = { restarts++ },
                 onSessionInteraction = {}, onSessionInput = {}, technicalMode = false,
                 onTechnicalModeChanged = {}, sunlightMode = false, onSetAppTheme = {},
                 onResetFontScale = { 1f }, sessionActionError = null, onClearSessionActionError = {},
@@ -273,5 +282,24 @@ class ReaderActionsMenuTest {
         openMenu()
         compose.onNodeWithText("Enter / approve").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("Sunlight mode on").assertDoesNotExist()
+    }
+
+    @Test fun restartOnNewestVersionIsHiddenForNonHostedChats() {
+        render(material3 = true)
+        openMenu()
+        compose.onNodeWithText("Restart on newest version").assertDoesNotExist()
+    }
+
+    @Test fun hostedChatMenuIncludesRestartOnNewestVersion() {
+        render(
+            material3 = true,
+            hostSessionId = "c001c001-2681-4000-8000-000000002681",
+            paneCommand = "claude",
+            hostProvider = "claude",
+        )
+        openMenu()
+        compose.onNodeWithText("Restart on newest version").performScrollTo().assertIsDisplayed().performClick()
+        compose.onNodeWithText("Restart on newest version").assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, restarts) }
     }
 }

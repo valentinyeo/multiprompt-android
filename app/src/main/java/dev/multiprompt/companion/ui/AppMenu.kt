@@ -52,6 +52,7 @@ internal fun InboxOverflowMenu(
     onArrangeSplits: () -> Unit,
     onNewWorkspace: () -> Unit,
     onRefresh: () -> Unit,
+    onRestartIdleChats: () -> Unit = {},
     onAiUsage: () -> Unit = {},
     onReleaseNotes: () -> Unit = {},
 ) {
@@ -89,6 +90,13 @@ internal fun InboxOverflowMenu(
                 onClick = {
                     expanded = false
                     onRefresh()
+                },
+            )
+            KitMenuRow(
+                label = dev.multiprompt.companion.reader.RestartNewest.INBOX_LABEL,
+                onClick = {
+                    expanded = false
+                    onRestartIdleChats()
                 },
             )
             KitMenuRow(
