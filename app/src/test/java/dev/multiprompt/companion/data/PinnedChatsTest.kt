@@ -120,8 +120,8 @@ class PinnedChatsTest {
         assertEquals(listOf("gamma", "beta", "alpha", "delta"), PinnedChats.order(normal, pins).map { it.name })
 
         val rendered = PinnedChats.order(normal, pins, atEnd = true)
-        assertEquals(listOf("alpha", "delta", "gamma", "beta"), rendered.map { it.name })
-        assertEquals(listOf("gamma", "beta", "alpha", "delta"), rendered.asReversed().map { it.name })
+        assertEquals(listOf("alpha", "delta", "beta", "gamma"), rendered.map { it.name })
+        assertEquals(listOf("gamma", "beta"), rendered.asReversed().take(2).map { it.name })
     }
 
     @Test

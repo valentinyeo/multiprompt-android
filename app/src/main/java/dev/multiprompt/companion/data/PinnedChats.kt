@@ -40,7 +40,7 @@ object PinnedChats {
         val pinned = items.filter { keyOf(it) in position }.sortedBy { position.getValue(keyOf(it)) }
         if (pinned.isEmpty()) return items
         val unpinned = items.filter { keyOf(it) !in position }
-        return if (atEnd) unpinned + pinned else pinned + unpinned
+        return if (atEnd) unpinned + pinned.asReversed() else pinned + unpinned
     }
 
     fun order(sessions: List<TmuxSession>, pinnedKeys: List<String>, atEnd: Boolean = false): List<TmuxSession> =
