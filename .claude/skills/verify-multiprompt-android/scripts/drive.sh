@@ -1114,6 +1114,11 @@ if [[ "$feature" == chat-search.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == room-order.md ]]; then
+    source "$scripts/room-order-drive.sh"
+    room_order_journey
+fi
+
 if [[ "$feature" == session-drafts.md ]]; then
     tap_node desc 'Robot verify-session' reveal
     wait_for_text 'Inbox preview stays.'
