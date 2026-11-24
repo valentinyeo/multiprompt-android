@@ -5,6 +5,7 @@
       "^tools/speed-check/",
       "^\\.github/workflows/speed-check\\.yml$",
       "^app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest\\.kt$",
+      "^app/src/test/java/dev/multiprompt/companion/ui/ChatListSnapshotTest\\.kt$",
       "app/src/main/java/dev/multiprompt/companion/ui/(?:MultipromptApp|ChatHistoryList|ChatBubble|SessionPreview|SessionGroups|SessionActivity|InboxListEnd|TopFade|NewBelow|ReaderScroll|ChatOpenAnchor|MarkdownText)\\.kt$",
       "app/src/main/java/dev/multiprompt/companion/(?:MainViewModel|MainActivity)\\.kt$",
       "app/src/main/java/dev/multiprompt/companion/reader/",

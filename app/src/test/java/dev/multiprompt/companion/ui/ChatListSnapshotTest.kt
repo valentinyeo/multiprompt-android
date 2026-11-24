@@ -24,6 +24,7 @@ import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.reader.ChatHistoryMessage
+import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -72,6 +73,16 @@ class ChatListSnapshotTest {
         it.getInt(listState)
     }
 
+    private fun report(row: String, recompositions: Int, remeasures: Int) {
+        val line = "CHAT_LIST_SNAPSHOTS row=$row snapshots=50 recompositions=$recompositions remeasures=$remeasures"
+        println(line)
+        runCatching {
+            val output = File(System.getProperty("user.dir"), "build")
+            output.mkdirs()
+            File(output, "chat-list-snapshots.txt").appendText("$line\n")
+        }
+    }
+
     private fun assertQuiet(row: String, update: (Int) -> Unit) {
         compose.waitForIdle()
         var beforeRows = 0
@@ -91,7 +102,7 @@ class ChatListSnapshotTest {
         compose.runOnIdle {
             val rows = (compositions[row] ?: 0) - beforeRows
             val remeasures = measures() - beforeMeasures
-            println("CHAT_LIST_SNAPSHOTS row=$row snapshots=50 recompositions=$rows remeasures=$remeasures")
+            report(row, rows, remeasures)
             assertEquals("Unchanged rows must not recompose", 0, rows)
             assertEquals("Unchanged snapshots must not request lazy-list remeasure/scroll", 0, remeasures)
             assertEquals(beforePosition, listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset)

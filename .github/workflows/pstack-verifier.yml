@@ -140,7 +140,7 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   speed:
-    name: chat list remeasures
+    name: chat list and inbox work
     needs: pick
     if: needs.pick.outputs.speed == 'yes'
     permissions:

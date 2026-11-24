@@ -31,7 +31,7 @@ concurrency:
 
 jobs:
   speed:
-    name: chat list remeasures
+    name: chat list and inbox work
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -39,7 +39,7 @@ jobs:
       HEAD_SHA: ${{ inputs.head_sha }}
       GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
       EVIDENCE: ${{ github.workspace }}/speed-evidence
-      PROBE: app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest.kt
+      PROBES: app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest.kt app/src/test/java/dev/multiprompt/companion/ui/ChatListSnapshotTest.kt
     steps:
       - name: Check the revisions
         run: |
@@ -63,11 +63,14 @@ jobs:
             printf 'base_revision=%s\n' "$(git -C app-base rev-parse HEAD)"
             printf 'head_revision=%s\n' "$(git -C app-head rev-parse HEAD)"
           } | tee "$EVIDENCE/revisions.txt"
-      - name: Copy this check's probe into both revisions
+      - name: Copy this check's probes into both revisions
         run: |
           for side in app-base app-head; do
-            mkdir -p "$side/$(dirname "$PROBE")"
-            cp "$PROBE" "$side/$PROBE"
+            for probe in $PROBES; do
+              mkdir -p "$side/$(dirname "$probe")"
+              cp "$probe" "$side/$probe"
+            done
+            python3 tools/speed-check/inbox-list-state.py "$side"
           done
       - uses: actions/setup-java@v4
         with:
@@ -76,38 +79,40 @@ jobs:
       - uses: ./.github/actions/gradle-ci
         with:
           read-only: true
-      - name: Count the chat list remeasures on the base revision
+      - name: Count the chat list and inbox work on the base revision
         id: base
         continue-on-error: true
         timeout-minutes: 20
         run: |
           set +e
-          tools/ci/gradle-retry.sh -p app-base --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:testDebugUnitTest --tests '*ChatListRemeasureTest*' 2>&1 | tee "$EVIDENCE/base-test.txt"
+          tools/ci/gradle-retry.sh -p app-base --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:testDebugUnitTest --tests '*ChatListRemeasureTest*' --tests '*ChatListSnapshotTest*' 2>&1 | tee "$EVIDENCE/base-test.txt"
           status=${PIPESTATUS[0]}
           set -e
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Count the chat list remeasures on the head revision
+      - name: Count the chat list and inbox work on the head revision
         id: head
         continue-on-error: true
         timeout-minutes: 20
         run: |
           set +e
-          tools/ci/gradle-retry.sh -p app-head --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:testDebugUnitTest --tests '*ChatListRemeasureTest*' 2>&1 | tee "$EVIDENCE/head-test.txt"
+          tools/ci/gradle-retry.sh -p app-head --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:testDebugUnitTest --tests '*ChatListRemeasureTest*' --tests '*ChatListSnapshotTest*' 2>&1 | tee "$EVIDENCE/head-test.txt"
           status=${PIPESTATUS[0]}
           set -e
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
-      - name: Judge head against the base revision
+      - name: Judge the inbox and chat list readings
         run: |
           reading() {
             local side=$1
             local target="$EVIDENCE/$side-remeasures.txt"
             : > "$target"
-            for candidate in "$side/app/build/chat-list-remeasures.txt" "$side/build/chat-list-remeasures.txt"; do
-              if [ -s "$candidate" ]; then cat "$candidate" >> "$target"; return 0; fi
+            for candidate in "$side/app/build" "$side/build"; do
+              for name in chat-list-remeasures.txt chat-list-snapshots.txt; do
+                if [ -s "$candidate/$name" ]; then cat "$candidate/$name" >> "$target"; fi
+              done
             done
-            return 1
+            grep -q '^CHAT_LIST_' "$target"
           }
           reading app-base || echo "the base revision wrote no remeasure reading"
           reading app-head || echo "the head revision wrote no remeasure reading"
@@ -117,14 +122,14 @@ jobs:
             --base-status '${{ steps.base.outputs.status }}' \
             --head-status '${{ steps.head.outputs.status }}' \
             --out "$EVIDENCE/speed"
-      - name: Publish the remeasure report to the job summary
+      - name: Publish the speed report to the job summary
         if: always()
         run: |
           if [ -s "$EVIDENCE/speed/report.md" ]; then
             cat "$EVIDENCE/speed/report.md" >> "$GITHUB_STEP_SUMMARY"
             cat "$EVIDENCE/speed/info.txt" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo 'No remeasure report was produced. The artifact holds both test runs.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'No speed report was produced. The artifact holds both test runs.' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Retain both test runs even on failure
         if: always()
