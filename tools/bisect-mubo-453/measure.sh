@@ -61,29 +61,25 @@ launch_inbox() {
     local attempt
     adb shell am force-stop "$package"
     mpa launch > "$out/launch.json" 2>&1
-    for attempt in 1 2 3; do
+    for attempt in 1 2 3 4 5; do
         mpa read --out "$out/screen.json" > /dev/null 2>&1
+        if grep -Fq 'Trust and connect' "$out/screen.json"; then
+            mpa tap text 'Trust and connect' > "$out/tap-trust.json" 2>&1
+            sleep 5
+            continue
+        fi
         if grep -Fq 'Use without account (debug)' "$out/screen.json"; then
             mpa tap text 'Use without account (debug)' > "$out/tap-account.json" 2>&1
+            sleep 3
+            continue
         fi
-        if mpa read --wait-text Inbox --timeout 30 > "$out/wait.json" 2>&1; then
+        if grep -Fq 'Inbox' "$out/screen.json"; then
             return 0
         fi
         dismiss_anr
+        sleep 5
     done
     printf 'MISSING_TEXT Inbox\n' >> "$out/setup-failures.txt"
-    return 1
-}
-
-trust_host_if_asked() {
-    local attempt
-    for attempt in 1 2 3; do
-        if mpa read --select text --value 'Trust and connect' --timeout 30 > "$out/trust.json" 2>&1; then
-            mpa tap text 'Trust and connect' > "$out/tap-trust.json" 2>&1
-            return 0
-        fi
-        dismiss_anr
-    done
     return 1
 }
 
@@ -151,7 +147,6 @@ key=$(base64 -w0 "$FIXTURE/user-key")
 adb shell "am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture -e host_label 'Bisect probe' -e ssh_host 10.0.2.2 -e ssh_port 2222 -e ssh_user verifyssh -e ssh_private_key '$key' $package.test/androidx.test.runner.AndroidJUnitRunner" > "$out/host-seed.txt" 2>&1
 grep -q 'OK (1 test)' "$out/host-seed.txt" || { printf 'SETUP_FAILED host seed\n' | tee -a "$out/setup-failures.txt"; exit 1; }
 launch_inbox || exit 1
-trust_host_if_asked || true
 wait_text Inbox || exit 1
 mpa tap text All > /dev/null 2>&1
 wait_text cl-long-chat || exit 1

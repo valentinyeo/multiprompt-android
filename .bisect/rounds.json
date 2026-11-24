@@ -1,6 +1,6 @@
 {
   "counters": false,
-  "repeats": 3,
+  "repeats": 1,
   "replies_per_window": 10,
   "reply_interval_s": 1.0,
   "window_s": 10,
@@ -8,14 +8,6 @@
     {
       "base": "60aff06fb0ff51f3456bb3d2eb5dc68b7b11c04e",
       "suspect": "d3743fb251827fe8465e65e2f34d5aee6fbd9651"
-    },
-    {
-      "base": "3b23cb2a44bd7743b0a6be1567b5f72340518def",
-      "suspect": "2a913189fa489f11b0f93066d63d85139d323915"
-    },
-    {
-      "base": "d9dfd975ad2adaf859c6f9f0350f6dc4fdca71cf",
-      "suspect": "ed1cc9e507a63ae43fe080af9fc06408e3e1fa89"
     }
   ]
 }
