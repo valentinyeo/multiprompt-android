@@ -490,6 +490,7 @@ wait_for_text() { test "$1" = "$expected_screen"; }
         self.skill(self.home, "login-only")
         self.skill(self.cwd, "login-project-only")
         with patch.object(skills, "tmux_folder", return_value=self.cwd), \
+                patch.object(skills, "hosted_folder", return_value=None), \
                 patch.object(skills.subprocess, "run") as run:
             self.assertEqual([row["name"] for row in self.main_rows(self.cwd)], ["login-only", "login-project-only"])
         run.assert_not_called()
