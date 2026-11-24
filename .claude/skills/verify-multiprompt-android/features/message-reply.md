@@ -12,7 +12,7 @@ Every step drives the phone through `mpa`.
 4. Long-press the same bubble, tap **Reply**, type `REPLY_BODY_418` with `mpa fill`, and send it.
 5. The host receipt file must contain the exact lines `> REPLY_BUBBLE_418` and `REPLY_BODY_418`.
 6. Require the host answer `REPLY_DELIVERED_418`, then require the reply bubble is present and is not marked **Not sent**, never offers **Send again** or **Remove**, and carries no **Replying** bar. The phone shows those retry controls only when the host never accepted the prompt, so their absence is the sent proof.
-7. Reply to the same bubble again, this time typing `/review REPLY_BODY_419`. The two new host lines must be exactly `/review REPLY_BODY_419` and then `> REPLY_BUBBLE_418`: the command line arrives first, so the host runs the skill, and the quote follows it. A reply that starts with plain text keeps the quote first, and a `/` inside the line stays in the body.
+7. Long-press `REPLY_DELIVERED_418` with `mpa hold`, tap **Reply**, and type `/review REPLY_BODY_419`. The two new host lines must be exactly `/review REPLY_BODY_419` and then `> REPLY_DELIVERED_418`: the command line arrives first, so the host runs the skill, and the quote follows it. A reply that starts with plain text keeps the quote first, and a `/` inside the line stays in the body.
 
 `mpa proof` records each state as `reply-open.json`, `reply-cancelled.json`, `reply-sent.json` and `reply-command.json`, with the text and description it checked. Host receipts come from the SSH fixture's stdin log, not a phone echo; `reply-command-receipts.txt` holds the lines the host received after the command reply.
 

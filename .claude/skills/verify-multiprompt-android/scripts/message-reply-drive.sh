@@ -39,7 +39,7 @@ grep -Fx 'REPLY_BODY_418' "$EVIDENCE/reply-receipts.txt"
 "$mpa" proof --name reply-sent --require-text REPLY_BODY_418 --require-text REPLY_DELIVERED_418 --forbid-text Replying --forbid-text 'Not sent' --forbid-text 'Send again' --forbid-text Remove --forbid-desc 'Cancel reply' --note MESSAGE_REPLY_JOURNEY_OK --proof-file "$EVIDENCE/reply-proof.txt"
 sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reply-command-before.txt"
 before=$(wc -l < "$EVIDENCE/reply-command-before.txt")
-"$mpa" hold text REPLY_BUBBLE_418
+"$mpa" hold text REPLY_DELIVERED_418
 "$mpa" read --wait-text Reply
 "$mpa" tap text Reply
 "$mpa" read --wait-text Replying
@@ -48,9 +48,10 @@ before=$(wc -l < "$EVIDENCE/reply-command-before.txt")
 "$mpa" screenshot reply-command-draft
 "$mpa" tap desc 'Send prompt'
 for attempt in {1..30}; do
-    if sudo tail -n "+$((before + 1))" /home/verifyssh/receipts.txt | grep -Fxq '> REPLY_BUBBLE_418'; then break; fi
+    if sudo tail -n "+$((before + 1))" /home/verifyssh/receipts.txt | grep -Fxq '> REPLY_DELIVERED_418'; then break; fi
     sleep 1
 done
+"$mpa" read --select editor-value --value composer --extra ''
 sudo cat /home/verifyssh/receipts.txt > "$EVIDENCE/reply-command-all.txt"
 tail -n "+$((before + 1))" "$EVIDENCE/reply-command-all.txt" | grep -v '^[[:space:]]*$' > "$EVIDENCE/reply-command-receipts.txt"
 first_received=$(head -1 "$EVIDENCE/reply-command-receipts.txt")
@@ -58,10 +59,10 @@ if [[ "$first_received" != '/review REPLY_BODY_419' ]]; then
     printf 'The host did not receive the command first, it got: %s\n' "$first_received" >&2
     exit 1
 fi
-sed -n 2p "$EVIDENCE/reply-command-receipts.txt" | grep -Fx '> REPLY_BUBBLE_418'
+sed -n 2p "$EVIDENCE/reply-command-receipts.txt" | grep -Fx '> REPLY_DELIVERED_418'
 "$mpa" read --wait-text REPLY_BODY_419
 "$mpa" screenshot reply-command
-"$mpa" proof --name reply-command --require-text '/review' --require-text REPLY_BODY_419 --forbid-text 'Not sent' --forbid-text 'Send again' --note REPLY_COMMAND_FIRST --proof-file "$EVIDENCE/reply-command-proof.txt"
+"$mpa" proof --name reply-command --require-text '/review' --require-text REPLY_BODY_419 --forbid-text Replying --forbid-text 'Not sent' --forbid-text 'Send again' --note REPLY_COMMAND_FIRST --proof-file "$EVIDENCE/reply-command-proof.txt"
 grep -Fx 'live-cl_mention-2953|Mention 2953' "$EVIDENCE/mention-session.txt"
 "$mpa" fill 'Message verify-session' '@Mention'
 "$mpa" read --wait-text 'Mention 2953'

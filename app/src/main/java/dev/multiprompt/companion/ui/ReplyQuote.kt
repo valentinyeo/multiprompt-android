@@ -17,7 +17,7 @@ internal object ReplyQuote {
     fun parse(message: String): Reply? {
         val lines = message.lines()
         val head = lines.firstOrNull().orEmpty()
-        val command = head.substringBefore(' ').takeIf { COMMAND.matches(it) }
+        val command = command(head)
         val afterCommand = if (command == null) "" else head.removePrefix(command).trimStart()
         val inline = afterCommand.isNotEmpty() && !quoted(afterCommand) && lines.getOrNull(1)?.let(::quoted) == true
         val rest = when {
@@ -57,7 +57,7 @@ internal object ReplyQuote {
         quoted.isNullOrBlank() -> message
         message.isBlank() -> ""
         else -> {
-            val head = message.lineSequence().first()
+            val head = message.lineSequence().first().trimEnd()
             if (command(head) == null) quote(quoted) + "\n\n" + message
             else {
                 val tail = message.lineSequence().drop(1).dropWhile { it.isBlank() }.joinToString("\n")
@@ -67,7 +67,7 @@ internal object ReplyQuote {
     }
 
     private fun command(head: String): String? =
-        head.substringBefore(' ').takeIf { COMMAND.matches(it) }
+        head.takeWhile { it != ' ' && it != '\t' }.takeIf { COMMAND.matches(it) }
 
     fun preview(message: String, limit: Int = PREVIEW_LIMIT): String = cut(
         message.lineSequence().filter { it.isNotBlank() }.take(2).joinToString(" "),

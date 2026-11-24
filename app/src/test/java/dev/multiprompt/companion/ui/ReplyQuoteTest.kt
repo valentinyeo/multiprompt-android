@@ -62,6 +62,7 @@ class ReplyQuoteTest {
         val reply = requireNotNull(ReplyQuote.parse(wire))
         assertEquals("> Quoted line", reply.quoted)
         assertEquals("/review check this", reply.body)
+        assertEquals("/review\tcheck this\n> Quoted line", ReplyQuote.compose("Quoted line", "/review\tcheck this"))
         val pill = dev.multiprompt.companion.skills.NativeSkills.spans(
             wire,
             listOf(dev.multiprompt.companion.skills.NativeSkill("review", "Review")),
@@ -81,6 +82,7 @@ class ReplyQuoteTest {
     fun commandReplyWithNoOtherTextKeepsTheQuoteAfterTheCommand() {
         val wire = ReplyQuote.compose("the earlier answer", "/pstack:poteto-help")
         assertEquals("/pstack:poteto-help\n> the earlier answer", wire)
+        assertEquals("/pstack:poteto-help\n> the earlier answer", ReplyQuote.compose("the earlier answer", "/pstack:poteto-help   "))
         val reply = requireNotNull(ReplyQuote.parse(wire))
         assertEquals("> the earlier answer", reply.quoted)
         assertEquals("/pstack:poteto-help", reply.body)
