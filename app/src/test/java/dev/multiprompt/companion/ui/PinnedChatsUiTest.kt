@@ -4,12 +4,15 @@ import android.app.Application
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasScrollToIndexAction
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import dev.multiprompt.companion.AppUiState
+import dev.multiprompt.companion.SessionBucket
 import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.HostProfile
@@ -122,7 +125,7 @@ class PinnedChatsUiTest {
     }
 
     @Test
-    fun pinningAndUnpinningInLongReversedListKeepsFirstRowVisible() {
+    fun pinningInNewestAtBottomOrderPutsThePinnedRowAtTheVisualTop() {
         val many = listOf(first, second) + (1..20).map { index ->
             TmuxSession(host.id, "row-$index", 1, 0, 100L - index)
         }
@@ -139,16 +142,37 @@ class PinnedChatsUiTest {
         compose.onNodeWithText(PinnedChats.PIN_LABEL).performClick()
         compose.waitForIdle()
 
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(many.size - 1)
+        compose.waitForIdle()
+
         compose.onNodeWithText("beta").assertIsDisplayed()
-        compose.onNodeWithText("alpha").assertIsDisplayed()
-        assertTrue(topY("alpha") < topY("beta"))
+        compose.onNodeWithText("row-20").assertIsDisplayed()
+        assertTrue(topY("beta") < topY("row-20"))
+        assertTrue(topY("row-20") < topY("row-19"))
+        compose.onNodeWithText("alpha").assertDoesNotExist()
 
         compose.onNodeWithText("beta").performTouchInput { longClick() }
         compose.onNodeWithText(PinnedChats.UNPIN_LABEL).performClick()
         compose.waitForIdle()
 
-        compose.onNodeWithText("alpha").assertIsDisplayed()
-        compose.onNodeWithText("beta").assertIsDisplayed()
-        assertTrue(topY("beta") < topY("alpha"))
+        assertEquals(emptyList<String>(), state.value.pinnedSessionKeys)
+        compose.onNodeWithText("row-20").assertIsDisplayed()
+        assertTrue(topY("row-20") < topY("row-19"))
+        compose.onNodeWithText("beta").assertDoesNotExist()
+    }
+
+    @Test
+    fun waitingBucketRowsCanBePinned() {
+        state.value = state.value.copy(
+            sessionBucket = SessionBucket.WAITING,
+            archivedSessionKeys = setOf(PinnedChats.key(second)),
+        )
+        render()
+
+        compose.onNodeWithText("beta").performTouchInput { longClick() }
+        compose.onNodeWithText(PinnedChats.PIN_LABEL).performClick()
+        compose.waitForIdle()
+
+        assertEquals(listOf(PinnedChats.key(second)), state.value.pinnedSessionKeys)
     }
 }

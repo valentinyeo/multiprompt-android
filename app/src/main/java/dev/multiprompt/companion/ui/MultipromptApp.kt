@@ -462,6 +462,8 @@ private fun AppScreens(viewModel: MainViewModel) {
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
             pinned = PinnedChats.isPinned(state.pinnedSessionKeys, readerSession),
+            pinEnabled = PinnedChats.isPinned(state.pinnedSessionKeys, readerSession) ||
+                state.sessionBucket != SessionBucket.ARCHIVE,
             onTogglePin = {
                 viewModel.setSessionPinned(readerSession, !PinnedChats.isPinned(state.pinnedSessionKeys, readerSession))
             },
@@ -1902,10 +1904,11 @@ internal fun SessionsScreen(
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
                 )
         }
+    val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
     val visibleSessions = (if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
     } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts))
-        .let { PinnedChats.order(it, state.pinnedSessionKeys) }
+        .let { PinnedChats.order(it, state.pinnedSessionKeys, atEnd = reversedSessions) }
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
@@ -1946,7 +1949,6 @@ internal fun SessionsScreen(
             }
         }
     }
-    val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
     val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
         val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
         tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
@@ -1964,12 +1966,11 @@ internal fun SessionsScreen(
         }
     }
     var lastPinnedKeys by remember { mutableStateOf(state.pinnedSessionKeys) }
-    LaunchedEffect(state.pinnedSessionKeys) {
-        if (state.pinnedSessionKeys != lastPinnedKeys) {
-            lastPinnedKeys = state.pinnedSessionKeys
-            if (sessionListEntries > 0) {
-                sessionListState.scrollToItem(0)
-            }
+    LaunchedEffect(state.pinnedSessionKeys, reversedSessions, sessionListEntries) {
+        val added = state.pinnedSessionKeys - lastPinnedKeys.toSet()
+        lastPinnedKeys = state.pinnedSessionKeys
+        if (added.isNotEmpty() && sessionListEntries > 0) {
+            sessionListState.scrollToItem(if (reversedSessions) sessionListEntries - 1 else 0)
         }
     }
     Scaffold(
@@ -2270,6 +2271,7 @@ internal fun SessionsScreen(
                             unreadCount = state.unreadCounts[key] ?: 1,
                             archived = key in state.archivedSessionKeys,
                             pinned = key in state.pinnedSessionKeys,
+                            pinEnabled = pinned || state.sessionBucket != SessionBucket.ARCHIVE,
                             onTogglePin = { onSetPinned(session, key !in state.pinnedSessionKeys) },
                             starred = starred,
                             hasDraft = key in draftKeys,
@@ -2525,6 +2527,7 @@ private fun SessionCard(
     onMoveToGroup: (() -> Unit)? = null,
     inFavoritesView: Boolean = false,
     pinned: Boolean = false,
+    pinEnabled: Boolean = false,
     onTogglePin: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
@@ -2653,7 +2656,7 @@ private fun SessionCard(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
-                    if (!archived || pinned) {
+                    if (pinEnabled) {
                         onTogglePin?.let { toggle ->
                             KitMenuRow(
                                 label = if (pinned) PinnedChats.UNPIN_LABEL else PinnedChats.PIN_LABEL,
@@ -3080,6 +3083,7 @@ internal fun ReaderScreen(
     onOpenMentionedSession: (String) -> Unit = {},
     unreadSinceEpochSeconds: Long? = null,
     pinned: Boolean = false,
+    pinEnabled: Boolean = false,
     onTogglePin: (() -> Unit)? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
@@ -4085,7 +4089,7 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
-                                if (!archived || pinned) {
+                                if (pinEnabled) {
                                     onTogglePin?.let { toggle ->
                                         KitMenuRow(
                                             label = if (pinned) PinnedChats.UNPIN_LABEL else PinnedChats.PIN_LABEL,

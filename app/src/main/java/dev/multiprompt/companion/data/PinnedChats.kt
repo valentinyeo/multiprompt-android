@@ -27,17 +27,24 @@ object PinnedChats {
         return pinnedKeys.filterNot { it.startsWith(prefix) }
     }
 
-    fun <T> order(items: List<T>, pinnedKeys: List<String>, keyOf: (T) -> String): List<T> {
+    fun prune(pinnedKeys: List<String>, hostId: String, listedNames: Collection<String>): List<String> {
+        if (pinnedKeys.isEmpty()) return pinnedKeys
+        val prefix = SessionReadStore.key(hostId, "")
+        val listed = listedNames.mapTo(mutableSetOf()) { key(hostId, it) }
+        return pinnedKeys.filterNot { it.startsWith(prefix) && it !in listed }
+    }
+
+    fun <T> order(items: List<T>, pinnedKeys: List<String>, keyOf: (T) -> String, atEnd: Boolean = false): List<T> {
         if (pinnedKeys.isEmpty() || items.size <= 1) return items
         val position = pinnedKeys.withIndex().associate { (index, key) -> key to index }
         val pinned = items.filter { keyOf(it) in position }.sortedBy { position.getValue(keyOf(it)) }
         if (pinned.isEmpty()) return items
         val unpinned = items.filter { keyOf(it) !in position }
-        return pinned + unpinned
+        return if (atEnd) unpinned + pinned else pinned + unpinned
     }
 
-    fun order(sessions: List<TmuxSession>, pinnedKeys: List<String>): List<TmuxSession> =
-        order(sessions, pinnedKeys, ::key)
+    fun order(sessions: List<TmuxSession>, pinnedKeys: List<String>, atEnd: Boolean = false): List<TmuxSession> =
+        order(sessions, pinnedKeys, ::key, atEnd)
 
     fun encode(pinnedKeys: List<String>): String {
         val array = JSONArray()
@@ -69,6 +76,14 @@ class PinnedChatStore(context: Context) {
     fun unpin(session: TmuxSession): List<String> = save(PinnedChats.unpin(load(), PinnedChats.key(session)))
 
     fun removeHost(hostId: String): List<String> = save(PinnedChats.removeHost(load(), hostId))
+
+    fun prune(listedNames: Map<String, Collection<String>>): List<String> {
+        val current = load()
+        val pruned = listedNames.entries.fold(current) { keys, (hostId, names) ->
+            PinnedChats.prune(keys, hostId, names)
+        }
+        return if (pruned == current) current else save(pruned)
+    }
 
     private fun save(keys: List<String>): List<String> {
         preferences.edit().putString(KEY, PinnedChats.encode(keys)).apply()

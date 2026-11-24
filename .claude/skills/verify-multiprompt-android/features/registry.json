@@ -523,7 +523,7 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin ordering across replies and app restart. Does not assert all 46 rows render.",
+      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin at the visual top of the Inbox list across replies and app restart. Does not assert all 46 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -540,14 +540,14 @@
         "inbox.pin-chat"
       ],
       "evidence": {
-        "seed-counts.json": 2200,
-        "seed-check.json": 1000,
-        "seed-search.xml": 1800,
+        "seed-counts.json": 2500,
+        "seed-check.json": 1200,
+        "seed-search.xml": 2000,
+        "seed-deep-target.xml": 1000,
         "seed-deep-choice.json": 900,
         "search-keyboard.json": 1200,
         "row-long-press-actions.xml": 1500,
-        "start-agent-picker.xml": 1400,
-        "pin-chat-state.json": 1800
+        "pin-chat-state.json": 1400
       }
     },
     "settings-navigation.md": {
@@ -1371,7 +1371,7 @@
       ]
     },
     "inbox.pin-chat": {
-      "description": "Pinning a chat from the chat menu moves it first in the list, keeps it ahead when another chat gets a new reply, survives app restart, and unpinning restores normal order.",
+      "description": "Pinning a chat from the chat menu puts it at the visual top of the Inbox list in both sort orders, keeps it there when another chat gets a new reply, survives app restart, and unpinning restores normal order.",
       "journey": "sessions.md",
       "sideEffect": false,
       "match": [

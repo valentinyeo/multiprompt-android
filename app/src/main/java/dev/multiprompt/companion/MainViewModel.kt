@@ -1113,6 +1113,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 current.workspaceSelectionInitialized,
             sessionWorkspaceIds = sessionWorkspaceIds,
             sessionInteractionEpochSeconds = interactionEpochSeconds,
+            pinnedSessionKeys = if (final) pinnedChats.prune(
+                results.filter { it.error == null }.associate { result -> result.hostId to result.sessions.map { it.name } },
+            ) else current.pinnedSessionKeys,
             waitingIdleObservations = if (final) idleObservations.filterKeys { it in archivedKeys }
                 else current.waitingIdleObservations,
             refreshing = !final,

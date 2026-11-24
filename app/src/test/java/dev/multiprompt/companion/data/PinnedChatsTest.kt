@@ -109,6 +109,37 @@ class PinnedChatsTest {
     }
 
     @Test
+    fun newestAtBottomOrderingPutsPinnedChatsAtTheVisualTop() {
+        val a = session("alpha")
+        val b = session("beta")
+        val c = session("gamma")
+        val d = session("delta")
+        val normal = listOf(a, b, c, d)
+        val pins = PinnedChats.pin(PinnedChats.pin(emptyList(), PinnedChats.key(c)), PinnedChats.key(b))
+
+        assertEquals(listOf("gamma", "beta", "alpha", "delta"), PinnedChats.order(normal, pins).map { it.name })
+
+        val rendered = PinnedChats.order(normal, pins, atEnd = true)
+        assertEquals(listOf("alpha", "delta", "gamma", "beta"), rendered.map { it.name })
+        assertEquals(listOf("gamma", "beta", "alpha", "delta"), rendered.asReversed().map { it.name })
+    }
+
+    @Test
+    fun pruneDropsPinsForSessionsNoLongerListedOnThatHost() {
+        val renamed = session("old-name")
+        val kept = session("kept")
+        val elsewhere = session("main", hostId = "host-2")
+        val pins = listOf(PinnedChats.key(renamed), PinnedChats.key(kept), PinnedChats.key(elsewhere))
+
+        assertEquals(
+            listOf(PinnedChats.key(kept), PinnedChats.key(elsewhere)),
+            PinnedChats.prune(pins, "host-1", listOf("kept", "new-name")),
+        )
+        assertEquals(pins, PinnedChats.prune(pins, "host-1", listOf("kept", "old-name")))
+        assertEquals(emptyList<String>(), PinnedChats.prune(emptyList(), "host-1", emptyList()))
+    }
+
+    @Test
     fun encodeAndDecodeRoundTripPreservesOrderAndIgnoresBadInput() {
         val pins = listOf("host-1::gamma", "host-2::alpha")
         assertEquals(pins, PinnedChats.decode(PinnedChats.encode(pins)))

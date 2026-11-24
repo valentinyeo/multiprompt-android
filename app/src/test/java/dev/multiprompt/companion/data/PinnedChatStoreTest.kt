@@ -45,4 +45,17 @@ class PinnedChatStoreTest {
         store.removeHost("host-1")
         assertEquals(listOf(PinnedChats.key(gamma)), PinnedChatStore(context).load())
     }
+
+    @Test
+    fun pruneDropsPinsForSessionsMissingFromTheHostRefresh() {
+        val store = PinnedChatStore(context)
+        store.pin(alpha)
+        store.pin(beta)
+        store.pin(gamma)
+
+        val pruned = store.prune(mapOf("host-1" to listOf("beta"), "host-2" to listOf("gamma")))
+
+        assertEquals(listOf(PinnedChats.key(beta), PinnedChats.key(gamma)), pruned)
+        assertEquals(pruned, PinnedChatStore(context).load())
+    }
 }
