@@ -88,8 +88,9 @@ account_layout_prefs new-workspace-dismissed "$studio_layout"
 "$mpa" read --wait-absent 'New workspace'
 "$mpa" tap text Review
 "$mpa" read --wait-text 'This split is clear'
+cp "$EVIDENCE/current.xml" "$EVIDENCE/workspace-created-empty.xml"
 "$mpa" screenshot workspace-created
-"$mpa" proof --name workspace-created --require-text Review --require-text 'This split is clear' --forbid-text 'New workspace'
+"$mpa" proof --name workspace-created --xml "$EVIDENCE/workspace-created-empty.xml" --require-text Review --require-text 'This split is clear' --forbid-text 'New workspace'
 account_layout_prefs workspace-created "$created_layout"
 account_layout_receipt workspace-created "$created_layout"
 "$mpa" tap text Studio
