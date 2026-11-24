@@ -64,9 +64,21 @@ wait_chat() {
     wait_text "$marker"
 }
 
-open_chat() {
+enter_debug_account() {
+    if mpa read --select text --value 'Use without account (debug)' --timeout 20 > "$out/gate.json" 2>&1; then
+        mpa tap text 'Use without account (debug)' > "$out/tap-account.json" 2>&1
+    fi
+}
+
+relaunch_to_inbox() {
     adb shell am force-stop "$package"
-    mpa launch --wait-text Inbox > "$out/launch.json" 2>&1 || return 1
+    mpa launch > "$out/launch.json" 2>&1 || return 1
+    enter_debug_account
+    mpa read --wait-text Inbox --timeout 90 > "$out/wait-inbox.json" 2>&1
+}
+
+open_chat() {
+    relaunch_to_inbox || return 1
     mpa tap text All > "$out/tap-all.json" 2>&1
     wait_text cl-long-chat || return 1
     mpa tap text cl-long-chat > "$out/tap-chat.json" 2>&1 || return 1
@@ -117,16 +129,15 @@ if ! install_side "$first"; then
 fi
 adb install -r -g "$apks/$first/app-debug-androidTest.apk" > "$out/install-test.txt" 2>&1
 grep -q Success "$out/install-test.txt" || { printf 'SETUP_FAILED test apk\n' | tee -a "$out/setup-failures.txt"; exit 1; }
-adb shell am force-stop "$package"
-mpa launch --wait-text Inbox > "$out/launch.json" 2>&1
-mpa tap text 'Use without account (debug)' > "$out/tap-account.json" 2>&1
-wait_text Inbox || exit 1
+relaunch_to_inbox || { printf 'SETUP_FAILED first inbox\n' >> "$out/setup-failures.txt"; exit 1; }
 key=$(base64 -w0 "$FIXTURE/user-key")
 adb shell "am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture -e host_label 'Bisect probe' -e ssh_host 10.0.2.2 -e ssh_port 2222 -e ssh_user verifyssh -e ssh_private_key '$key' $package.test/androidx.test.runner.AndroidJUnitRunner" > "$out/host-seed.txt" 2>&1
 grep -q 'OK (1 test)' "$out/host-seed.txt" || { printf 'SETUP_FAILED host seed\n' | tee -a "$out/setup-failures.txt"; exit 1; }
 adb shell am force-stop "$package"
-mpa launch --wait-text Trust > "$out/launch-trust.json" 2>&1
-mpa tap text 'Trust and connect' > "$out/tap-trust.json" 2>&1
+mpa launch > "$out/launch-trust.json" 2>&1
+enter_debug_account
+wait_text Trust || { printf 'SETUP_FAILED trust sheet\n' >> "$out/setup-failures.txt"; exit 1; }
+mpa tap text 'Trust and connect' > "$out/tap-trust.json" 2>&1 || { printf 'SETUP_FAILED trust tap\n' >> "$out/setup-failures.txt"; exit 1; }
 wait_text Inbox || exit 1
 mpa tap text All > /dev/null 2>&1
 wait_text cl-long-chat || exit 1
