@@ -40,6 +40,7 @@ class ReaderSwipeOrderTest {
         val sessions = listOf(newest, middle, oldest, firstPin, secondPin)
         f.state.value = f.state.value.copy(
             accountLayout = null,
+            selectedWorkspaceId = null,
             sessions = sessions,
             sessionInteractionEpochSeconds = sessions.associate {
                 SessionReadStore.key(it.hostId, it.name) to it.lastActivityEpochSeconds

@@ -80,7 +80,8 @@ class InboxOrderTest {
         val topToBottom = InboxOrder.topToBottom(listOf(newest, firstPin, oldest, secondPin), pins, newestAtBottom = true)
         assertEquals(listOf("first-pin", "second-pin", "oldest", "newest"), topToBottom.map { it.name })
         assertEquals(oldest, InboxOrder.nextAfterRemoving(topToBottom, 1))
-        assertEquals(firstPin, InboxOrder.nextAfterRemoving(topToBottom, 2))
+        assertEquals(newest, InboxOrder.nextAfterRemoving(topToBottom, 2))
+        assertEquals(oldest, InboxOrder.nextAfterRemoving(topToBottom, 3))
     }
 
     @Test
