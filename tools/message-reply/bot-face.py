@@ -100,7 +100,7 @@ def main(argv=None):
         Path(args.out).write_text(json.dumps(result, indent=2) + "\n")
         print(json.dumps({key: result[key] for key in ("session", "passed", "metrics")}, separators=(",", ":")))
         if not passed:
-            failed = "; ".join(check["detail"] for check in checks if not check["passed"])
+            failed = "; ".join(f"{check['kind']}: {check['detail']}" for check in checks if not check["passed"])
             raise SystemExit(f"MENTION_BOT_FACE_FAILED: the row does not draw the chat's own bot ({failed})")
         return 0
     except FaceError as error:
