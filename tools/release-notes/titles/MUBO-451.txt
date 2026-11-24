@@ -1,0 +1,1 @@
+Phone test checks bot faces in the mention menu
