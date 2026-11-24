@@ -1,0 +1,20 @@
+{
+  "repeats": 3,
+  "replies_per_window": 10,
+  "reply_interval_s": 1.0,
+  "window_s": 10,
+  "pairs": [
+    {
+      "base": "ed1cc9e507a63ae43fe080af9fc06408e3e1fa89",
+      "suspect": "3b23cb2a44bd7743b0a6be1567b5f72340518def"
+    },
+    {
+      "base": "3b23cb2a44bd7743b0a6be1567b5f72340518def",
+      "suspect": "2a913189fa489f11b0f93066d63d85139d323915"
+    },
+    {
+      "base": "ed1cc9e507a63ae43fe080af9fc06408e3e1fa89",
+      "suspect": "2a913189fa489f11b0f93066d63d85139d323915"
+    }
+  ]
+}
