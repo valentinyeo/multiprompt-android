@@ -19,6 +19,7 @@ import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onParent
@@ -164,6 +165,7 @@ class ReaderChromeTest {
         }
         compose.onNodeWithText("Message ${f.session.displayName}").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertDoesNotExist()
+        awaitLaidOut("dictation-stop", "dictation-send", "dictation-timer")
         compose.onNodeWithTag("dictation-stop").assertIsDisplayed()
         compose.onNodeWithTag("dictation-send").assertIsDisplayed()
         compose.onNodeWithTag("dictation-timer").assertIsDisplayed()
@@ -283,6 +285,15 @@ class ReaderChromeTest {
             history.value = ChatHistoryState(ChatHistory(sid = "chrome"), loaded = true, connected = true)
         }
         compose.onNodeWithText("Retry").assertDoesNotExist()
+    }
+
+    private fun awaitLaidOut(vararg tags: String) {
+        compose.waitUntil(5_000) {
+            tags.all { tag ->
+                compose.onAllNodesWithTag(tag).fetchSemanticsNodes()
+                    .any { it.boundsInRoot.height > 0f && it.boundsInRoot.width > 0f }
+            }
+        }
     }
 
     private fun screenshot(name: String = "chat-view") {
