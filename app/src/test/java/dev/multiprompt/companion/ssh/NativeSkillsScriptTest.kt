@@ -25,9 +25,9 @@ class NativeSkillsScriptTest {
     }
 
     private fun skill(home: File, name: String) {
-        val file = File(home, ".claude/skills/$name/SKILL.md")
-        file.parentFile.mkdirs()
-        file.writeText("---\nname: $name\ndescription: Fixture skill\n---\nBODY_MUST_NOT_BE_INJECTED\n")
+        val folder = File(home, ".claude/skills/$name")
+        folder.mkdirs()
+        File(folder, "SKILL.md").writeText("---\nname: $name\ndescription: Fixture skill\n---\nBODY_MUST_NOT_BE_INJECTED\n")
     }
 
     private fun home(): File = Files.createTempDirectory("native-skills").toFile().also { it.deleteOnExit() }

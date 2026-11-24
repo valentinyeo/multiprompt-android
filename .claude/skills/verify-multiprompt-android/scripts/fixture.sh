@@ -179,8 +179,8 @@ set -euo pipefail
 sudo -n -u skillowner -- true
 sudo -n -- true
 sudo -n -H -u skillowner -- python3 -c 'import os,pwd; assert os.environ["HOME"]=="/home/skillowner" and pwd.getpwuid(os.getuid()).pw_name=="skillowner"'
-printf 'owner_sudo_preflight=ok\n' >> "$EVIDENCE/owner-fixture.txt"
 PREFLIGHT
+    printf 'owner_sudo_preflight=ok\n' >> "$EVIDENCE/owner-fixture.txt"
     sudo -u skillowner test -r /home/skillowner/.claude/skills/owner-note/SKILL.md
     sudo -u verifyssh test ! -r /home/skillowner/.claude/skills/owner-note/SKILL.md
     sudo -u verifyssh test -r /home/verifyssh/.claude/skills/login-note/SKILL.md
