@@ -23,7 +23,7 @@ class BlockedByHookTest {
         val row = requireNotNull(ChatHistoryProtocol.parseRow(JSONObject()
             .put("role", "assistant").put("text", "").put("id", "").put("timestamp", blocked.getString("timestamp"))
             .put("offset", 0).put("end", 1)
-            .put("settlement", JSONObject().put("operation", "blocked").put("content", prompt)))
+            .put("settlement", JSONObject().put("operation", "blocked").put("content", prompt))))
         assertEquals(ChatHistoryProtocol.QueueOperation.BLOCKED, row.settlement?.operation)
         assertEquals(prompt, row.settlement?.content)
         assertTrue(ChatHistory(rows = listOf(row)).messages.isEmpty())
