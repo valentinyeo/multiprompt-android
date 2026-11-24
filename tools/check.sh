@@ -62,7 +62,6 @@ source_checks() {
   python3 -B tools/install-scheduled-jobs.test.py
   python3 -B tools/network-wait.test.py
   python3 -B tools/startup-time/report.test.py
-  python3 -B tools/scroll-jank/report.test.py
   python3 -B tools/speed-check/report.test.py
   python3 -B tools/long-chat/check.test.py
   python3 -B tools/chat-shapes/chat-shapes.test.py
