@@ -225,7 +225,7 @@ function renderWorkflow(source) {
 
 module.exports = {
   registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, HARNESS_SMOKE_JOURNEYS, MAX_PR_JOURNEYS, PR_CHECK_CAP, PR_NON_JOURNEY_CHECKS, speedPatterns,
-  changedRecipes, changedJourneys, directJourneys, speedRelevant, selectionForChange, prioritizeJourneys, capPrJourneys, changedProduct,
+  changedPaths, changedRecipes, changedJourneys, directJourneys, speedRelevant, selectionForChange, prioritizeJourneys, capPrJourneys, changedProduct,
   pathOutcomes, recipeOutcomes, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors,
   renderIndex, renderWorkflow,
 };
