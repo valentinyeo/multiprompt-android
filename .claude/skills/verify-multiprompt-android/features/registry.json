@@ -1830,6 +1830,9 @@
       "description": "Choose and retain themes and font sizes; navigate settings, host mapping and update menus. SOFT-2670.",
       "journey": "settings-controls.md",
       "sideEffect": true,
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/ui/Theme\\.kt$"
+      ],
       "match": [
         "settingsPage|SettingsPage|Session list settings|Default Reader font size|KitSegmented|HostMappingDialog|Desktop tmux hosts|Open navigation|AppSection.UPDATE to \"Update\"|Dictation key|VersionLabel",
         "onSetReaderDefaultFontScale|readerDefaultFontScale|fontOptions|AppTheme|onSetAppTheme|AppSection\\.UPDATE|onSelect\\(destination\\)"
