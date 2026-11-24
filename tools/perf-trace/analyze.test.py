@@ -77,6 +77,15 @@ class AnalyzeTest(unittest.TestCase):
         self.assertEqual(report['matching_main_thread_stacks']['parsing']['slices'][0]['jank_overlap_ms'], 35)
         self.assertIn('p50=25.000', analyze.markdown(report))
 
+    def test_unnamed_slices_keep_their_time_without_breaking_stack_matching(self):
+        fixture = Fixture()
+        fixture.db.execute('UPDATE slice SET name = NULL WHERE id = 1')
+        report = analyze.analyze(fixture, 'dev.multiprompt.companion')
+        self.assertEqual(report['main_slices_during_jank'][0]['name'], '[unnamed]')
+        self.assertEqual(report['matching_main_thread_stacks']['parsing']['slices'][0]['stack'],
+                         '[unnamed] > ChatHistory.projectMessages')
+        self.assertIn('[unnamed]', analyze.markdown(report))
+
     def test_missing_data_is_not_a_clean_bill_of_health(self):
         fixture = Fixture()
         fixture.db.executescript('DELETE FROM process; DELETE FROM stats;')

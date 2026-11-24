@@ -67,7 +67,7 @@ def analyze(tp, package):
         )
         SELECT MIN(ts) AS ts, MAX(end_ts) AS end_ts FROM groups GROUP BY group_id;
         CREATE PERFETTO TABLE perf_slices AS
-        SELECT s.id, s.parent_id, s.name, s.ts, s.dur
+        SELECT s.id, s.parent_id, COALESCE(s.name, '[unnamed]') AS name, s.ts, s.dur
         FROM slice s JOIN thread_track tt ON s.track_id = tt.id
         WHERE tt.utid IN (SELECT utid FROM perf_main) AND s.dur > 0;
     """)
@@ -93,7 +93,7 @@ def analyze(tp, package):
     slice_stacks = rows(tp, '''WITH RECURSIVE lineage(id, parent_id, stack) AS (
         SELECT id, parent_id, name FROM perf_slices
         UNION ALL
-        SELECT l.id, s.parent_id, s.name || ' > ' || l.stack
+        SELECT l.id, s.parent_id, COALESCE(s.name, '[unnamed]') || ' > ' || l.stack
         FROM lineage l JOIN slice s ON s.id = l.parent_id
         )
         SELECT s.id, s.ts, s.dur / 1e6 AS duration_ms, s.name, l.stack,
