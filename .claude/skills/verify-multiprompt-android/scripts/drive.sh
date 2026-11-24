@@ -1733,6 +1733,9 @@ fi
 if [[ "$feature" == ai-switch.md ]]; then
     source "$scripts/ai-switch-drive.sh"
 fi
+if [[ "$feature" == pi-model-switch.md ]]; then
+    source "$scripts/pi-model-switch-drive.sh"
+fi
 if [[ "$feature" == chat-identity.md ]]; then
     wait_for_text PROJECTION_READY_2532
     projection_event() {

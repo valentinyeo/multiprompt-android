@@ -1,8 +1,4 @@
 {
-  "pi.model-switch": {
-    "sourcePr": 374,
-    "cleanupTicket": "SOFT-2539"
-  },
   "legacy.igsh-429": {
     "sourceTicket": "IGSH-429",
     "cleanupTicket": "IGSH-429"

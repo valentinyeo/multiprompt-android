@@ -96,6 +96,36 @@ elif [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
     grep -Fx c001c001-2538-4000-8000-000000002538 "$EVIDENCE/ai-switch-initial-sid.txt"
     sudo -u verifyssh tmux display-message -p -t live-verify-session '#{session_name}|#{pane_current_command}' > "$EVIDENCE/ai-switch-initial-pane.txt"
     grep -Fx 'live-verify-session|sleep' "$EVIDENCE/ai-switch-initial-pane.txt"
+elif [[ "${VERIFY_FEATURE:-}" == pi-model-switch.md ]]; then
+    fixture_session=live-verify-session
+    [[ "${GITHUB_ACTIONS:-}" == true ]]
+    sudo install -m 755 "$(dirname "$0")/pi-model-switch-fixture.py" /home/verifyssh/pi-model-switch-fixture.py
+    sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/pi-model-switch-reader.py
+    sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin /home/verifyssh/.local/share/zigshell
+    sudo install -m 755 "$(dirname "$0")/pi-model-switch-fixture.py" /home/verifyssh/.local/bin/pi
+    sudo install -m 644 "$(dirname "$0")/pi-model-switch-fixture.py" /home/verifyssh/.local/share/zigshell/mp_complete.py
+    sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/pi
+    sudo -u verifyssh env GITHUB_ACTIONS=true HOME=/home/verifyssh tmux new-session -d -s live-verify-session -x 100 -y 32 'exec env GITHUB_ACTIONS=true HOME=/home/verifyssh /home/verifyssh/pi -u /home/verifyssh/pi-model-switch-fixture.py console > /home/verifyssh/pi-model-switch-setup.log 2>&1'
+    sudo -u verifyssh tmux set-window-option -t live-verify-session: automatic-rename off
+    sudo -u verifyssh tmux rename-window -t live-verify-session: verify-session
+    ready=false
+    for attempt in {1..30}; do
+        if sudo grep -Fxq PI_MODEL_SWITCH_READY_287 /home/verifyssh/pi-model-switch-setup.log 2>/dev/null &&
+            [[ $(sudo -u verifyssh tmux display-message -p -t live-verify-session '#{pane_current_command}') == sleep ]]; then ready=true; break; fi
+        sleep 1
+    done
+    sudo cat /home/verifyssh/pi-model-switch-setup.log > "$EVIDENCE/pi-model-switch-setup.txt"
+    sudo -u verifyssh tmux display-message -p -t live-verify-session '#{session_name}|#{pane_current_command}|#{window_name}' > "$EVIDENCE/pi-model-switch-pane.txt"
+    if [[ "$ready" != true ]]; then
+        grep -F 'PI_MODEL_SWITCH_READY_287' "$EVIDENCE/pi-model-switch-setup.txt"
+        cat "$EVIDENCE/pi-model-switch-pane.txt"
+        exit 1
+    fi
+    grep -Fx 'live-verify-session|sleep|verify-session' "$EVIDENCE/pi-model-switch-pane.txt"
+    sudo -u verifyssh env HOME=/home/verifyssh python3 /home/verifyssh/pi-model-switch-reader.py host start pi c001c001-0287-4000-8000-000000000287 > "$EVIDENCE/pi-model-switch-host-start.json"
+    jq -e '.status == "started" or .status == "already"' "$EVIDENCE/pi-model-switch-host-start.json"
+    sudo -u verifyssh tmux show-option -v -t live-verify-session @mp_host_sid > "$EVIDENCE/pi-model-switch-sid.txt"
+    grep -Fx c001c001-0287-4000-8000-000000000287 "$EVIDENCE/pi-model-switch-sid.txt"
 elif [[ "${VERIFY_FEATURE:-}" == chat-codex.md ]]; then
     sudo install -m 755 "$(dirname "$0")/codex-console.py" /home/verifyssh/codex-console.py
     sudo install -m 755 "$(dirname "$0")/resync-console.py" /home/verifyssh/resync-console.py

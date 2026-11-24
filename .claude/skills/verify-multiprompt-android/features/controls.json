@@ -4310,8 +4310,12 @@
       "label": "Back from Pi models",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:3fb8b61b8bf026c2:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4456",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "pi-model-switch.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/pi-model-switch.md",
+        "action": "Tap Model in the open Pi model sheet",
+        "result": "The sheet closes back to the attach menu with Add image"
+      }
     },
     {
       "id": "pi-models.choose-pi-model",
@@ -4319,8 +4323,12 @@
       "label": "Choose Pi model",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:ef2c2d77a87f6e6b:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4464",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "pi-model-switch.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/pi-model-switch.md",
+        "action": "Tap claude-sonnet-4-6",
+        "result": "The sheet closes and the next reply uses anthropic/claude-sonnet-4-6"
+      }
     },
     {
       "id": "pi-models.loading-pi-models-display-only",
@@ -4337,8 +4345,12 @@
       "label": "Retry loading Pi models",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:2d6d3a80afc9c994:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4478",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "pi-model-switch.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/pi-model-switch.md",
+        "action": "Tap No Pi models on this server. Tap to retry.",
+        "result": "The model list replaces the retry row"
+      }
     },
     {
       "id": "attach-host-settings.back-from-model-effort-permissions",
@@ -4574,8 +4586,12 @@
       "label": "Pi models",
       "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:top-level:KitMenuRow:ac4f8835a966e28f:1",
       "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:4552",
-      "journey": null,
-      "missing": "No automated journey exercises this control and checks its result."
+      "journey": "pi-model-switch.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/pi-model-switch.md",
+        "action": "Tap Model in the attach menu",
+        "result": "The Pi model sheet shows the retry row first, then both models"
+      }
     },
     {
       "id": "attach-menu.model",

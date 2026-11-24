@@ -1187,6 +1187,28 @@
         "clear-store-after.json": 1500,
         "clear-store-final.json": 1500
       }
+    },
+    "pi-model-switch.md": {
+      "name": "Switch Pi models",
+      "description": "Open a Pi chat's model sheet, retry a failed model load, switch to another model, and check the host's set_model receipt and the model in the next phone reply.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/pi-model-switch-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "pi.model-switch"
+      ],
+      "evidence": {
+        "pi-model-switch-state.json": 3600,
+        "pi-model-switch-proof.json": 1600,
+        "pi-model-switch-receipts.txt": 2400
+      }
     }
   },
   "outcomes": {
@@ -1473,11 +1495,25 @@
     },
     "pi.model-switch": {
       "description": "Discover Pi models, switch them and retry.",
-      "journey": null,
+      "journey": "pi-model-switch.md",
       "sideEffect": true,
       "match": [
         "PiModels|piModels|piModel"
-      ]
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "tap_text claude-sonnet-4-6"
+        },
+        "result": {
+          "file": "pi-model-switch-state.json",
+          "quote": "\"reply\": {"
+        },
+        "sideEffect": {
+          "file": "pi-model-switch-receipts.txt",
+          "quote": "\"type\": \"set_model\""
+        }
+      }
     },
     "chat-search.open": {
       "description": "Open chat search, count and mark hits, navigate, wrap and close.",

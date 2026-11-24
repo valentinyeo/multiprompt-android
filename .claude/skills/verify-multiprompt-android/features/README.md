@@ -120,6 +120,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `crash-report.exits`. Runner: `verify.yml` (debug). Priority evidence: `crash-reports-received.txt` (3200 characters), `crash-exit-summaries.json` (900 characters), `crash-exits.txt` (1600 characters).
 - [Cleared chat](chat-clear.md): A transcribed chat that starts fresh after /clear shows only what came after the clear, keeps a message typed after it, and never shows or sends an unsent or failed message from before it.
   - Outcomes: `chat-clear.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-clear-before-unsent.xml` (1500 characters), `00-clear-after.xml` (1500 characters), `00-clear-reopened.xml` (1500 characters), `00-clear-state.json` (1500 characters), `clear-store-after.json` (1500 characters), `clear-store-final.json` (1500 characters).
+- [Switch Pi models](pi-model-switch.md): Open a Pi chat's model sheet, retry a failed model load, switch to another model, and check the host's set_model receipt and the model in the next phone reply.
+  - Outcomes: `pi.model-switch`. Runner: `verify.yml` (debug). Priority evidence: `pi-model-switch-state.json` (3600 characters), `pi-model-switch-proof.json` (1600 characters), `pi-model-switch-receipts.txt` (2400 characters).
 
 ## Initial coverage gaps
 
@@ -127,7 +129,6 @@ These IDs are an inventory, not exemptions for future changes. Untouched gaps do
 
 | Outcome | Existing case | Cleanup ticket |
 |---|---|---|
-| `pi.model-switch` | [#374](https://github.com/valentinyeo/multiprompt-android/pull/374) | SOFT-2539 |
 | `legacy.igsh-429` | IGSH-429 | IGSH-429 |
 | `legacy.igsh-422` | IGSH-422 | IGSH-422 |
 | `legacy.igsh-432` | IGSH-432 | IGSH-432 |
