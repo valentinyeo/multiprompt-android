@@ -168,7 +168,7 @@ object MentionCopy {
     }
 
     private fun listSeparator(gap: String): Boolean {
-        var trimmed = trimRight(gap)
+        var trimmed = trimHSpace(gap)
         if (trimmed.isEmpty()) return true
         if (trimmed[0] == ',') {
             trimmed = trimRight(trimmed.substring(1))
@@ -202,6 +202,8 @@ object MentionCopy {
         while (i < text.length && hSpace(text[i])) i++
         return i
     }
+
+    private fun trimHSpace(text: String): String = trimRight(text.substring(skipHSpace(text, 0)))
 
     private fun trimRight(text: String): String {
         var end = text.length
