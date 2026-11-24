@@ -63,12 +63,26 @@ menu_scroll() {
     done
     return 1
 }
+open_section() {
+    local title=$1 probe=$2 attempt
+    for attempt in 1 2 3; do
+        if select_node text "$probe" >/dev/null 2>&1; then return 0; fi
+        if select_node text "$title" >/dev/null 2>&1; then
+            tap_text "$title"
+            if select_node text "$probe" >/dev/null 2>&1; then return 0; fi
+        else
+            if select_node text Model >/dev/null 2>&1; then tap_text Model; fi
+            if select_node text Effort >/dev/null 2>&1; then tap_text Effort; fi
+        fi
+    done
+    printf 'Attach section %s did not open\n' "$title" >&2
+    return 1
+}
 : > "$EVIDENCE/native-menu-commands.txt"
 wait_for_absence 'Model switch did not finish; try again'
 menu_state attach-back visible 'Add image'
 for model in Opus Haiku Fable; do
-    wait_for_absence 'Model switch did not finish; try again'
-    tap_text Model
+    open_section Model Fable
     tap_text "$model"
     wait_receipt "VERIFY_RECEIVED:/model ${model,,}"
     printf 'VERIFY_RECEIVED:/model %s\n' "${model,,}" >> "$EVIDENCE/native-menu-commands.txt"
@@ -81,8 +95,7 @@ for model in Opus Haiku Fable; do
     menu_state "attach-${model,,}-selected" visible "$model ›"
 done
 for effort in Low Medium; do
-    wait_for_absence 'Model switch did not finish; try again'
-    tap_text Effort
+    open_section Effort High
     tap_text "$effort"
     wait_receipt "VERIFY_RECEIVED:/effort ${effort,,}"
     printf 'VERIFY_RECEIVED:/effort %s\n' "${effort,,}" >> "$EVIDENCE/native-menu-commands.txt"
