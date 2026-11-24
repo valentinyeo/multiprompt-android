@@ -45,7 +45,7 @@ Unlinked inventory gaps get their own requests.
 Generated counterparts never create more counterparts.
 Archived counterparts still count as already paired.
 
-New-request coverage starts 2026-10-29T22:55:59Z.
+New-request coverage starts 2026-11-25T00:00:00Z.
 Historical gaps remain linked in this list.
 
 Agent operation: `python3 tools/parity/multiprompt-parity.py --apply`.

@@ -1,0 +1,1 @@
+Phone test taps the wrong menu row when the menu grows

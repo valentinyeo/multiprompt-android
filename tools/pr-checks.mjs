@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,7 +28,12 @@ export const retiringChecks = [
   'pick journeys',
 ];
 export const emptyJourneyMatrix = /^(?:parent )?journey \$\{\{ matrix\.feature \}\}(?: \/ .*)?$/;
-export const speedCheckJob = 'chat list remeasures';
+export function speedJobName(text = readFileSync(new URL('../.github/workflows/speed-check.yml', import.meta.url), 'utf8')) {
+  const name = text.match(/^jobs:[ \t]*\n {2}[\w-]+:[ \t]*\n {4}name: (.+?)[ \t]*$/m)?.[1];
+  if (!name) throw new Error('speed-check.yml has no job name');
+  return name;
+}
+export const speedCheckJob = speedJobName();
 export const journeyVerifyCheck = /^journey (.+) \/ verify$/;
 export const nightlyWorkflow = 'android-full.yml';
 export const nightlyJobName = /^nightly (.+) \/ verify$/;
