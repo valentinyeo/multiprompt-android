@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 room_order_send() {
-    local text=$1 attempt
-    python3 "$scripts/mpa" fill 'Message Order room' "$text"
+    local text=$1 room=${2:-Order room} attempt
+    python3 "$scripts/mpa" fill "Message $room" "$text"
     python3 "$scripts/mpa" tap text Send || true
     for attempt in {1..30}; do
         if python3 "$scripts/mpa" read --select draft --value '' >/dev/null 2>&1; then return 0; fi
@@ -36,15 +36,11 @@ room_order_background() {
 }
 
 room_order_inbox() {
-    local cycle attempt
+    local cycle
     for cycle in {1..4}; do
-        if python3 "$scripts/mpa" read --select contains --value 'Order room' >/dev/null 2>&1; then return 0; fi
-        room_order_background || true
+        if python3 "$scripts/mpa" tap text 'Order room' --reveal; then return 0; fi
+        room_order_background
         adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity" >/dev/null
-        for attempt in {1..25}; do
-            if python3 "$scripts/mpa" read --select contains --value 'Order room' >/dev/null 2>&1; then return 0; fi
-            sleep 1
-        done
     done
     return 1
 }
@@ -82,7 +78,7 @@ room_order_journey() {
     done < "$EVIDENCE/account-origin-blocked.txt"
     relaunch_app
     adb shell run-as "$package" cat shared_prefs/encrypted_secrets.xml > "$EVIDENCE/account-store.txt" || true
-    room_order_inbox || true
+    room_order_inbox
     python3 "$scripts/mpa" read --select contains --value 'Order room'
     python3 "$scripts/mpa" screenshot room-inbox
     python3 "$scripts/mpa" tap text 'Order room'
@@ -116,6 +112,23 @@ room_order_journey() {
     python3 "$scripts/mpa" screenshot room-ordered
     room_order_submits "$EVIDENCE/room-submits.txt"
     python3 "$scripts/room-order-check.py" submitted "$EVIDENCE/room-submits.txt"
+    python3 "$scripts/mpa" tap desc Back
+    python3 "$scripts/mpa" read --wait-text Inbox
+    python3 "$scripts/mpa" tap text 'Existing room'
+    python3 "$scripts/mpa" read --wait-text EXISTING_BEFORE_139
+    python3 "$scripts/mpa" screenshot room-existing-open
+    room_order_send EXISTING_SEND_139 'Existing room'
+    for attempt in {1..30}; do
+        room_order_submits "$EVIDENCE/room-existing-submits.txt"
+        if python3 "$scripts/room-order-check.py" existing-submitted "$EVIDENCE/room-existing-submits.txt"; then break; fi
+        sleep 1
+    done
+    python3 "$scripts/room-order-check.py" existing-submitted "$EVIDENCE/room-existing-submits.txt"
+    python3 "$scripts/mpa" read --wait-text EXISTING_SEND_139
+    python3 "$scripts/mpa" proof --name room-existing --require-text EXISTING_BEFORE_139 --require-text EXISTING_SEND_139
+    dump_ui
+    cp "$EVIDENCE/current.xml" "$EVIDENCE/room-existing.xml"
+    python3 "$scripts/mpa" screenshot room-existing
     printf 'ROOM_ORDER_OK\n'
     exit 0
 }

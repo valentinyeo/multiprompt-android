@@ -123,7 +123,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Cleared chat](chat-clear.md): A transcribed chat that starts fresh after /clear shows only what came after the clear, keeps a message typed after it, and never shows or sends an unsent or failed message from before it.
   - Outcomes: `chat-clear.journey`. Runner: `verify.yml` (debug). Priority evidence: `00-clear-before-unsent.xml` (1500 characters), `00-clear-after.xml` (1500 characters), `00-clear-reopened.xml` (1500 characters), `00-clear-state.json` (1500 characters), `clear-store-after.json` (1500 characters), `clear-store-final.json` (1500 characters).
 - [Room message order](room-order.md): A room shows the first send above the second, and the second agent's reply carries the first agent's earlier answer before the new message, while the host submit log shows the same order.
-  - Outcomes: `rooms.order`. Runner: `verify.yml` (debug). Priority evidence: `room-ordered.xml` (3000 characters), `room-submits.txt` (1500 characters).
+  - Outcomes: `rooms.order`. Runner: `verify.yml` (debug). Priority evidence: `room-ordered.xml` (3000 characters), `room-submits.txt` (1500 characters), `room-existing.json` (1500 characters), `room-existing-submits.txt` (1500 characters).
 
 ## Initial coverage gaps
 

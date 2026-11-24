@@ -5,7 +5,7 @@ from pathlib import Path
 
 STATE = Path.home() / '.multiprompt-runtime' / 'state.json'
 SUBMITS = Path.home() / 'room-submits.jsonl'
-AGENTS = {'alpha': 'tmux-alpha', 'beta': 'tmux-beta'}
+AGENTS = {'alpha': 'tmux-alpha', 'beta': 'tmux-beta', 'gamma': 'tmux-gamma'}
 
 
 def load():

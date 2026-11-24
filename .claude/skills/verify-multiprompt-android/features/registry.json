@@ -1228,7 +1228,9 @@
       ],
       "evidence": {
         "room-ordered.xml": 3000,
-        "room-submits.txt": 1500
+        "room-submits.txt": 1500,
+        "room-existing.json": 1500,
+        "room-existing-submits.txt": 1500
       }
     }
   },

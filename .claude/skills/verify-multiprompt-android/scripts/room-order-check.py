@@ -68,6 +68,23 @@ def install(assets):
             'name': ROOM,
             'members': members,
         })
+        existing = bridge.execute({
+            'op': 'create',
+            'host_uuid': host,
+            'command_id': str(uuid.uuid4()),
+            'name': 'Existing room',
+            'members': [{**members[0], 'alias': 'gamma', 'display_name': 'Gamma',
+                         'provider_sid': 'gamma', 'session_identity': 'claude:gamma'}],
+        })
+        bridge.execute({
+            'op': 'post_human',
+            'host_uuid': host,
+            'command_id': str(uuid.uuid4()),
+            'room_id': existing['event']['room_id'],
+            'expected_revision': 1,
+            'text': 'EXISTING_BEFORE_139',
+            'recipients': [],
+        })
     finally:
         bridge.close()
     print('ROOM_READY')
@@ -224,6 +241,11 @@ def main():
         shown(sys.argv[2])
     elif command == 'submitted':
         submitted(sys.argv[2])
+    elif command == 'existing-submitted':
+        texts = [row['text'] for row in load_rows(sys.argv[2]) if row.get('sid') == 'gamma']
+        if texts != ['EXISTING_BEFORE_139', 'EXISTING_SEND_139']:
+            raise SystemExit('existing room did not deliver its old and new messages')
+        print('ROOM_EXISTING_SUBMITTED')
     else:
         raise SystemExit('unknown room-order-check command')
 
