@@ -54,7 +54,7 @@ class KitMaterialCheckTest(unittest.TestCase):
         self.assertEqual(Counter(), found(source))
 
     def test_purple_palette_names_and_template_literals_are_rejected(self):
-        source = "\n".join(["val purple = Purple40", "val scheme = Color(0xFF6750A4)"])
+        source = "\n".join(["val accent = Purple40", "val scheme = Color(0xFF6750A4)"])
         self.assertEqual(Counter({SCREEN + ": purple": 2}), found(source))
 
     def test_debug_and_test_sources_are_out_of_scope(self):
