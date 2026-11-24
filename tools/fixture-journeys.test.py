@@ -482,6 +482,7 @@ session['db'].close()
                 self.assertEqual('failed', events[-1]['state'])
 
     def test_block_event_marks_the_sent_prompt_not_sent_without_a_wait(self):
+        import datetime as datetime_module
         reader = load('fixture_canonical_reader', ROOT / 'app/src/main/assets/chat_history_reader.py')
         source = ast.parse((SCRIPTS / 'queued-console.py').read_text())
         functions = [node for node in ast.walk(source) if isinstance(node, ast.FunctionDef) and node.name in ('advance_queue', 'accept_input', 'block_prompt', 'append')]
@@ -491,7 +492,7 @@ session['db'].close()
             transcript.parent.mkdir(parents=True)
             transcript.write_text('')
             sources = {name: base64.b64encode((ROOT / 'app/src/main/assets/chat_connectors' / (name + '.py')).read_bytes()).decode() for name in ('claude', 'codex')}
-            namespace = dict(reader=reader, SID=queue.SID, HOME=home, TRANSCRIPT=transcript, RECEIPTS=home / 'receipts.txt', draft='', native=[], redraw=lambda: None, closing=closing, datetime=datetime, json=json, uuid=uuid)
+            namespace = dict(reader=reader, SID=queue.SID, HOME=home, TRANSCRIPT=transcript, RECEIPTS=home / 'receipts.txt', draft='', native=[], redraw=lambda: None, closing=closing, datetime=datetime_module, json=json, uuid=uuid)
             exec(compile(ast.Module(body=functions, type_ignores=[]), '<queued-fixture-controller>', 'exec'), namespace)
             def state():
                 with closing(sqlite3.connect(reader.message_store_path())) as db:
