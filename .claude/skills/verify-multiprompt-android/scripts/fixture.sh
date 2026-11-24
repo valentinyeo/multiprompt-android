@@ -174,12 +174,12 @@ SKILL
     printf '%s\n' 'Defaults:verifyssh !requiretty' 'Defaults:verifyssh logfile=/home/verifyssh/sudo.log' 'verifyssh ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/verify-skillowner >/dev/null
     sudo chmod 440 /etc/sudoers.d/verify-skillowner
     sudo visudo -cf /etc/sudoers.d/verify-skillowner
-    sudo -u verifyssh bash <<'PREFLIGHT'
+    sudo -H -u verifyssh bash <<'PREFLIGHT'
 set -euo pipefail
-cd "$HOME"
 sudo -n -u skillowner -- true
 sudo -n -- true
 sudo -n -H -u skillowner -- python3 -c 'import os,pwd; assert os.environ["HOME"]=="/home/skillowner" and pwd.getpwuid(os.getuid()).pw_name=="skillowner"'
+printf 'owner_sudo_preflight=ok\n' >> "$EVIDENCE/owner-fixture.txt"
 PREFLIGHT
     sudo -u skillowner test -r /home/skillowner/.claude/skills/owner-note/SKILL.md
     sudo -u verifyssh test ! -r /home/skillowner/.claude/skills/owner-note/SKILL.md
