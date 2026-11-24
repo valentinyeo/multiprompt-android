@@ -289,7 +289,7 @@ class ChatHistoryConnectionTest {
             .put("item", "pi-login-2")
         for (done in listOf(false, false, true)) {
             val fake = FakeHost("pi").apply { events = if (done) listOf(pending, completed) else listOf(pending) }
-            ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.PI, "tmux", "/cwd"),
+            ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.PI, "tmux", "/cwd", "sid1"),
                 byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(),
                 connectedExchange = { fake.connect(it) }, pollGate = ChatPollGate()).use { chat ->
                 chat.pollGate.acquire()
