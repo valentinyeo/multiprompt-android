@@ -583,6 +583,12 @@ shot sessions
 break_it_ready
 real_chat_step
 
+if [[ "$feature" == live-chat-freshness.md ]]; then
+    source "$scripts/live-chat-freshness-drive.sh"
+    live_chat_freshness
+    exit 0
+fi
+
 if [[ "$feature" == session-favorite-dot.md ]]; then
     [[ "$package" == dev.multiprompt.companion.debug ]]
     wait_for_text verify-keep

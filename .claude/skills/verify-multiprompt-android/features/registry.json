@@ -1041,6 +1041,28 @@
         "phone-restart-host.json": 2000
       }
     },
+    "live-chat-freshness.md": {
+      "name": "Live chat shows new messages",
+      "description": "The real-size restarted chat shows its newest rows on open, and a row appended on the host reaches the phone within seconds with a host receipt.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/live-chat-freshness-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "reader.live-tail"
+      ],
+      "evidence": {
+        "live-chat-freshness.json": 2500,
+        "live-chat-host.txt": 1500,
+        "live-chat-freshness.txt": 200
+      }
+    },
     "folder-bar.md": {
       "name": "Inbox folder bar",
       "description": "Selected last/middle folders remain fully visible on selection and restart; overflow fades over a transparent bar. SOFT-2706.",
@@ -1878,6 +1900,29 @@
         "sideEffect": {
           "file": "phone-restart-host.json",
           "quote": "\"working_untouched\": true"
+        }
+      }
+    },
+    "reader.live-tail": {
+      "description": "The live chat renders the newest host rows on open and a message appended on the host appears within seconds, proven by the phone screen and a host receipt.",
+      "journey": "live-chat-freshness.md",
+      "sideEffect": true,
+      "match": [],
+      "paths": [
+        "^tools/real-chat/fixture\\.py$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "append --role user --text LIVE_CHAT_APPEND_2781"
+        },
+        "result": {
+          "file": "live-chat-freshness.json",
+          "quote": "\"verdict\": \"LIVE_CHAT_NEWEST_WITHIN_SECONDS\""
+        },
+        "sideEffect": {
+          "file": "live-chat-host.txt",
+          "quote": "LIVE_CHAT_APPENDED:LIVE_CHAT_APPEND_2781"
         }
       }
     },

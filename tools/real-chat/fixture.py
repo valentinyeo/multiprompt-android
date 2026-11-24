@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
+import uuid
 
 STAMP = '2026-11-21T09:00:00.000Z'
 HOST_ROOT = '.local/state/multiprompt/agent-host'
@@ -25,6 +27,8 @@ STALE_FIRST = 'REAL_CHAT_STALE_FIRST_2781'
 STALE_SECOND = 'REAL_CHAT_STALE_SECOND_2781'
 NEIGHBOUR_TEXT = 'REAL_CHAT_NEIGHBOUR_2781'
 HANDOVER_TEXT = 'REAL_CHAT_HANDOVER_2781'
+USER_APPEND = 'LIVE_CHAT_APPEND_2781'
+REPLY_APPEND = 'LIVE_CHAT_APPEND_REPLY_2781'
 MIN_BYTES = 2_600_000
 MAX_BYTES = 3_600_000
 MIN_ROWS = 3_900
@@ -217,16 +221,37 @@ def latest_init(path):
     return found
 
 
+def append(home, role, text):
+    if role not in ('user', 'assistant'):
+        raise SystemExit('append needs --role user or assistant')
+    if not isinstance(text, str) or not text.strip() or len(text) > 200:
+        raise SystemExit('append needs --text of 1 to 200 characters')
+    home = Path(home)
+    manifest = check(home)
+    path = Path(manifest['transcript'])
+    identity = 'a2781b00-0000-4000-8000-' + uuid.uuid4().hex[:12]
+    written = text_row(role, identity, text)
+    with path.open('a', encoding='utf-8') as stream:
+        stream.write(json.dumps(written) + '\n')
+    measured = counts(path)
+    entry = dict(role=role, text=text, id=identity, at=time.time(), bytes=measured['bytes'], rows=measured['rows'])
+    manifest = read_json(home / 'chat-real.json')
+    manifest.setdefault('appended', []).append(entry)
+    write_json(home / 'chat-real.json', manifest)
+    return dict(entry=entry, transcript=str(path), appended=len(manifest['appended']))
+
+
 def check(home):
     home = Path(home)
     manifest = read_json(home / 'chat-real.json')
     expected = plan()
     assert (manifest['session'], manifest['chat'], manifest['live']) == (expected['session'], expected['chat'], expected['live']), 'REAL_CHAT_IDENTITY'
     measured = counts(manifest['transcript'])
+    appends = [row['text'] for row in manifest.get('appended', [])]
     assert MIN_BYTES <= measured['bytes'] <= MAX_BYTES, 'REAL_CHAT_BYTES'
-    assert MIN_ROWS <= measured['rows'] <= MAX_ROWS, 'REAL_CHAT_ROWS'
+    assert MIN_ROWS <= measured['rows'] <= MAX_ROWS + len(appends), 'REAL_CHAT_ROWS'
     assert MIN_TOOL_SHARE <= measured['tool_rows'] / measured['rows'] <= MAX_TOOL_SHARE, 'REAL_CHAT_TOOL_SHARE'
-    assert last_text(manifest['transcript']) == REPLY_NEWEST, 'REAL_CHAT_LATEST'
+    assert last_text(manifest['transcript']) in [REPLY_NEWEST] + appends, 'REAL_CHAT_LATEST'
     assert last_text(manifest['first_transcript']) == STALE_FIRST, 'REAL_CHAT_STALE_FIRST'
     assert last_text(manifest['second_transcript']) == STALE_SECOND, 'REAL_CHAT_STALE_SECOND'
     assert last_text(manifest['neighbour_transcript']) == NEIGHBOUR_TEXT, 'REAL_CHAT_NEIGHBOUR'
@@ -289,7 +314,7 @@ COMMANDS = {'plan': plan, 'seed': create, 'check': check}
 
 def main(argv):
     parser = argparse.ArgumentParser(description='Real-size synthetic Claude chat for the phone tests.')
-    parser.add_argument('command', choices=sorted(COMMANDS) + ['cache'])
+    parser.add_argument('command', choices=sorted(COMMANDS) + ['append', 'cache'])
     parser.add_argument('--home', default=None)
     parser.add_argument('--host-id')
     parser.add_argument('--hostname')
@@ -299,9 +324,13 @@ def main(argv):
     parser.add_argument('--tmux', default=SESSION)
     parser.add_argument('--cwd')
     parser.add_argument('--out')
+    parser.add_argument('--role', choices=['user', 'assistant'])
+    parser.add_argument('--text')
     arguments = parser.parse_args(argv[1:])
     home = Path(arguments.home or os.environ.get('HOME') or Path.home())
-    if arguments.command == 'cache':
+    if arguments.command == 'append':
+        payload = append(home, arguments.role, arguments.text)
+    elif arguments.command == 'cache':
         payload = cache(home, arguments.host_id, arguments.hostname, arguments.port, arguments.username,
                         arguments.agent, arguments.tmux, arguments.cwd)
         if arguments.out:
