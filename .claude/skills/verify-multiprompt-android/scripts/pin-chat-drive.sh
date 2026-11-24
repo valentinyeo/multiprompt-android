@@ -75,6 +75,29 @@ prove_pinned_on_top pin-after-reply
 relaunch_app Inbox
 "$mpa" read --wait-text Inbox
 prove_pinned_on_top pin-after-restart
+row_below=$(python3 - "$EVIDENCE/pin-top-rows-pin-after-restart.json" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1]))[1])
+PY
+)
+"$mpa" tap text "$deep_target"
+"$mpa" read --wait-text "Message $deep_target"
+"$mpa" tap desc 'Session actions'
+"$mpa" screenshot pin-archive-next-menu
+"$mpa" tap text Waiting
+"$mpa" read --wait-text "Message $row_below"
+"$mpa" proof --name pin-archive-next --require-text "Message $row_below" --forbid-text "Message $deep_target"
+cp "$EVIDENCE/current.xml" "$EVIDENCE/pin-archive-next.xml"
+"$mpa" tap desc Back
+"$mpa" read --wait-text Inbox
+"$mpa" tap desc 'Switch session bucket'
+"$mpa" tap text Waiting
+"$mpa" hold desc "$deep_description"
+"$mpa" tap text 'Return to open'
+"$mpa" tap desc 'Switch session bucket'
+"$mpa" tap text Inbox
+"$mpa" read --wait-text "$deep_target"
 "$mpa" hold desc "$deep_description"
 "$mpa" read --wait-text Unpin
 "$mpa" read --select absent --value 'Pin to top'
@@ -94,7 +117,7 @@ import sys
 
 root = Path(sys.argv[1])
 pinned_chat, other_chat = sys.argv[2], sys.argv[3]
-names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-unpinned"]
+names = ["pin-before", "pin-pinned", "pin-after-reply-newest", "pin-after-reply", "pin-after-restart", "pin-archive-next", "pin-unpinned"]
 phases = {}
 for name in names:
     phase = json.loads((root / f"{name}.json").read_text())

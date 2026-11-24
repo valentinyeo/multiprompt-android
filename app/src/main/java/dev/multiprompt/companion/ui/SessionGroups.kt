@@ -4,9 +4,21 @@ data class SessionGroup<T>(val name: String?, val items: List<T>)
 
 object SessionGroups {
     const val RECENTS = "Recents"
+    const val PINNED = "Pinned"
 
     fun <T> heading(group: SessionGroup<T>, all: List<SessionGroup<T>>): String? =
         group.name ?: RECENTS.takeIf { all.any { it.name != null } }
+
+    fun <T> withPinned(groups: List<SessionGroup<T>>, pinned: List<T>, atEnd: Boolean): List<SessionGroup<T>> {
+        if (pinned.isEmpty() || groups.none { it.name != null }) return groups
+        val pinnedItems = pinned.toSet()
+        val rest = groups.mapNotNull { group ->
+            val items = group.items.filterNot { it in pinnedItems }
+            items.takeIf { it.isNotEmpty() }?.let { SessionGroup(group.name, it) }
+        }
+        val pinnedGroup = SessionGroup(PINNED, pinned)
+        return if (atEnd) rest + pinnedGroup else listOf(pinnedGroup) + rest
+    }
 
     fun <T> split(items: List<T>, order: List<String>? = null, groupOf: (T) -> String?): List<SessionGroup<T>> {
         val loose = items.filter { groupOf(it).isNullOrEmpty() }

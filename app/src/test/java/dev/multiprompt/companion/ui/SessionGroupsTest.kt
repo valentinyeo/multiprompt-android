@@ -45,4 +45,58 @@ class SessionGroupsTest {
         assertEquals(expected, SessionGroups.split(listOf("a", "b"), null) { of[it] })
         assertEquals(expected, SessionGroups.split(listOf("a", "b"), emptyList()) { of[it] })
     }
+
+    @Test fun pinnedChatIsFirstInTheWholeListWhenChatsAreGrouped() {
+        val of = mapOf("a" to "Design", "b" to "Runners", "c" to "Design", "d" to null)
+        val groups = SessionGroups.split(listOf("a", "b", "c", "d"), listOf("Runners", "Design")) { of[it] }
+        assertEquals(
+            listOf(SessionGroup(null, listOf("d")), SessionGroup("Runners", listOf("b")), SessionGroup("Design", listOf("a", "c"))),
+            groups,
+        )
+
+        val pinned = SessionGroups.withPinned(groups, listOf("c"), atEnd = false)
+        assertEquals(
+            listOf(
+                SessionGroup("Pinned", listOf("c")), SessionGroup(null, listOf("d")),
+                SessionGroup("Runners", listOf("b")), SessionGroup("Design", listOf("a")),
+            ),
+            pinned,
+        )
+        assertEquals(listOf<String?>("Pinned", "Recents", "Runners", "Design"), pinned.map { SessionGroups.heading(it, pinned) })
+    }
+
+    @Test fun pinnedChatLeavesItsGroupAndAnEmptiedGroupDisappears() {
+        val of = mapOf("a" to "Runners", "b" to "Runners", "c" to "Design")
+        val groups = SessionGroups.split(listOf("a", "b", "c"), null) { of[it] }
+
+        assertEquals(
+            listOf(SessionGroup("Pinned", listOf("c")), SessionGroup("Runners", listOf("a", "b"))),
+            SessionGroups.withPinned(groups, listOf("c"), atEnd = false),
+        )
+    }
+
+    @Test fun pinnedGroupGoesLastSoAReversedListShowsItFirst() {
+        val of = mapOf("a" to "Design", "b" to "Runners", "c" to "Design")
+        val groups = SessionGroups.split(listOf("a", "b", "c"), null) { of[it] }
+
+        assertEquals(
+            listOf(SessionGroup("Design", listOf("c")), SessionGroup("Runners", listOf("b")), SessionGroup("Pinned", listOf("a"))),
+            SessionGroups.withPinned(groups, listOf("a"), atEnd = true),
+        )
+    }
+
+    @Test fun anUngroupedListKeepsPinsInPlaceWithoutAPinnedHeading() {
+        val groups = SessionGroups.split(listOf("c", "a", "b")) { null }
+        val pinned = SessionGroups.withPinned(groups, listOf("c"), atEnd = false)
+
+        assertEquals(groups, pinned)
+        assertEquals(listOf<String?>(null), pinned.map { SessionGroups.heading(it, pinned) })
+    }
+
+    @Test fun noPinnedChatsLeavesTheGroupsUntouched() {
+        val groups = SessionGroups.split(listOf("a", "b")) { mapOf("a" to "Design")[it] }
+
+        assertEquals(groups, SessionGroups.withPinned(groups, emptyList(), atEnd = false))
+        assertEquals(groups, SessionGroups.withPinned(groups, emptyList(), atEnd = true))
+    }
 }

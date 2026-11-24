@@ -1,0 +1,1 @@
+Android: pinned chats stay first with groups and archive-next
