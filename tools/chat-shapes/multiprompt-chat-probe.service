@@ -1,9 +1,13 @@
 [Unit]
 Description=Check that every live chat loads its latest transcript
+OnFailure=multiprompt-chat-probe-ticket.service
 
 [Service]
 Type=oneshot
-ExecStart=%h/projects/multiprompt-android/tools/chat-shapes/live_probe.py
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStartPre=-/usr/bin/git -C %h/projects/multiprompt-android-jobs fetch --depth 1 origin main
+ExecStartPre=-/usr/bin/git -C %h/projects/multiprompt-android-jobs checkout -q --detach origin/main
+ExecStart=/usr/bin/python3 %h/projects/multiprompt-android-jobs/tools/chat-shapes/live_probe.py
 Nice=10
 StandardOutput=journal
 StandardError=journal
