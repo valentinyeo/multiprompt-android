@@ -357,6 +357,17 @@ wait_for_text() { test "$1" = "$expected_screen"; }
                             input=options["input"], capture_output=True, text=True, env=env)
         return run
 
+    def main_rows(self, requested):
+        from io import StringIO
+        from unittest.mock import patch
+        output = StringIO()
+        with patch.object(sys, "argv", [str(SCRIPT), "live-abc", str(requested)]), \
+                patch.object(Path, "home", return_value=self.home), \
+                patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": ""}), \
+                patch.object(sys, "stdout", output):
+            skills.main()
+        return json.loads(output.getvalue())
+
     def test_chat_under_another_account_lists_that_accounts_skills(self):
         from unittest.mock import patch
         self.skill(self.home, "login-only")
@@ -368,18 +379,20 @@ wait_for_text() { test "$1" = "$expected_screen"; }
         self.skill(owner_home, "owner-user")
         self.skill(project, "owner-project")
         calls = []
+        self.skill(self.cwd, "stale-project-only")
         with patch.object(skills, "owner_account", return_value="other"), \
-                patch.object(skills, "tmux_folder", return_value=None), \
+                patch.object(skills, "tmux_folder", return_value=project), \
                 patch.object(skills.subprocess, "run", side_effect=self.run_as_owner(owner_home, calls)):
-            answer = skills.owner_answer("live-abc", str(project), Path("/home/login"))
-        self.assertEqual([row["name"] for row in json.loads(answer)], ["owner-project", "owner-user"])
+            rows = self.main_rows(self.cwd)
+        self.assertEqual([row["name"] for row in rows], ["owner-project", "owner-user"])
         command, options = calls[0]
         self.assertEqual(command[:7], ["sudo", "-n", "-H", "-u", "other", "--", "python3"])
         self.assertEqual(command[7], "-c")
         self.assertEqual(command[8], skills.LAUNCHER)
         self.assertEqual(command[9:], ["live-abc", str(project)])
         self.assertEqual(options["input"], SCRIPT.read_text(encoding="utf-8"))
-        self.assertNotIn("login-only", answer)
+        self.assertNotIn("login-only", [row["name"] for row in rows])
+        self.assertNotIn("stale-project-only", [row["name"] for row in rows])
 
     def test_chat_under_the_login_account_never_asks_sudo(self):
         from unittest.mock import patch
@@ -401,7 +414,7 @@ wait_for_text() { test "$1" = "$expected_screen"; }
                 patch.object(skills, "owner_skills", return_value=answer) as output:
             self.assertEqual(skills.owner_answer("live-abc", "", self.home), answer)
             owner.assert_called_once_with(Path(requested), self.home)
-        output.assert_called_once_with("other", "live-abc", "")
+        output.assert_called_once_with("other", "live-abc", requested)
 
     def test_unreadable_chat_folder_still_names_its_owner(self):
         locked = self.home / "locked"
@@ -422,18 +435,64 @@ wait_for_text() { test "$1" = "$expected_screen"; }
             self.assertIsNone(skills.owner_answer("live-abc", str(self.cwd), self.home))
         hosted.assert_not_called()
 
-    def test_refused_or_broken_owner_answer_falls_back_to_the_local_list(self):
+    def test_account_and_handoff_folder_follow_the_live_chat_not_the_stale_request(self):
         from unittest.mock import patch
+        lookup = self.accounts(live=(1001, "/home/live"), stale=(1002, "/home/stale"),
+                               hosted=(1003, "/home/hosted"))
+        answer = '[{"name": "owner-only", "description": ""}]'
+        cases = [(Path("/home/live/app"), "/home/stale/app", Path("/home/hosted/app"), "live", "/home/live/app"),
+                 (None, "/home/stale/app", Path("/home/hosted/app"), "stale", "/home/stale/app"),
+                 (None, "", Path("/home/hosted/app"), "hosted", "/home/hosted/app")]
+        for live, requested, hosted, account, folder in cases:
+            with self.subTest(account=account):
+                with patch.object(skills.pwd, "getpwnam", side_effect=lookup), \
+                        patch.object(skills, "tmux_folder", return_value=live), \
+                        patch.object(skills, "hosted_folder", return_value=hosted), \
+                        patch.object(skills.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, stdout=answer)) as run:
+                    self.assertEqual(self.main_rows(requested), [{"name": "owner-only", "description": ""}])
+                command = run.call_args.args[0]
+                self.assertEqual(command[:7], ["sudo", "-n", "-H", "-u", account, "--", "python3"])
+                self.assertEqual(command[9:], ["live-abc", folder])
+
+    def test_refused_or_broken_owner_reads_never_expose_login_skills(self):
+        from unittest.mock import patch
+        self.skill(self.home, "login-only")
+        self.skill(self.cwd, "login-project-only")
+        lookup = self.accounts(other=(1001, "/home/other"))
         failures = [subprocess.CompletedProcess([], 1, stdout="[]", stderr="sudo: a password is required"),
+                    subprocess.CompletedProcess([], 1, stdout='[{"name": "partial"}]', stderr="sudo failed"),
                     subprocess.CompletedProcess([], 0, stdout="not json", stderr=""),
                     subprocess.CompletedProcess([], 0, stdout='{"name": "x"}', stderr=""),
+                    subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+                    subprocess.CompletedProcess([], 0, stdout="null", stderr=""),
+                    subprocess.CompletedProcess([], 0, stdout="[]", stderr=""),
                     OSError("no sudo"), subprocess.TimeoutExpired("sudo", 8)]
         for failure in failures:
             with self.subTest(failure=repr(failure)):
-                with patch.object(skills, "owner_account", return_value="other"), \
-                        patch.object(skills, "tmux_folder", return_value=None), \
+                with patch.object(skills.pwd, "getpwnam", side_effect=lookup), \
+                        patch.object(skills, "tmux_folder", return_value=Path("/home/other/app")), \
                         patch.object(skills.subprocess, "run", side_effect=[failure]):
-                    self.assertIsNone(skills.owner_answer("live-abc", "/home/other/app", self.home))
+                    self.assertEqual(self.main_rows(self.cwd), [])
+
+    def test_missing_handoff_source_never_exposes_login_skills(self):
+        from unittest.mock import patch
+        self.skill(self.home, "login-only")
+        lookup = self.accounts(other=(1001, "/home/other"))
+        with patch.object(skills.pwd, "getpwnam", side_effect=lookup), \
+                patch.object(skills, "tmux_folder", return_value=Path("/home/other/app")), \
+                patch.object(skills, "own_source", return_value=None), \
+                patch.object(skills.subprocess, "run") as run:
+            self.assertEqual(self.main_rows(self.cwd), [])
+        run.assert_not_called()
+
+    def test_login_chat_still_lists_its_own_skills_without_sudo(self):
+        from unittest.mock import patch
+        self.skill(self.home, "login-only")
+        self.skill(self.cwd, "login-project-only")
+        with patch.object(skills, "tmux_folder", return_value=self.cwd), \
+                patch.object(skills.subprocess, "run") as run:
+            self.assertEqual([row["name"] for row in self.main_rows(self.cwd)], ["login-only", "login-project-only"])
+        run.assert_not_called()
 
     def test_owner_run_reads_its_own_home_and_never_asks_sudo_again(self):
         self.skill(self.home, "own-home")

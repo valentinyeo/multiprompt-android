@@ -206,8 +206,9 @@ def project_directory(session, requested):
 
 
 def owner_answer(session, requested, home=None):
-    account = owner_account(chat_folder(session, requested), Path.home() if home is None else home)
-    return owner_skills(account, session, requested) if account else None
+    folder = chat_folder(session, requested)
+    account = owner_account(folder, Path.home() if home is None else home)
+    return (owner_skills(account, session, str(folder)) or "[]") if account else None
 
 
 def main():
