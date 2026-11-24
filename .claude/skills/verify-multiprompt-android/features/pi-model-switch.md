@@ -6,7 +6,7 @@ Dispatch `verify.yml` with `feature=pi-model-switch.md`. The driver uses the sam
 
 A disposable Pi RPC process replaces the external provider without changing the app or its host runtime. It starts on `opencode-go/deepseek-v4.1-flash`, records every `set_model` control and every prompt it receives with the model in use, and answers with the model in the reply. The model list comes from a disposable `~/.local/share/zigshell/mp_complete.py` helper: its first answer is an empty list, every later answer is two models. That is the failed load the app retries. Setup requires the Pi host start and the recorded tmux identity before the emulator launches.
 
-Every prompt comes from the phone. A Pi chat does not show a reply that the host finished before the phone held the chat: the app carries the message-store events from its own snapshot cursor, and only the Claude path replays older ones. So the journey's first send produces the model in use, and each fixture reply streams in full, then waits on a hold file that the journey removes once the phone shows it. The host's settled receipt gates the next step.
+Every prompt comes from the phone. A submit rebuilds the phone's message replica, so it takes a fresh snapshot and then reads host events only after that snapshot cursor; only the Claude path replays events older than the cursor. A reply that starts before the rebuild is therefore invisible until its next text event. The fixture answers each phone prompt only once the store shows that rebuild: it polls `message_snapshots` for a snapshot created after it received the prompt, then streams the reply in small deltas and holds completion until the journey removes the hold file after the phone shows the text. The host's settled receipt gates the next step. Each receipt records the snapshot wait.
 
 ## Journey
 
@@ -23,6 +23,6 @@ Every prompt comes from the phone. A Pi chat does not show a reply that the host
 
 Every capture keeps a PNG and its XML. The retry capture forbids the second model name, so a model list that arrives without the retry fails. A reply that still names the initial model fails the product assertion instead of passing on a tapped row.
 
-Do not send a prompt and then wait for a finished reply. When the phone rebuilds its message replica just after a submit (its message-status check sees no row for a moment), a reply that already completed is behind the new snapshot cursor and never reaches the screen. The streamed text survives that rebuild. That is why the fixture holds completion and the journey asserts on the streaming reply.
+Do not answer a prompt before the phone's post-submit snapshot. That snapshot rebuilds the replica and moves the cursor past the reply, and only the Claude path replays older host events, so a reply the fixture emits at once is lost until its completion event. The fixture waits for the snapshot row, then streams; the journey asserts on that streamed text. If the wait times out the fixture still streams after a delay, and the run then depends on timing, which the snapshot wait in `pi-model-switch-receipts.txt` shows.
 
 The loading row is display-only and transient; this recipe does not assert it. Live provider authentication, the pinned model list of a real Pi install, and signed releases are outside this recipe.

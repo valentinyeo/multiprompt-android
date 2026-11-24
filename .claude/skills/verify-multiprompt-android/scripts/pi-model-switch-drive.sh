@@ -33,7 +33,7 @@ prompt_and_reply() {
     fill 'Message verify-session' "$prompt"
     for attempt in {1..8}; do
         tap_desc 'Send prompt'
-        if wait_for_text "$reply" 5 40; then seen=true; break; fi
+        if wait_for_text "$reply" 5 60; then seen=true; break; fi
         dump_ui || break
         if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value 'Message verify-session' "$prompt" >/dev/null 2>&1; then
             printf 'Journey retry %s: the draft was still in the composer\n' "$attempt" >&2
@@ -90,6 +90,8 @@ initial = 'opencode-go/deepseek-v4.1-flash'
 chosen = 'anthropic/claude-sonnet-4-6'
 rows = [json.loads(line) for line in (root / 'pi-model-switch-receipts.txt').read_text().splitlines()]
 models = [row for row in rows if row['type'] == 'models']
+snapshots = [row for row in rows if row['type'] == 'snapshot']
+assert len(snapshots) >= 2, snapshots
 assert len(models) >= 3, models
 assert models[0]['result'] == 'empty', models
 assert all(row['result'] == 'listed' for row in models[1:]), models
@@ -130,6 +132,7 @@ for phase, (required, forbidden) in expected.items():
     states[phase] = dict(xml=file.name, screenshot=file.with_suffix('.png').name, text=required)
 root.joinpath('pi-model-switch-state.json').write_text(json.dumps(states, indent=2) + '\n')
 proof = dict(models=[row['result'] for row in models],
+             snapshots=[row['waited'] for row in snapshots],
              switch=dict(provider=switch['provider'], modelId=switch['modelId'], sid=switch['sid']),
              prompts=[dict(message=row['message'], model=row['model']) for row in prompts],
              phone=dict(before='PI_MODEL_BEFORE_287 ' + initial, reply='PI_MODEL_AFTER_287 ' + chosen))

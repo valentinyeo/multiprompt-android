@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import time
@@ -16,11 +17,46 @@ RECEIPTS = HOME / 'pi-model-switch-receipts.jsonl'
 LISTED = HOME / 'pi-model-switch-models-listed'
 HOLD = HOME / 'pi-model-switch-hold'
 SETTLED = HOME / 'pi-model-switch-settled'
+STORE = HOME / '.local/state/multiprompt/shared-messages/store.sqlite3'
 PHONE_BEFORE = 'PHONE_MODEL_BEFORE_287'
+CHUNK = 4
+CHUNK_SECONDS = 0.3
+SNAPSHOT_TIMEOUT = 25.0
+FALLBACK_SECONDS = 6.0
 
 
 def boundary():
     assert Path.home() == HOME and os.getuid() != 0
+
+
+def snapshot_after(since):
+    deadline = time.time() + SNAPSHOT_TIMEOUT
+    while time.time() < deadline:
+        found = None
+        try:
+            db = sqlite3.connect(f'file:{STORE}?mode=ro', uri=True)
+            try:
+                found = db.execute(
+                    'SELECT created FROM message_snapshots WHERE provider=? AND sid=? AND created>=? LIMIT 1',
+                    ('pi', SID, since)).fetchone()
+            finally:
+                db.close()
+        except sqlite3.Error:
+            found = None
+        if found:
+            return round(time.time() - since, 3)
+        time.sleep(0.2)
+    return None
+
+
+def stream(reply, request):
+    since = time.time()
+    waited = snapshot_after(since)
+    receipt(dict(type='snapshot', sid=SID, id=request.get('id'), waited=waited))
+    time.sleep(FALLBACK_SECONDS if waited is None else 0.2)
+    for start in range(0, len(reply), CHUNK):
+        emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=reply[start:start + CHUNK])))
+        time.sleep(CHUNK_SECONDS)
 
 
 def receipt(row):
@@ -84,12 +120,12 @@ def pi():
             emit(dict(type='response', command='prompt', id=request.get('id'), success=True))
             emit(dict(type='agent_start'))
             emit(dict(type='message_start'))
-            emit(dict(type='message_update', assistantMessageEvent=dict(type='text_delta', contentIndex=0, delta=reply)))
-            if HOLD.exists():
-                for attempt in range(960):
-                    if not HOLD.exists():
-                        break
-                    time.sleep(0.25)
+            stream(reply, request)
+            for attempt in range(360):
+                if not HOLD.exists():
+                    break
+                time.sleep(0.25)
+            assert not HOLD.exists(), 'The phone never showed the streamed reply'
             emit(dict(type='message_update', assistantMessageEvent=dict(type='text_end', contentIndex=0, content=reply)))
             emit(dict(type='message_end', message=dict(role='assistant', stopReason='stop')))
             emit(dict(type='agent_settled'))
