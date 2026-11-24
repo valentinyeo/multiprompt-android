@@ -16,11 +16,11 @@ spec.loader.exec_module(parity)
 
 def task(number="MUBO-2000", label="Multiprompt", **kwargs):
     return {"ticketNumber": number, "title": "Show session replies", "description": "",
-            "createdAt": "2026-10-30T01:00:00Z", "labels": [{"name": label}], "status": "Normal", **kwargs}
+            "createdAt": "2026-11-25T01:00:00Z", "labels": [{"name": label}], "status": "Normal", **kwargs}
 
 
 def inventory():
-    return {"track_since": "2026-10-29T22:55:59Z", "features": [], "catch_up_tickets": []}
+    return {"track_since": "2026-11-25T00:00:00Z", "features": [], "catch_up_tickets": []}
 
 
 def relation(number="MUBO-165", direction="incoming"):
@@ -73,7 +73,7 @@ class ParityTests(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
     def test_feature_row_links_each_ticket_to_its_own_board(self):
-        data = {"reviewed": "2026-10-29", "track_since": "2026-10-29T22:55:59Z", "catch_up_tickets": [], "features": [
+        data = {"reviewed": "2026-10-29", "track_since": "2026-11-25T00:00:00Z", "catch_up_tickets": [], "features": [
             {"id": "codex-chat", "name": "Codex chat",
              "desktop": {"status": "partial", "source": "https://github.com/valentinyeo/multiprompt/a.zig", "ticket": "IGSH-1220"},
              "android": {"status": "partial", "source": "https://github.com/valentinyeo/multiprompt-android/b.kt", "ticket": "MUBO-1220"}}]}
@@ -93,15 +93,21 @@ class ParityTests(unittest.TestCase):
         result = parity.reconcile(inventory(), [task(label="Multiprompt Android")], False, stub())
         self.assertEqual(result, [{"source": "MUBO-2000", "target": "desktop"}])
 
-    def test_24_nov_duplicates_are_paired_by_real_links(self):
-        rows = [task("MUBO-3000", createdAt="2026-11-24T09:00:00Z"),
-                task("MUBO-3001", "Multiprompt Android", createdAt="2026-11-24T09:00:00Z"),
-                task("MUBO-3002", createdAt="2026-11-24T09:10:00Z"),
-                task("MUBO-3003", "Multiprompt Android", createdAt="2026-11-24T09:10:00Z")]
+    def test_duplicates_are_paired_by_real_links(self):
+        rows = [task("MUBO-3000", createdAt="2026-11-25T09:00:00Z"),
+                task("MUBO-3001", "Multiprompt Android", createdAt="2026-11-25T09:00:00Z"),
+                task("MUBO-3002", createdAt="2026-11-25T09:10:00Z"),
+                task("MUBO-3003", "Multiprompt Android", createdAt="2026-11-25T09:10:00Z")]
         linked = {"MUBO-3000": ["MUBO-3001"], "MUBO-3001": ["MUBO-3000"],
                   "MUBO-3002": ["MUBO-3003"], "MUBO-3003": ["MUBO-3002"]}
         self.assertEqual(parity.pairs(inventory(), rows, stub(links=linked)), [])
         self.assertEqual(len(parity.pairs(inventory(), rows, stub())), 4)
+
+    def test_requests_before_the_cutoff_are_never_paired(self):
+        rows = [task("MUBO-3000", createdAt="2026-11-24T09:00:00Z"),
+                task("MUBO-3001", "Multiprompt Android", createdAt="2026-11-24T23:59:59Z")]
+        self.assertEqual(parity.pairs(inventory(), rows, stub()), [])
+        self.assertEqual(len(parity.pairs(inventory(), [task("MUBO-3000", createdAt="2026-11-25T00:00:00Z")], stub())), 1)
 
     def test_link_pairs_in_either_direction(self):
         desktop = task("MUBO-3000")
