@@ -150,6 +150,53 @@ elif [[ "${VERIFY_FEATURE:-}" == native-skills.md || "${VERIFY_FEATURE:-}" == sk
     sudo install -m 755 "$(dirname "$0")/skills-console.py" /home/verifyssh/skills-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/skills-console.py /home/verifyssh/receipts.txt'
+elif [[ "${VERIFY_FEATURE:-}" == owner-skills.md ]]; then
+    sudo useradd -m -s /bin/bash skillowner
+    sudo chmod 755 /home/skillowner
+    sudo install -d -m 755 -o skillowner -g skillowner /home/skillowner/chat-work
+    sudo -u skillowner mkdir -p /home/skillowner/.claude/skills/owner-note
+    sudo -u skillowner tee /home/skillowner/.claude/skills/owner-note/SKILL.md >/dev/null <<'SKILL'
+---
+name: owner-note
+description: Owner account skill
+---
+BODY_MUST_NOT_BE_INJECTED
+SKILL
+    sudo chmod 700 /home/skillowner/.claude /home/skillowner/.claude/skills /home/skillowner/.claude/skills/owner-note
+    sudo chmod 600 /home/skillowner/.claude/skills/owner-note/SKILL.md
+    sudo -u verifyssh mkdir -p /home/verifyssh/.claude/skills/login-note
+    sudo -u verifyssh tee /home/verifyssh/.claude/skills/login-note/SKILL.md >/dev/null <<'SKILL'
+---
+name: login-note
+description: Login account skill
+---
+BODY_MUST_NOT_BE_INJECTED
+SKILL
+    printf '%s\n' 'Defaults:verifyssh !requiretty' 'Defaults:verifyssh logfile=/home/verifyssh/sudo.log' 'verifyssh ALL=(ALL) NOPASSWD: ALL' | sudo tee /etc/sudoers.d/verify-skillowner >/dev/null
+    sudo chmod 440 /etc/sudoers.d/verify-skillowner
+    sudo visudo -cf /etc/sudoers.d/verify-skillowner
+    sudo -H -u verifyssh bash <<'PREFLIGHT' || { printf 'OWNER_SUDO_PREFLIGHT_FAILED\n' >&2; exit 1; }
+set -euo pipefail
+sudo -n -u skillowner -- true || { printf 'OWNER_SUDO_SKILLOWNER_DENIED\n' >&2; exit 1; }
+sudo -n -- true || { printf 'OWNER_SUDO_ROOT_DENIED\n' >&2; exit 1; }
+sudo -n -H -u skillowner -- python3 -c 'import os,pwd; assert os.environ["HOME"]=="/home/skillowner" and pwd.getpwuid(os.getuid()).pw_name=="skillowner"' || { printf 'OWNER_SUDO_ENVIRONMENT_WRONG\n' >&2; exit 1; }
+PREFLIGHT
+    printf 'owner_sudo_preflight=ok\n' >> "$EVIDENCE/owner-fixture.txt"
+    sudo -u skillowner test -r /home/skillowner/.claude/skills/owner-note/SKILL.md || { printf 'OWNER_SKILL_UNREADABLE_FOR_OWNER\n' >&2; exit 1; }
+    sudo -u verifyssh test ! -r /home/skillowner/.claude/skills/owner-note/SKILL.md || { printf 'OWNER_SKILL_VISIBLE_TO_LOGIN\n' >&2; exit 1; }
+    sudo -u verifyssh test -r /home/verifyssh/.claude/skills/login-note/SKILL.md || { printf 'LOGIN_SKILL_UNREADABLE\n' >&2; exit 1; }
+    sudo -u verifyssh test -x /home/skillowner/chat-work || { printf 'OWNER_CHAT_FOLDER_UNREACHABLE\n' >&2; exit 1; }
+    sudo install -m 755 "$(dirname "$0")/owner-skills-console.py" /home/verifyssh/owner-skills-console.py
+    sudo -u verifyssh tmux new-session -d -s verify-session -c /home/skillowner/chat-work -x 100 -y 32 'exec -a claude /usr/bin/python3 -u /home/verifyssh/owner-skills-console.py /home/verifyssh/receipts.txt' || { printf 'OWNER_SESSION_NOT_STARTED\n' >&2; exit 1; }
+    [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{session_path}')" == /home/skillowner/chat-work ]] || { printf 'OWNER_SESSION_PATH_WRONG\n' >&2; exit 1; }
+    [[ "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{pane_current_path}')" == /home/skillowner/chat-work ]] || { printf 'OWNER_PANE_PATH_WRONG\n' >&2; exit 1; }
+    {
+        printf 'session_path=%s\n' "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{session_path}')"
+        printf 'pane_path=%s\n' "$(sudo -u verifyssh tmux display-message -p -t verify-session '#{pane_current_path}')"
+        printf 'owner_skill=owner-note\n'
+        printf 'owner_skill_hidden_from_verifyssh=yes\n'
+        printf 'login_skill=login-note\n'
+    } > "$EVIDENCE/owner-fixture.txt"
 elif [[ "${VERIFY_FEATURE:-}" == chat-reactions.md ]]; then
     sudo install -m 755 "$(dirname "$0")/reaction-console.py" /home/verifyssh/reaction-console.py
     sudo -u verifyssh ln -s "$(command -v python3)" /home/verifyssh/claude

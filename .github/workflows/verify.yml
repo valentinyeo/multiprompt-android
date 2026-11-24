@@ -126,6 +126,7 @@ on:
           - hosts.md
           - launcher-icon.md
           - native-skills.md
+          - owner-skills.md
           - robot-faces.md
           - session-drafts.md
           - session-favorite-dot.md
