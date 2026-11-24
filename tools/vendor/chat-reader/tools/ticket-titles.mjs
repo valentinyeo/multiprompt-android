@@ -45,38 +45,70 @@ export function ticketLine(record) {
   return `${id} ${title}`;
 }
 
-export async function resolveTicketTitles(ids, catalog, token, request = fetch) {
+function catalogTitles(catalog) {
   const titles = {};
   for (const [id, title] of Object.entries(catalog)) {
     const canonical = canonicalTicketId(id);
     if (Object.hasOwn(titles, canonical) && titles[canonical] !== title) throw new Error(`Conflicting titles for ${canonical}`);
     titles[canonical] = title;
   }
+  return titles;
+}
+
+function skipError(kind, message) {
+  const error = new Error(message);
+  error.kind = kind;
+  return error;
+}
+
+async function fetchTicketTitle(id, token, request, remaining) {
+  const ticket = parseTicketId(id);
+  if (!token) throw skipError('no-token', `Missing title for ${id}; provide a catalog or release token`);
+  let response;
+  try {
+    response = await request(`https://api.hypertask.ai/api/mcp/tasks?ticket_number=${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(Math.min(15000, remaining)),
+      redirect: 'error',
+    });
+  } catch {
+    throw skipError('lookup-failed', `Title lookup failed for ${id}`);
+  }
+  if (!response.ok) throw skipError('lookup-failed', `Title lookup failed for ${id}`);
+  const data = await response.json().catch(() => null);
+  const task = data?.tasks?.[0];
+  if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || !acceptsTaskForId(id, ticket, task)) throw skipError('not-found', `Unresolved title for ${id}`);
+  return ticketRecord(id, task.title).title;
+}
+
+export async function resolveTicketTitles(ids, catalog, token, request = fetch) {
+  const titles = catalogTitles(catalog);
   ids = ids.map(canonicalTicketId);
   const missing = [...new Set(ids)].filter(id => !Object.hasOwn(titles, id));
   if (missing.length > 2000) throw new Error('Too many unresolved ticket titles');
   const deadline = Date.now() + 120000;
   for (const id of missing) {
-    const ticket = parseTicketId(id);
-    if (!token) throw new Error(`Missing title for ${id}; provide a catalog or release token`);
     const remaining = deadline - Date.now();
     if (remaining <= 0) throw new Error('Ticket title lookup timed out');
-    let response;
-    try {
-      response = await request(`https://api.hypertask.ai/api/mcp/tasks?ticket_number=${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(Math.min(15000, remaining)),
-        redirect: 'error',
-      });
-    } catch {
-      throw new Error(`Title lookup failed for ${id}`);
-    }
-    if (!response.ok) throw new Error(`Title lookup failed for ${id}`);
-    const data = await response.json().catch(() => null);
-    const task = data?.tasks?.[0];
-    if (data?.success !== true || !Array.isArray(data.tasks) || data.tasks.length !== 1 || !acceptsTaskForId(id, ticket, task)) throw new Error(`Unresolved title for ${id}`);
-    titles[id] = ticketRecord(id, task.title).title;
+    titles[id] = await fetchTicketTitle(id, token, request, remaining);
   }
   for (const id of ids) ticketRecord(id, titles[id]);
   return titles;
+}
+
+export async function resolveReleaseTitles(ids, catalog, token, request = fetch) {
+  const titles = catalogTitles(catalog);
+  const unresolved = [];
+  const deadline = Date.now() + 120000;
+  for (const id of [...new Set(ids.map(value => parseTicketId(value)?.id).filter(Boolean))]) {
+    if (Object.hasOwn(titles, id)) continue;
+    try {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw skipError('timed-out', 'Ticket title lookup timed out');
+      titles[id] = await fetchTicketTitle(id, token, request, remaining);
+    } catch (error) {
+      unresolved.push([id, error.kind || 'lookup-failed']);
+    }
+  }
+  return { titles, unresolved };
 }

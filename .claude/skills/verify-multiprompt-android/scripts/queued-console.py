@@ -82,7 +82,7 @@ def reply(text):
     redraw()
 
 
-if os.environ.get('VERIFY_FEATURE') in ('chat-queued.md', 'chat-clear.md'):
+if os.environ.get('VERIFY_FEATURE') in ('chat-queued.md', 'chat-clear.md', 'send-blocked.md'):
     spec = importlib.util.spec_from_file_location('queue_reader', HOME / 'queue-reader.py')
     reader = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(reader)
@@ -116,6 +116,17 @@ def advance_queue():
     reader.message_poll('verify-session', 'claude', SID)
     if not draft and not native:
         reader.message_store_request(dict(op='message_dispatch', message_protocol=1, provider='claude', sid=SID, tmux='verify-session'))
+
+
+def block_prompt(prompt):
+    if reader is None:
+        return False
+    append(dict(type='system', subtype='informational', level='warning', preventContinuation=True, uuid=str(uuid.uuid4()),
+                content='UserPromptSubmit hook blocked the prompt. Original prompt: ' + prompt,
+                promptSubmitEnding=dict(ending=dict(kind='blocked_by_hook', reason='the verify fixture hook blocked this prompt'),
+                                        promptKept=False)))
+    (HOME / 'blocked-at.txt').write_text(str(time.time()) + '\n', encoding='utf-8')
+    return True
 
 
 def fail_messages():
@@ -155,6 +166,8 @@ while True:
                 redraw()
             elif event in ('marker:BEFORE_CONSUMPTION_MARKER', 'marker:UNCERTAIN_MARKER_1', 'marker:UNCERTAIN_MARKER_2'):
                 reply(event.partition(':')[2])
+            elif event.startswith('block:') and native and native[0].split('\n', 1)[0] == event.partition(':')[2]:
+                result = 'ok' if block_prompt(event.partition(':')[2]) else 'invalid fixture event: ' + event
             elif event == 'fail-messages' and reader is not None:
                 fail_messages()
             elif event == 'clear-transcript':

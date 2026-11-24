@@ -29,6 +29,16 @@ SPEC.loader.exec_module(reader)
 FIXTURE_SPEC = importlib.util.spec_from_file_location('soft2779_fixture', ROOT / 'tools/fixtures/SOFT-2779/fixture.py')
 fixture = importlib.util.module_from_spec(FIXTURE_SPEC)
 FIXTURE_SPEC.loader.exec_module(fixture)
+MUBO_246_PROMPT = '/pstack:poteto-mode full autopilot on this queue'
+MUBO_246_FIXTURE = ROOT / 'tools/fixtures/MUBO-246/blocked-by-hook.jsonl'
+
+
+def mubo_246_events():
+    return [event for event in (json.loads(line) for line in MUBO_246_FIXTURE.read_text().splitlines() if line.strip())]
+
+
+def mubo_246_blocked_row():
+    return next(event for event in mubo_246_events() if event.get('promptSubmitEnding', {}).get('promptKept') is False)
 
 
 class HistoryReaderTest(unittest.TestCase):
@@ -2148,6 +2158,46 @@ class HistoryReaderTest(unittest.TestCase):
         self.assertIsNone(reader.settlement_event(dict(refused, content='Compacted while idle'), 'claude'))
         self.assertIsNone(reader.settlement_event(refused, 'codex'))
 
+    def test_mubo_246_a_prompt_a_hook_blocked_is_a_send_failure(self):
+        self.path.write_text(MUBO_246_FIXTURE.read_text())
+        blocked = mubo_246_blocked_row()
+        self.assertIsNone(reader.settlement_event(blocked, 'claude'))
+        fact = reader.settlement_event(blocked, 'claude', True)
+        self.assertEqual(fact['settlement'], dict(operation='blocked', content=MUBO_246_PROMPT))
+        self.assertEqual(fact['timestamp'], blocked['timestamp'])
+        kept = next(event for event in mubo_246_events() if event.get('promptSubmitEnding', {}).get('promptKept') is True)
+        self.assertIsNone(reader.settlement_event(kept, 'claude', True))
+        delivered = next(event for event in mubo_246_events() if event.get('type') == 'user')
+        self.assertIsNone(reader.settlement_event(delivered, 'claude', True))
+        self.assertIsNone(reader.settlement_event(dict(blocked, isSidechain=True), 'claude', True))
+        self.assertIsNone(reader.settlement_event(blocked, 'codex', True))
+        self.query.update(settlement=True, blocked_settlement=True, offset=0, cached_sid='')
+        _, rows = self.read()
+        self.assertEqual([row['settlement'] for row in rows if row.get('settlement')],
+                         [dict(operation='blocked', content=MUBO_246_PROMPT)])
+        self.assertEqual([row['text'] for row in rows if row.get('role') == 'user'], ['summarise the open pull requests'])
+
+    def test_mubo_246_a_client_without_the_opt_in_reads_master_output(self):
+        self.path.write_text(MUBO_246_FIXTURE.read_text())
+        self.query.update(settlement=True, offset=0, cached_sid='')
+        wire = reader.response(dict(self.query))
+        self.assertNotIn('blocked', wire)
+        without_opt_in = wire.splitlines()[1:-1]
+        self.assertEqual([json.loads(row)['text'] for row in without_opt_in], ['summarise the open pull requests', 'Two are open.'])
+        ignored = [event for event in mubo_246_events() if event.get('promptSubmitEnding')]
+        self.path.write_text(''.join(json.dumps(event) + '\n' for event in mubo_246_events() if event not in ignored))
+        self.query.update(cached_sid='', inode=0, offset=0, mtime=0, probe='')
+        master = reader.response(dict(self.query))
+        self.assertEqual(without_opt_in, master.splitlines()[1:-1])
+        self.assertNotIn('blocked', master)
+        self.path.write_text(MUBO_246_FIXTURE.read_text())
+        self.query.update(blocked_settlement=True, cached_sid='', inode=0, offset=0, mtime=0, probe='')
+        _, rows = self.read()
+        self.assertEqual([row['settlement'] for row in rows if row.get('settlement')],
+                         [dict(operation='blocked', content=MUBO_246_PROMPT)])
+        self.assertEqual([row['text'] for row in rows if row['role'] == 'assistant' and row['text']], ['Two are open.'])
+        self.assertEqual([row['text'] for row in rows if row['role'] == 'user'], ['summarise the open pull requests'])
+
     def test_queue_removal_and_contentless_dequeue_popall_survive_delta_paging(self):
         self.query['settlement'] = True
         enqueue = dict(type='queue-operation', operation='enqueue', content='please review my offer', timestamp='2026-10-13T11:06:22.591Z')
@@ -4077,6 +4127,33 @@ class IGSH_1266_SharedMessageHostTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.submit(text='different synthetic prompt')
         self.assertEqual(self.status()['state'], 'sent')
+
+    def test_mubo_246_a_prompt_blocked_by_a_hook_says_not_sent(self):
+        self.submit(text=MUBO_246_PROMPT)
+        self.request('dispatch')
+        self.assertEqual(self.status()['state'], 'sent')
+        self.append(mubo_246_blocked_row())
+        self.poll()
+        message = self.status()
+        self.assertEqual(message['state'], 'failed')
+        self.assertIn('blocked_by_hook', message['receipt'])
+
+    def test_mubo_246_a_block_for_another_prompt_leaves_a_delivered_message_alone(self):
+        self.submit(text='synthetic prompt')
+        self.request('dispatch')
+        self.append(mubo_246_blocked_row())
+        self.poll()
+        self.assertEqual(self.status()['state'], 'sent')
+
+    def test_mubo_246_the_host_stream_marks_a_blocked_prompt_not_sent(self):
+        session = dict(state={}, sends=[dict(id='message_fixture_0001', attempt='a1', epoch=1, accepted=False,
+                                             text=MUBO_246_PROMPT)])
+        with patch.object(reader, 'host_apply', return_value=True) as apply:
+            reader.host_claude_event('claude', 'sid', 'fixture', session, mubo_246_blocked_row())
+        fact = apply.call_args.args[3][0]
+        self.assertEqual((fact['kind'], fact['id'], fact['reason']),
+                         ('not_sent', 'message_fixture_0001', 'blocked_by_hook'))
+        self.assertEqual(session['sends'], [])
 
     def test_soft_2989_connector_not_sent_keeps_the_reason_it_returned(self):
         connector = dict(
@@ -8765,6 +8842,78 @@ class SOFT2272HostedClearTest(unittest.TestCase):
         wire = reader.response(dict(self.query), reader.READER_SOURCE, as_owner=True)
         self.assertIn('PINEAPPLE', wire)
 
+
+class SOFT_3054_FreshHandoverTest(unittest.TestCase):
+    fixture = json.loads((ROOT / 'tools/fixtures/SOFT-3054/scenario.json').read_text(encoding='utf-8'))
+    provider = 'claude'
+    sid = 'a3054000-0000-4000-8000-000000003054'
+    tmux = 'soft-3054-chat'
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.addCleanup(patch.stopall)
+        self.home = Path(self.temp.name)
+        patch.object(reader, 'HOME', self.home).start()
+        paths = reader.host_paths(self.provider, self.sid)
+        reader.host_write(paths['config'], dict(enabled=True, tmux=self.tmux, cwd=self.temp.name))
+        self.history = paths['history']
+        self.stream = io.BytesIO()
+        self.session = dict(state=dict(display_history=True, native_session=self.sid))
+        reader.host_session_reset(self.session, types.SimpleNamespace(stdin=self.stream))
+        self.session['ready'] = True
+        for row in self.fixture['history_rows']:
+            reader.host_history_append(self.provider, self.sid, self.session, dict(row))
+        reader.host_state_write(self.provider, self.sid, self.session['state'])
+
+    def test_handover_usable_rejects_local_command_notices(self):
+        self.assertFalse(reader.host_fresh_handover_usable(self.fixture['handover_noise']))
+        self.assertFalse(reader.host_fresh_handover_usable(self.fixture['limit_notice']))
+        self.assertTrue(reader.host_fresh_handover_usable(self.fixture['handover_real']))
+
+    def test_handover_finish_keeps_the_real_reply_over_command_noise(self):
+        fresh = dict(phase='handover', text={}, started=time.time())
+        self.session['state']['fresh_start'] = fresh
+        reader.host_event(self.provider, self.sid, self.tmux, self.session, 'text.done',
+                          dict(text=self.fixture['handover_noise']))
+        reader.host_event(self.provider, self.sid, self.tmux, self.session, 'text.done',
+                          dict(text=self.fixture['handover_real']))
+        reader.host_fresh_finish(self.provider, self.sid, self.tmux, self.session, 'completed')
+        saved = reader.host_read(reader.host_paths(self.provider, self.sid)['root'] / fresh['file'])
+        self.assertIn('Super MCP', saved['text'])
+        self.assertNotIn('Reloaded skills', saved['text'])
+
+    def test_handover_finish_falls_back_to_recent_history_when_only_noise_arrives(self):
+        fresh = dict(phase='handover', text={}, started=time.time())
+        self.session['state']['fresh_start'] = fresh
+        reader.host_event(self.provider, self.sid, self.tmux, self.session, 'text.done',
+                          dict(text=self.fixture['handover_noise']))
+        reader.host_fresh_finish(self.provider, self.sid, self.tmux, self.session, 'completed')
+        saved = reader.host_read(reader.host_paths(self.provider, self.sid)['root'] / fresh['file'])
+        self.assertIn('MCP adapter audit', saved['text'])
+        self.assertNotIn('Reloaded skills', saved['text'])
+
+    def test_valentin_resume_inlines_handover_instead_of_a_file_path(self):
+        paths = reader.host_paths(self.provider, self.sid)
+        reader.host_write(paths['root'] / 'saved.json', dict(text=self.fixture['handover_real']))
+        self.session['state'].update(valentin_mode=True,
+                                     fresh_start=dict(phase='resume', file='saved.json', started=time.time()))
+        reader.host_fresh_resume(self.provider, self.sid, self.tmux, self.session)
+        sent = json.loads(self.stream.getvalue().decode())
+        prompt = sent['message']['content'][0]['text']
+        self.assertIn('Super MCP wiring', prompt)
+        self.assertNotIn('read the handover at', prompt)
+
+    def test_resume_says_when_saved_handover_is_only_command_noise(self):
+        paths = reader.host_paths(self.provider, self.sid)
+        reader.host_write(paths['root'] / 'saved.json', dict(text=self.fixture['handover_noise']))
+        self.session['state']['fresh_start'] = dict(phase='resume', file='saved.json', started=time.time())
+        reader.host_fresh_resume(self.provider, self.sid, self.tmux, self.session)
+        sent = json.loads(self.stream.getvalue().decode())
+        prompt = sent['message']['content'][0]['text']
+        self.assertIn('did not contain usable text', prompt)
+        self.assertIn('MCP adapter audit', prompt)
+        self.assertNotIn('Reloaded skills', prompt)
 
 class MUBO_239_DisplayHistoryReplyIdTest(unittest.TestCase):
     provider = 'claude'

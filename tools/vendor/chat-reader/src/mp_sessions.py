@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import datetime
 import hashlib
 import importlib.machinery
 import importlib.util
 import json
 import os
 import sys
+import uuid
 from pathlib import Path
 
 PROVIDERS = ("claude", "codex", "pi", "cursor")
@@ -90,11 +92,49 @@ def enable_args(provider, sid, folder, tmux):
     return command
 
 
+def desktop_host(listing):
+    hosts = listing.get("hosts") or []
+    slot = host_slot()
+    return hosts[slot] if slot < len(hosts) else None
+
+
+def desktop_tabs(send, listing):
+    host = desktop_host(listing)
+    for workspace, group, tab in send.iter_tabs(listing):
+        if host is None or tab.get("host") == host:
+            yield workspace, group, tab
+
+
+def desktop_state(listing, tab=None, tmux=None):
+    online = listing.get("ok") is True
+    active = listing.get("active_workspace")
+    if active is None and online:
+        active = next((ws.get("name") for ws in listing.get("workspaces", []) if ws.get("active")), None)
+    archived = online and tab is None and any(entry.get("tmux") == tmux and entry.get("host") == desktop_host(listing)
+                                             for entry in listing.get("archived_sessions", []))
+    if not online:
+        visible, reason = None, "desktop offline"
+    elif archived:
+        visible, reason = False, "archived"
+    elif tab is None:
+        visible, reason = False, "not in layout"
+    elif isinstance(tab.get("visible"), bool):
+        visible = tab["visible"]
+        reason = None if visible else tab.get("hidden_reason") or "not in sidebar layout"
+    else:
+        visible, reason = None, "desktop visibility unavailable"
+    return dict(in_layout=tab is not None if online else None, visible=visible, hidden_reason=reason,
+                waiting=tab.get("waiting") if tab else None, pinned=tab.get("pinned") if tab else None,
+                archived=tab.get("archived") if tab else (True if archived else None),
+                user_hidden=tab.get("user_hidden") if tab else None,
+                active_workspace=active if online else None, sidebar_view=listing.get("sidebar_view") if online else None)
+
+
 def session_catalog(send, listing):
     names = send.published_names()
     rows = {}
     if listing.get("ok"):
-        for workspace, group, tab in send.iter_tabs(listing):
+        for workspace, group, tab in desktop_tabs(send, listing):
             tmux = tab.get("tmux")
             if not isinstance(tmux, str):
                 continue
@@ -106,6 +146,7 @@ def session_catalog(send, listing):
                 group=group,
                 tab_id=tab.get("id"),
                 tab_open=True,
+                **desktop_state(listing, tab, tmux),
             )
     for path in sorted(send.host_root().glob("*.config.json")):
         config = send.read_json(path)
@@ -119,7 +160,7 @@ def session_catalog(send, listing):
         provider = config.get("provider") or state.get("provider") or "claude"
         sid = state.get("sid") or config.get("sid")
         alive = send.pid_alive(state.get("pid"))
-        row = rows.get(tmux, dict(tmux=tmux, tab_open=False))
+        row = rows.get(tmux, dict(tmux=tmux, tab_open=False, **desktop_state(listing, tmux=tmux)))
         row.update(
             provider=provider,
             sid=sid,
@@ -245,12 +286,16 @@ def filter_workspace(rows, workspace):
 
 
 def catalog_table(rows):
-    headers = ("NAME", "WORKSPACE", "GROUP", "STATE", "TMUX", "SID")
+    headers = ("NAME", "WORKSPACE", "GROUP", "STATE", "VISIBILITY", "WAITING", "PINNED", "ON SCREEN", "VIEW", "TMUX", "SID")
     body = []
     for row in rows:
         mark = "*" if row.get("self") else " "
+        visible = row.get("visible")
+        visibility = "visible" if visible is True else ("hidden: " if visible is False else "unknown: ") + (row.get("hidden_reason") or "unreported")
+        waiting, pinned = ("unknown" if row.get(field) is None else "yes" if row[field] else "no" for field in ("waiting", "pinned"))
         body.append((mark + (row.get("link") or row.get("name") or row["tmux"]), row.get("workspace") or "", row.get("group") or "",
-                     row_state(row), row["tmux"], row.get("sid") or ""))
+                     row_state(row), visibility, waiting, pinned, row.get("active_workspace") or "unknown", row.get("sidebar_view") or "unknown",
+                     row["tmux"], row.get("sid") or ""))
     data = [headers] + body
     widths = [max(len(row[i]) for row in data) for i in range(len(headers))]
     return "\n".join("  ".join(row[i].ljust(widths[i]) for i in range(len(headers))) for row in data)
@@ -280,20 +325,18 @@ def session_message(send, target, text, sender=None):
     return dict(name=target.get("name"), tmux=tmux, sid=sid, id=message.get("id"), state=state)
 
 
-def live_catalog_rows(send):
+def live_catalog_rows(send, listing):
     rows = []
+    tabs = {tab.get("tmux"): (workspace, group, tab) for workspace, group, tab in desktop_tabs(send, listing)} if listing.get("ok") is True else {}
     for chat in send.live_chats():
-        rows.append(dict(
-            name=chat.get("name"),
-            link=chat.get("link"),
-            tmux=chat["tmux"],
-            sid=chat["sid"],
-            provider=chat.get("provider"),
-            workspace="",
-            group="",
-            busy=chat.get("state") == "busy",
-            running=chat.get("state") != "stopped",
-        ))
+        workspace, group, tab = tabs.get(chat["tmux"], (None, None, None))
+        row = dict(chat, workspace=workspace, group=group,
+                   busy=chat.get("state") == "busy", running=chat.get("state") != "stopped",
+                   **desktop_state(listing, tab, chat["tmux"]))
+        if tab is not None:
+            row["name"] = tab.get("title") or chat.get("name")
+            row["link"] = send.link_token(row["name"], chat["tmux"])
+        rows.append(row)
     return rows
 
 
@@ -316,12 +359,13 @@ def cmd_list(args):
         else:
             print(catalog_table(rows))
         return 0
-    rows = live_catalog_rows(send)
+    listing = send.zsb("workspace-list") if callable(getattr(send, "zsb", None)) else dict(ok=False)
+    rows = live_catalog_rows(send, listing)
     caller = send.own_tmux()
     for row in rows:
         row["self"] = caller is not None and row["tmux"] == caller
     if args.json:
-        print(json.dumps(send.live_chats(), separators=(",", ":")))
+        print(json.dumps(rows, separators=(",", ":")))
     else:
         print(catalog_table(rows))
     return 0
@@ -541,6 +585,199 @@ def cmd_move(args):
     return 0
 
 
+PING_TEXT = "mp-sessions health ping"
+
+
+def _label(row, send):
+    return row.get("link") or row.get("name") or row["tmux"]
+
+
+def _last_reply_time(reader, send, provider, sid, folder, tmux):
+    chat = dict(provider=provider, sid=sid, cwd=folder or "")
+    path = send.transcript_path(reader, chat)
+    if path is None or not path.is_file():
+        return None
+    stamp = path.stat().st_mtime
+    for raw in reversed(send.tail_lines(path, limit=65536)):
+        try:
+            event = __import__("json").loads(raw)
+        except (ValueError, UnicodeError):
+            continue
+        row = reader.conversation_event(event, provider)
+        if row and row.get("role") == "assistant":
+            text = row.get("text") or ""
+            if text.strip():
+                ts = event.get("timestamp")
+                if isinstance(ts, str):
+                    try:
+                        stamp = datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+                    except ValueError:
+                        pass
+                break
+    return datetime.datetime.fromtimestamp(stamp, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _desktop_tab(send, listing, tmux):
+    if listing.get("ok") is not True:
+        return None, "UNKNOWN desktop offline"
+    tab = next((tab for workspace, group, tab in desktop_tabs(send, listing) if tab.get("tmux") == tmux), None)
+    if tab is None:
+        return None, None
+    cv = tab.get("cv")
+    if cv is False:
+        return tab, "shell tab"
+    return tab, None
+
+
+def _desktop_view(reader, listing, provider, sid, tmux, folder):
+    if listing.get("ok") is not True:
+        return "UNKNOWN desktop offline"
+    try:
+        q = dict(id=0, provider=provider, sid=sid, tmux=tmux, cwd=folder or os.getcwd())
+        q = reader.pin_hosted_claude(q, provider)
+        resolved = reader.resolve_response_path(q)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return "history unreadable"
+    path = resolved[2]
+    delegated = resolved[3]
+    if path is not None:
+        return None
+    if delegated is None:
+        return "history unreadable"
+    empty = reader.empty_history_response(q, resolved[1], tmux, provider)
+    return None if delegated == empty else "history unreadable"
+
+
+def _conversation_match(reader, provider, sid, tmux, folder):
+    if not sid or not tmux:
+        return "no session id"
+    try:
+        state = reader.host_session_state(provider, sid)
+    except (OSError, ValueError, TypeError, AttributeError):
+        state = {}
+    registered = state.get("native_session") or sid
+    try:
+        bound = reader.resolve_tmux_agent(provider, tmux, require_bound=True)
+    except (OSError, ValueError, TypeError, AttributeError, PermissionError):
+        bound = None
+    if bound is None:
+        return "agent not bound"
+    active_sid, path = bound
+    try:
+        expected = reader.conversation_path(provider, registered, folder or reader.host_cwd(provider, sid))
+    except (OSError, ValueError, TypeError, AttributeError, PermissionError):
+        expected = None
+    if expected is not None and path.resolve() != expected.resolve():
+        return "conversation mismatch"
+    if active_sid != registered and active_sid != sid:
+        return "conversation mismatch"
+    return None
+
+
+def _ping(send, row):
+    token = "mp-health-" + uuid.uuid4().hex[:16]
+    reader = send.reader_module()
+    provider, sid, tmux = row["provider"], row["sid"], row["tmux"]
+    try:
+        send.check_rate(reader, provider, sid, None)
+    except send.RateLimited:
+        return "rate limited"
+    message = send.submit(reader, provider, sid, tmux, PING_TEXT, token)
+    send.dispatch(reader, provider, sid, tmux)
+    final = send.handoff(reader, provider, sid, tmux, message.get("id"), 15.0)
+    state = (final or {}).get("state")
+    if state in ("failed", "cancelled") or state not in send.HANDOFF_STATES:
+        return "ping failed"
+    return None
+
+
+def evaluate_row(send, listing, row, ping):
+    label = _label(row, send)
+    provider = row.get("provider") or "claude"
+    sid = row.get("sid")
+    tmux = row["tmux"]
+    folder = row.get("folder")
+    reader = send.reader_module()
+    reasons = []
+    if row.get("in_layout") and row.get("visible") is False and not any(row.get(field) for field in ("waiting", "archived", "user_hidden")):
+        reasons.append("hidden: " + (row.get("hidden_reason") or "not in sidebar layout"))
+    tab_note = None
+    view_note = None
+    if not row.get("running"):
+        reasons.append("host not running")
+    elif sid:
+        mismatch = _conversation_match(reader, provider, sid, tmux, folder)
+        if mismatch:
+            reasons.append(mismatch)
+    else:
+        reasons.append("no session id")
+    if row.get("tab_open") or (row.get("running") and sid):
+        _, tab_reason = _desktop_tab(send, listing, tmux)
+        if tab_reason:
+            tab_note = tab_reason
+            if tab_reason == "shell tab" or tab_reason == "UNKNOWN desktop offline":
+                reasons.append(tab_reason)
+        view_reason = _desktop_view(reader, listing, provider, sid, tmux, folder)
+        if view_reason:
+            view_note = view_reason
+            if view_reason != "UNKNOWN desktop offline":
+                reasons.append(view_reason)
+            elif not reasons:
+                reasons.append(view_reason)
+    last_reply = None
+    if sid and provider not in ("hax", "cursor"):
+        try:
+            last_reply = _last_reply_time(reader, send, provider, sid, folder, tmux)
+        except (OSError, ValueError, TypeError, AttributeError):
+            last_reply = None
+    if ping and not reasons and row.get("running"):
+        ping_reason = _ping(send, row)
+        if ping_reason:
+            reasons.append(ping_reason)
+    status = "OK" if not reasons else "BROKEN " + reasons[0]
+    return dict(
+        name=row.get("name"),
+        link=label,
+        tmux=tmux,
+        sid=sid,
+        provider=provider,
+        workspace=row.get("workspace"),
+        group=row.get("group"),
+        **{field: row.get(field) for field in ("in_layout", "visible", "hidden_reason", "waiting", "pinned", "archived", "user_hidden", "active_workspace", "sidebar_view")},
+        status=status,
+        reasons=reasons,
+        last_reply=last_reply,
+        tab=tab_note or "ok",
+        view=view_note or "ok",
+        ping=PING_TEXT if ping and not reasons else None,
+    )
+
+
+def health_report(send, listing, rows, ping, as_json):
+    results = [evaluate_row(send, listing, row, ping) for row in rows]
+    broken = any(row["status"] != "OK" for row in results)
+    if as_json:
+        import json
+        print(json.dumps(results, separators=(",", ":")))
+    else:
+        for row in results:
+            visible = row.get("visible")
+            visibility = "visible" if visible is True else ("hidden: " if visible is False else "unknown: ") + (row.get("hidden_reason") or "unreported")
+            flags = " ".join(field + "=" + ("unknown" if row.get(field) is None else "yes" if row[field] else "no") for field in ("waiting", "pinned"))
+            print(row["link"] + " " + row["status"] + " | " + visibility + " | " + flags +
+                  " | workspace=" + (row.get("workspace") or "unknown") + " | on screen=" +
+                  (row.get("active_workspace") or "unknown") + " | view=" + (row.get("sidebar_view") or "unknown"))
+
+    return 1 if broken else 0
+
+
+def cmd_health(args):
+    send = load_send()
+    listing = send.zsb("workspace-list")
+    rows = session_catalog(send, listing)
+    return health_report(send, listing, rows, args.ping, args.json)
+
+
 def cmd_close(args):
     send = load_send()
     listing = send.zsb("workspace-list")
@@ -595,9 +832,12 @@ def parse(argv):
     ending = commands.add_parser("close", help="stop a chat and close its tab")
     ending.add_argument("name")
     ending.add_argument("--force", action="store_true")
+    probe = commands.add_parser("health", help="check each chat host, tab, history and optional ping")
+    probe.add_argument("--json", action="store_true")
+    probe.add_argument("--ping", action="store_true")
     if not argv:
         return argparse.Namespace(command="list", json=False, workspace=None)
-    if argv[0] not in {"list", "whoami", "start", "restart", "rename", "move", "close", "send", "-h", "--help"}:
+    if argv[0] not in {"list", "whoami", "start", "restart", "rename", "move", "close", "send", "health", "-h", "--help"}:
         if argv[0] == "--json":
             return parser.parse_args(["list", *argv])
         raise ValueError("unknown command; use mp-sessions --help")
@@ -619,7 +859,7 @@ def main(argv=None):
     command = args.command or "list"
     send = load_send(session_api=False)
     handlers = dict(list=cmd_list, whoami=cmd_whoami, start=cmd_start, restart=cmd_restart, rename=cmd_rename, move=cmd_move,
-                    close=cmd_close, send=cmd_send)
+                    close=cmd_close, send=cmd_send, health=cmd_health)
     try:
         if command == "send":
             tail = argv[1:] if argv and argv[0] == "send" else argv
