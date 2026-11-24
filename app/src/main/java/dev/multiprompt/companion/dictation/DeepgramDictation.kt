@@ -38,6 +38,9 @@ enum class DictationStatus {
     LISTENING,
     FINISHING,
     FAILED,
+    ;
+
+    val active: Boolean get() = this == CONNECTING || this == LISTENING || this == FINISHING
 }
 
 data class DictationState(
@@ -135,7 +138,7 @@ class DeepgramDictation(
 
     @Synchronized
     fun start(sessionKey: String) {
-        if (_state.value.status in ACTIVE_STATUSES) return
+        if (_state.value.status.active) return
         _state.value = DictationState(configured = _state.value.configured, sessionKey = sessionKey)
         if (ContextCompat.checkSelfPermission(appContext, Manifest.permission.RECORD_AUDIO) !=
             PackageManager.PERMISSION_GRANTED
@@ -181,7 +184,7 @@ class DeepgramDictation(
 
     @Synchronized
     fun stop() {
-        if (_state.value.status !in ACTIVE_STATUSES || stopping) return
+        if (!_state.value.status.active || stopping) return
         stopping = true
         stopRecorder()
         recordUsage()
@@ -432,10 +435,5 @@ class DeepgramDictation(
         const val AUDIO_BUFFER_BYTES = 3_200
         const val MAX_PENDING_AUDIO_BYTES = SpeechGate.SAMPLE_RATE * 2 * 8
         const val FINAL_RESULT_WAIT_MS = 1_200L
-        val ACTIVE_STATUSES = setOf(
-            DictationStatus.CONNECTING,
-            DictationStatus.LISTENING,
-            DictationStatus.FINISHING,
-        )
     }
 }
