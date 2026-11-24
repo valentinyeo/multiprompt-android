@@ -2271,7 +2271,7 @@ internal fun SessionsScreen(
                             unreadCount = state.unreadCounts[key] ?: 1,
                             archived = key in state.archivedSessionKeys,
                             pinned = key in state.pinnedSessionKeys,
-                            pinEnabled = pinned || state.sessionBucket != SessionBucket.ARCHIVE,
+                            pinEnabled = key in state.pinnedSessionKeys || state.sessionBucket != SessionBucket.ARCHIVE,
                             onTogglePin = { onSetPinned(session, key !in state.pinnedSessionKeys) },
                             starred = starred,
                             hasDraft = key in draftKeys,
