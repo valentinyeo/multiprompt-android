@@ -409,7 +409,8 @@ test('a change to the inbox, chat list or reader path schedules the speed check,
   assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt' }]), true);
   assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryCache.kt' }]), true);
   assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/assets/chat_history_reader.py' }]), true);
-  assert.equal(gate.speedRelevant('', [{ filename: 'tools/speed-check/measure.sh' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'tools/speed-check/report.py' }]), true);
+  assert.equal(gate.speedRelevant('', [{ filename: 'app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest.kt' }]), true);
   assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/ui/DesignKit.kt' }]), false);
   assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/terminal/ShellView.kt' }]), false);
   const diff = 'diff --git a/app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt b/app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt\n+changed\n';

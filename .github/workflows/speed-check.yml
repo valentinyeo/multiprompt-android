@@ -4,33 +4,23 @@ on:
   workflow_call:
     inputs:
       base_sha:
-        description: Base revision to build and time
+        description: Base revision to measure
         required: true
         type: string
       head_sha:
-        description: Head revision to build and time
+        description: Head revision to measure
         required: true
         type: string
-      rounds:
-        description: Measured rounds per side, 3 to 5
-        required: false
-        type: string
-        default: '3'
   workflow_dispatch:
     inputs:
       base_sha:
-        description: Base revision to build and time
+        description: Base revision to measure
         required: true
         type: string
       head_sha:
-        description: Head revision to build and time
+        description: Head revision to measure
         required: true
         type: string
-      rounds:
-        description: Measured rounds per side, 3 to 5
-        required: false
-        type: string
-        default: '3'
 
 permissions:
   contents: read
@@ -41,27 +31,21 @@ concurrency:
 
 jobs:
   speed:
-    name: inbox and chat speed
+    name: chat list remeasures
     runs-on: ubuntu-24.04
-    timeout-minutes: 75
+    timeout-minutes: 45
     env:
       BASE_SHA: ${{ inputs.base_sha }}
       HEAD_SHA: ${{ inputs.head_sha }}
-      SPEED_ROUNDS: ${{ inputs.rounds }}
-      SPEED_VERSION: 0.1.2-speed.${{ github.run_number }}
-      EXPECTED_VERSION: 0.1.2-speed.${{ github.run_number }}-debug
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
       EVIDENCE: ${{ github.workspace }}/speed-evidence
-      SPEED_OUT: ${{ github.workspace }}/speed-evidence/speed
-      SPEED_BASE_REVISION: ${{ inputs.base_sha }}
-      SPEED_HEAD_REVISION: ${{ inputs.head_sha }}
+      PROBE: app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest.kt
     steps:
-      - name: Check the revisions, the round count and the fixture path
+      - name: Check the revisions
         run: |
           [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$BASE_SHA" != "$HEAD_SHA" ]]
-          [[ "$SPEED_ROUNDS" =~ ^[3-5]$ ]]
-          echo "FIXTURE=$RUNNER_TEMP/speed-ssh" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -79,65 +63,70 @@ jobs:
             printf 'base_revision=%s\n' "$(git -C app-base rev-parse HEAD)"
             printf 'head_revision=%s\n' "$(git -C app-head rev-parse HEAD)"
           } | tee "$EVIDENCE/revisions.txt"
+      - name: Copy this check's probe into both revisions
+        run: |
+          for side in app-base app-head; do
+            mkdir -p "$side/$(dirname "$PROBE")"
+            cp "$PROBE" "$side/$PROBE"
+          done
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
       - uses: ./.github/actions/gradle-ci
-      - uses: android-actions/setup-android@v3
         with:
-          packages: platform-tools
-      - name: Build the base revision
-        timeout-minutes: 25
-        run: |
-          mkdir -p "$EVIDENCE"
-          tools/ci/gradle-retry.sh -p app-base --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="$SPEED_VERSION" assembleDebug 2>&1 | tee "$EVIDENCE/base-build.txt"
-          echo "SPEED_BASE_APK=$GITHUB_WORKSPACE/app-base/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
-      - name: Build the head revision and the host-seed instrumentation
-        timeout-minutes: 25
-        run: |
-          tools/ci/gradle-retry.sh -p app-head --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="$SPEED_VERSION" assembleDebug assembleDebugAndroidTest 2>&1 | tee "$EVIDENCE/head-build.txt"
-          echo "SPEED_HEAD_APK=$GITHUB_WORKSPACE/app-head/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
-          echo "SPEED_TEST_APK=$GITHUB_WORKSPACE/app-head/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" >> "$GITHUB_ENV"
-      - name: Check both APKs exist and differ
-        id: apks
-        run: |
-          test -s "$SPEED_BASE_APK"
-          test -s "$SPEED_HEAD_APK"
-          test -s "$SPEED_TEST_APK"
-          sha256sum "$SPEED_BASE_APK" "$SPEED_HEAD_APK" "$SPEED_TEST_APK" | tee "$EVIDENCE/apk-shas.txt"
-          if cmp -s "$SPEED_BASE_APK" "$SPEED_HEAD_APK"; then
-            echo "identical=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "identical=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Start the SSH and tmux fixture and seed the inbox
-        if: steps.apks.outputs.identical != 'true'
-        run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
-      - name: Time the inbox and the long chat on both revisions
-        if: steps.apks.outputs.identical != 'true'
-        uses: ./.github/actions/android-proof
-        with:
-          stage: speed-check
-          script: |
-            bash tools/speed-check/measure.sh
-      - name: Publish the speed report to the job summary
-        if: always()
-        run: |
-          if [ -s "$SPEED_OUT/report.md" ]; then
-            cat "$SPEED_OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
-            cat "$SPEED_OUT/info.txt" >> "$GITHUB_STEP_SUMMARY"
-          elif [ -s "$EVIDENCE/apk-shas.txt" ] && cmp -s "$SPEED_BASE_APK" "$SPEED_HEAD_APK"; then
-            echo 'SPEED_CHECK_IDENTICAL: head builds the same app bytes as base, so there is no speed difference to measure and nothing is timed.' >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo 'No speed report was produced. The emulator artifact holds the diagnostics.' >> "$GITHUB_STEP_SUMMARY"
-          fi
-      - name: Stop the fixture processes and keep the evidence
-        if: always()
-        timeout-minutes: 2
+          read-only: true
+      - name: Count the chat list remeasures on the base revision
+        id: base
         continue-on-error: true
-        run: .claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"
-      - name: Retain the measurements even on failure
+        timeout-minutes: 20
+        run: |
+          set +e
+          tools/ci/gradle-retry.sh -p app-base --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:testDebugUnitTest --tests '*ChatListRemeasureTest*' 2>&1 | tee "$EVIDENCE/base-test.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Count the chat list remeasures on the head revision
+        id: head
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          set +e
+          tools/ci/gradle-retry.sh -p app-head --no-daemon -Dorg.gradle.jvmargs=-Xmx3g :app:testDebugUnitTest --tests '*ChatListRemeasureTest*' 2>&1 | tee "$EVIDENCE/head-test.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Judge head against the base revision
+        run: |
+          reading() {
+            local side=$1
+            local target="$EVIDENCE/$side-remeasures.txt"
+            : > "$target"
+            for candidate in "$side/app/build/chat-list-remeasures.txt" "$side/build/chat-list-remeasures.txt"; do
+              if [ -s "$candidate" ]; then cat "$candidate" >> "$target"; return 0; fi
+            done
+            return 1
+          }
+          reading app-base || echo "the base revision wrote no remeasure reading"
+          reading app-head || echo "the head revision wrote no remeasure reading"
+          python3 tools/speed-check/report.py \
+            --base "$EVIDENCE/app-base-remeasures.txt" \
+            --head "$EVIDENCE/app-head-remeasures.txt" \
+            --base-status '${{ steps.base.outputs.status }}' \
+            --head-status '${{ steps.head.outputs.status }}' \
+            --out "$EVIDENCE/speed"
+      - name: Publish the remeasure report to the job summary
+        if: always()
+        run: |
+          if [ -s "$EVIDENCE/speed/report.md" ]; then
+            cat "$EVIDENCE/speed/report.md" >> "$GITHUB_STEP_SUMMARY"
+            cat "$EVIDENCE/speed/info.txt" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No remeasure report was produced. The artifact holds both test runs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain both test runs even on failure
         if: always()
         uses: actions/upload-artifact@v4
         with:

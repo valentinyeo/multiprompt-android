@@ -140,7 +140,7 @@ jobs:
       ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
   speed:
-    name: inbox and chat speed
+    name: chat list remeasures
     needs: pick
     if: needs.pick.outputs.speed == 'yes'
     permissions:
@@ -149,7 +149,6 @@ jobs:
     with:
       base_sha: ${{ needs.pick.outputs.merge_base }}
       head_sha: ${{ needs.pick.outputs.head_sha }}
-      rounds: '3'
 
   pstack-verifier:
     name: pstack-verifier

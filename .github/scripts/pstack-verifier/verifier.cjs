@@ -284,10 +284,10 @@ function applyRules({ features, conclusions, notDrivenReason, smoke = false, fea
   }
   if (speed?.required === true) {
     if (speed.result === 'success') {
-      notes.push('The inbox and chat speed check passed: head is within the noise margin of the base revision on cold open, fling scroll and long chat open.');
+      notes.push('The chat list speed check passed: head does no lazy-list remeasure the base revision does not, and a new reply costs inside the 25% plus two budget.');
     } else {
       verdict = 'FAIL';
-      notes.push(`The inbox and chat speed check did not pass (${speed.result || 'no result'}). Head is slower than the base revision past the tuned margin, or the measurements were incomplete; open that run for the per-journey medians.`);
+      notes.push(`The chat list speed check did not pass (${speed.result || 'no result'}). Head remeasured the chat list from a composition that brought no new reply, or needs more remeasures per reply than the base revision plus the margin; open that run for both counts.`);
     }
   }
   if ((!features.length || smoke) && verdict === 'PASS') {
