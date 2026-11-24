@@ -136,6 +136,7 @@ on:
           - session-stop.md
           - session-summaries.md
           - sessions.md
+          - send-blocked.md
           - settings-navigation.md
           - sign-in.md
           - terminal.md
