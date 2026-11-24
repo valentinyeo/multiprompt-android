@@ -34,7 +34,7 @@ object ChatFind {
     }
 
     fun label(selected: Int, count: Int): String {
-        val shown = if (count <= 0) 0 else selected.coerceIn(0, count - 1) + 1
+        val shown = if (count <= 0) 0 else (selected.coerceIn(0, count - 1) + 1)
         return "$shown of $count"
     }
 
