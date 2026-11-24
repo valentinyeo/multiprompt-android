@@ -28,6 +28,7 @@ import dev.multiprompt.companion.room.RoomLoadPolicy
 import dev.multiprompt.companion.room.RoomLoadTrigger
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
+import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -122,6 +123,7 @@ data class AppUiState(
     val unreadCounts: Map<String, Int> = emptyMap(),
     val repliedSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
+    val pinnedSessionKeys: List<String> = emptyList(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
     val unreadOnly: Boolean = false,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
@@ -228,6 +230,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val hosts = app.hostStore
     private val secrets = app.secretStore
     private val sessionReads = app.sessionReadStore
+    private val pinnedChats = app.pinnedChatStore
     private val botPhotos = BotPhotoCache(java.io.File(app.filesDir, "bot-photos"))
     private val sessionCache = app.sessionCacheStore
     private val dissolvedStore = app.dissolvedSessionStore
@@ -281,6 +284,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountPending = pendingLayout?.dirty == true,
             accountHosts = AccountHostMap.resolve(hosts.load(), accountStore.hostOverrides()),
             newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
+            pinnedSessionKeys = pinnedChats.load(),
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
@@ -655,6 +659,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountStore.setHost(slot, null)
         }
         sessionReads.removeHost(host.id)
+        val remainingPins = pinnedChats.removeHost(host.id)
         dissolvedStore.removeHost(host.id)
         workspaceStore.removeHost(host.id)
         sessionCache.removeHost(host.id)
@@ -685,6 +690,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 unreadSessionKeys = it.unreadSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
                 unreadCounts = it.unreadCounts.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 archivedSessionKeys = it.archivedSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
+                pinnedSessionKeys = remainingPins,
                 sessionWorkspaceIds = it.sessionWorkspaceIds.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 sessionInteractionEpochSeconds = it.sessionInteractionEpochSeconds.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 waitingIdleObservations = it.waitingIdleObservations.filterKeys { key -> !key.startsWith(sessionPrefix) },
@@ -1109,6 +1115,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 current.workspaceSelectionInitialized,
             sessionWorkspaceIds = sessionWorkspaceIds,
             sessionInteractionEpochSeconds = interactionEpochSeconds,
+            pinnedSessionKeys = if (final) pinnedChats.prune(
+                results.filter { it.error == null }.associate { result -> result.hostId to result.sessions.map { it.name } },
+            ) else current.pinnedSessionKeys,
             waitingIdleObservations = if (final) idleObservations.filterKeys { it in archivedKeys }
                 else current.waitingIdleObservations,
             refreshing = !final,
@@ -1265,6 +1274,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionReads.restore(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.update { it.copy(archivedSessionKeys = it.archivedSessionKeys - key) }
+    }
+
+    fun setSessionPinned(session: TmuxSession, pinned: Boolean) {
+        val updated = if (pinned) pinnedChats.pin(session) else pinnedChats.unpin(session)
+        _state.update { it.copy(pinnedSessionKeys = updated) }
     }
 
     fun toggleArchivedSessions() {
@@ -2420,6 +2434,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
             } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
         }
+        .let { PinnedChats.order(it, state.pinnedSessionKeys) }
 
     private companion object {
         const val ROOM_POLL_MS = 4_000L
