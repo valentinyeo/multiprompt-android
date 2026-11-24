@@ -21,4 +21,4 @@ The app before this change reads skills as `verifyssh` and never switches to `sk
 
 ## Outside this recipe
 
-A chat that already lives in the login account's own home, an account folder the login account cannot stat, a folder whose passwd home is not `/home/<name>`, plugin skills, a custom Claude config directory, refused or broken sudo answers, and accounts outside `/home` are covered by `tools/native-skills.test.py` and `NativeSkillsScriptTest` only. Account OTP, a signed release build and a live model provider are outside this recipe.
+A chat that already lives in the login account's own home, an account folder the login account cannot stat, a folder whose passwd home is not `/home/<name>`, plugin skills, a custom Claude config directory, refused or broken sudo answers, and accounts outside `/home` are covered by `tools/native-skills.test.py` only. Account OTP, a signed release build and a live model provider are outside this recipe.

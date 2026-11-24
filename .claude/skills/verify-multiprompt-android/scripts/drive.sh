@@ -2508,7 +2508,6 @@ CLEAR_RESULT
     exit 0
 fi
 if [[ "$feature" == owner-skills.md ]]; then
-    tap_text verify-session
     wait_for_text VERIFY_READY_528
     sudo -u verifyssh tmux display-message -p -t verify-session '#{session_path}' > "$EVIDENCE/owner-session-path.txt"
     grep -Fx '/home/skillowner/chat-work' "$EVIDENCE/owner-session-path.txt"
