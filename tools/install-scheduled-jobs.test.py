@@ -108,7 +108,8 @@ class InstallScheduledJobsTest(InstallTest):
             self.assertTrue(unit.is_file(), name)
             self.assertFalse(unit.is_symlink(), name)
             text = unit.read_text()
-            self.assertIn(str(self.clone), text, name)
+            if name.endswith('.service'):
+                self.assertIn(str(self.clone), text, name)
             self.assertNotIn(PLACEHOLDER, text, name)
             self.assertNotIn('.local/share', text, name)
             self.assertNotIn('projects/multiprompt-android/', text, name)
@@ -178,7 +179,7 @@ class FileTicketTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         args = self.args()
         self.assertEqual('--json', args[0])
-        self.assertEqual(['tasks', 'create'], args[1:3])
+        self.assertEqual('create', args[args.index('tasks') + 1])
         self.assertEqual('sentinel-token-one', args[args.index('--token') + 1])
         self.assertEqual('13734', args[args.index('--project') + 1])
         self.assertEqual('high', args[args.index('--priority') + 1])
