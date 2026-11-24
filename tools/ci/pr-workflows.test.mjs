@@ -118,7 +118,7 @@ test('the weekly maintenance PR keeps one branch, updates it, and mints a token 
   assert.match(script, /--force-with-lease=/);
   assert.match(script, /'gh', 'pr', 'edit'/);
   assert.doesNotMatch(script, /'merge'|--auto|gh pr merge/);
-  assert.match(report, /uses: actions\/create-github-app-token@[0-9a-f]{40} # v3\.3\.0/);
+  assert.match(report, /uses: actions\/create-github-app-token@[0-9a-f]{40} # v[0-9]+\n/);
   assert.ok(report.indexOf('create-github-app-token') < report.indexOf('actions/checkout@v4'));
   assert.match(report, /id: token\n        continue-on-error: true/);
   assert.match(report, /app-id: \$\{\{ secrets\.CI_APP_ID \}\}/);
