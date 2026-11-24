@@ -1,0 +1,1 @@
+MUBO-262: Nightly old-screen check passes on numbered lists

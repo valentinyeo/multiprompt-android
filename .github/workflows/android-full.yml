@@ -374,22 +374,36 @@ jobs:
 
       - name: Reject model footer summaries on original source
         run: |
-          source=app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt
-          cp "$source" "$RUNNER_TEMP/SessionPreview.kt"
-          git show 099a8e7:"$source" > "$source"
+          base=build/session-summary
+          tree="$RUNNER_TEMP/summary-control"
+          xml=TEST-dev.multiprompt.companion.ui.SessionFooterSummaryTest.xml
+          historical=099a8e73b6857ff901d1166854dbbda0884122f1
+          mkdir -p "$base" app/build/reports/summary-control
+          git fetch origin "$historical"
+          git worktree add --detach "$tree" "$historical"
+          cp app/src/test/java/dev/multiprompt/companion/ui/SessionFooterSummaryTest.kt "$tree/app/src/test/java/dev/multiprompt/companion/ui/"
           status=0
-          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*SessionPreviewTest' || status=$?
-          cp "$RUNNER_TEMP/SessionPreview.kt" "$source"
+          gradle -p "$tree" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*SessionFooterSummaryTest' > "$base/original.log" 2>&1 || status=$?
+          cat "$base/original.log"
+          cp "$tree/app/build/test-results/testDebugUnitTest/$xml" "$base/" 2>/dev/null || true
+          git worktree remove --force "$tree"
+          if python3 -B tools/historical_control.py classify-log --expected SUMMARY_FOOTER_MUST_NOT_SHOW --log "$base/original.log" > "$base/classification.txt"; then
+            cat "$base/classification.txt"
+            echo 'CONTROL_INVALID: the original summary revision no longer builds; move this control to a revision that does' >&2
+            exit 1
+          fi
           test "$status" -ne 0
-          python3 - <<'PYCONTROL'
+          python3 - "$base/$xml" <<'PYCONTROL'
+          import sys
           import xml.etree.ElementTree as ET
-          root = ET.parse('app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml').getroot()
-          for name in ['lastReplyStartsWithItsFirstSentenceNotTheFooter', 'liveWorkReplacesThePreviousReply', 'modelAndShellOnlyHaveNoInventedReply']:
+          root = ET.parse(sys.argv[1]).getroot()
+          for name in ('liveWorkReplacesThePreviousReply', 'newReplyReplacesEarlierWork', 'modelAndShellOnlyHaveNoInventedReply'):
               assert root.find(f"testcase[@name='{name}']/failure") is not None, name
           print('ORIGINAL_SUMMARY_FOOTER_REJECTED')
           PYCONTROL
-          mkdir -p app/build/reports/summary-control
-          cp app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ui.SessionPreviewTest.xml app/build/reports/summary-control/
+          cp "$base/$xml" app/build/reports/summary-control/
+          gradle --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*SessionFooterSummaryTest'
+          echo CURRENT_SUMMARY_FOOTERS_REJECTED
 
       - name: Reject new non-kit controls against the real Material dependency
         env:
