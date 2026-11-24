@@ -10,6 +10,7 @@ from datetime import datetime
 
 ROOT = Path(__file__).resolve().parents[2]
 PROJECT = "13734"
+PROJECTS = {"IGSH": "2060", "MUBO": PROJECT}
 CLI = "hypertask"
 TOKEN = Path(".config/hypertask-agents/credentials/sessions/multiprompt-android-dev-agent-token")
 LABELS = {"desktop": "Multiprompt", "android": "Multiprompt Android"}
@@ -58,6 +59,11 @@ def board(api=call, status="Normal"):
         cursors.add(cursor)
 
 
+def ticket_url(ticket):
+    key, number = ticket.split("-")
+    return f"https://app.hypertask.ai/detail/project-{PROJECTS[key]}/{number}"
+
+
 def timestamp(value):
     stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if stamp.tzinfo is None:
@@ -94,8 +100,7 @@ def render(data):
             cell = row[platform]
             text = f"[{cell['status']}]({cell['source']})"
             if cell.get("ticket"):
-                number = cell["ticket"].split("-")[1]
-                text += f" · [gap](https://app.hypertask.ai/detail/project-{PROJECT}/{number})"
+                text += f" · [gap]({ticket_url(cell['ticket'])})"
             cells.append(text)
         lines.append(f"| {row['name']} | {' | '.join(cells)} |")
     lines += ["", "## Automatic counterparts", "",
@@ -160,7 +165,7 @@ def reconcile(data, rows, apply=False, api=call):
         marker = f"MP-GAP:{source['feature']}:{target}" if source.get("feature") else f"MP-PAIR:{ticket}:{target}"
         name = "Android" if target == "android" else "desktop"
         url = ("https://github.com/valentinyeo/multiprompt-android/blob/main/docs/multiprompt-features.md"
-               if source.get("feature") else f"https://app.hypertask.ai/detail/project-{PROJECT}/{ticket.split('-')[1]}")
+               if source.get("feature") else ticket_url(ticket))
         feature_name = f"<p>{html.escape(source['name'])}</p>" if source.get("feature") else ""
         description = (f"<h2>Problem</h2><p>The other app has a matching request.</p>{feature_name}"
                        f"<p><a href='{url}'>Original app request</a></p>"

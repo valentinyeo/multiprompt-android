@@ -50,6 +50,26 @@ class ParityTests(unittest.TestCase):
         self.assertIn("MP-PAIR:MUBO-2000:android", calls[0][-1])
         self.assertIn("https://app.hypertask.ai/detail/project-13734/2000", calls[0][-1])
 
+    def test_feature_row_links_each_ticket_to_its_own_board(self):
+        data = {"reviewed": "2026-10-29", "track_since": "2026-10-29T22:55:59Z", "catch_up_tickets": [], "features": [
+            {"id": "codex-chat", "name": "Codex chat",
+             "desktop": {"status": "partial", "source": "https://github.com/valentinyeo/multiprompt/a.zig", "ticket": "IGSH-1220"},
+             "android": {"status": "partial", "source": "https://github.com/valentinyeo/multiprompt-android/b.kt", "ticket": "MUBO-1220"}}]}
+        self.assertEqual(parity.validate(data), data)
+        text = parity.render(data)
+        self.assertIn("[gap](https://app.hypertask.ai/detail/project-2060/1220)", text)
+        self.assertIn("[gap](https://app.hypertask.ai/detail/project-13734/1220)", text)
+
+    def test_counterpart_link_follows_the_source_ticket_key(self):
+        for source, link in (("IGSH-2000", "project-2060/2000"), ("MUBO-2000", "project-13734/2000")):
+            with self.subTest(source=source):
+                calls = []
+                def recording(*args):
+                    calls.append(args)
+                    return {"tasks": [task("MUBO-2001", "Multiprompt Android")]}
+                parity.reconcile(inventory(), [task(source)], True, recording)
+                self.assertIn(f"https://app.hypertask.ai/detail/{link}", calls[0][-1])
+
     def test_android_request_gets_desktop_counterpart(self):
         result = parity.reconcile(inventory(), [task(label="Multiprompt Android")])
         self.assertEqual(result, [{"source": "MUBO-2000", "target": "desktop"}])
