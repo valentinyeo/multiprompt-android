@@ -260,6 +260,15 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(listed.returncode, 0, listed.stderr)
         self.assertIn('STATE', listed.stdout)
 
+    def test_SOFT_3140_published_mp_sessions_health_executes_without_a_sibling_module(self):
+        self.info(self.bundle())
+        runtime = Path(self.home.name) / '.multiprompt-runtime'
+        self.assertFalse((runtime / 'mp_sessions_health.py').exists())
+        result = subprocess.run([str(runtime / 'mp-sessions'), 'health', '--json'],
+                                text=True, capture_output=True, env=self.env, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [])
+
     def test_published_mp_layout_answers_help_from_the_runtime_copy(self):
         self.info(self.bundle())
         layout = Path(self.home.name) / '.multiprompt-runtime' / 'mp-layout'

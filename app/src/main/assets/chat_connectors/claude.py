@@ -37,7 +37,7 @@ def capabilities(context=None):
             accepted=["queue-operation.enqueue", "user", "attachment.queued_command"],
             started=["attachment.queued_command", "user"],
             message=["user", "assistant"],
-            not_sent=["precondition_failure_before_terminal_write"],
+            not_sent=["precondition_failure_before_terminal_write", "system.informational.promptSubmitEnding"],
             aliases=["command_uuid", "delivery_id", "record_uuid", "native_session_id"],
         ),
         requires_services=list(REQUIRED_SERVICES),
@@ -58,6 +58,20 @@ APP_ID = re.compile(r"\n\[mp:([0-9a-f]{16})\]\s*\Z")
 
 def _visible(text):
     return APP_ID.sub("", text) if isinstance(text, str) else ""
+
+
+def _blocked_prompt(event):
+    ending = event.get("promptSubmitEnding") if isinstance(event, dict) else None
+    if not isinstance(ending, dict) or ending.get("promptKept") is not False:
+        return None
+    content = event.get("content")
+    if not isinstance(content, str):
+        return None
+    index = content.rfind("Original prompt:")
+    if index < 0:
+        return None
+    text = _visible(content[index + len("Original prompt:"):].strip()).strip()
+    return text or None
 
 
 def _app_id_of(text):
@@ -339,6 +353,11 @@ def _parse(start, finish, raw, sid, inode, services):
         if operation == "popAll":
             return [dict(shape, kind="popAll", source="queue-operation.popAll")], []
         return [], []
+    if kind == "system":
+        prompt = _blocked_prompt(event)
+        if prompt is None:
+            return [], []
+        return [dict(shape, kind="blocked", source="system.informational.promptSubmitEnding", key=_match_digest(prompt))], []
     if kind not in ("user", "assistant", "attachment"):
         return [], []
     try:
@@ -416,6 +435,12 @@ def _bind(state, current, occurrences, notes):
                     mark["popped"] = True
                     notes.append(dict(kind="native_queue_cleared", id=attempt["id"], attempt=attempt["attempt"],
                                       event_id=occurrence["base"]))
+            continue
+        if occurrence["kind"] == "blocked":
+            for attempt, mark in _open(marks, current):
+                if mark["accepted"] is None and attempt["boundary"] <= occurrence["start"] and _tracks(attempt, occurrence):
+                    mark["popped"] = True
+                    facts.append(_fact("not_sent", occurrence, sid, attempt, reason="blocked_by_hook"))
             continue
         candidates = []
         for attempt, mark in _open(marks, current):

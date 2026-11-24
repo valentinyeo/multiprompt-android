@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "handover_noise": "Reloaded skills: 150 skills available (none added or removed).",
+  "handover_real": "Goal: finish Super MCP wiring. Decisions: keep slash commands client-side. Unfinished: document the handover path and add reader tests. Next: ship SOFT-3054.",
+  "limit_notice": "You've hit your 5-hour limit",
+  "history_rows": [
+    {
+      "role": "user",
+      "text": "Continue the MCP adapter audit."
+    },
+    {
+      "role": "assistant",
+      "text": "Reloaded skills: 150 skills available (none added or removed)."
+    },
+    {
+      "role": "user",
+      "text": "/inne-mode"
+    },
+    {
+      "role": "assistant",
+      "text": "Goal: finish Super MCP wiring. Decisions: keep slash commands client-side. Unfinished: document the handover path and add reader tests. Next: ship SOFT-3054."
+    }
+  ]
+}
