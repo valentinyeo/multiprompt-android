@@ -35,8 +35,7 @@ def write_private(path, data):
     os.chmod(path, 0o600)
 
 
-def install(assets):
-    shutil.rmtree(room_directory(), ignore_errors=True)
+def install_runtime():
     runtime = Path.home() / '.multiprompt-runtime'
     runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(runtime, 0o700)
@@ -45,6 +44,11 @@ def install(assets):
     write_private(runtime / (digest + '.py'), source)
     write_private(runtime / 'reader.py', source)
     write_private(runtime / 'active.json', json.dumps({'protocol': 1, 'generation': 1, 'sha256': digest}, separators=(',', ':')).encode())
+
+
+def install(assets):
+    shutil.rmtree(room_directory(), ignore_errors=True)
+    install_runtime()
     SUBMITS.unlink(missing_ok=True)
     SUBMITS.write_bytes(b'')
     os.chmod(SUBMITS, 0o600)
@@ -223,6 +227,22 @@ def main():
         print(ACCOUNT_ID)
     elif command == 'install':
         install(Path(sys.argv[2]).resolve())
+    elif command == 'activate-runtime':
+        runtime = Path.home() / '.multiprompt-runtime'
+        print('ROOM_RUNTIME_BEFORE ' + (runtime / 'active.json').read_text())
+        print('ROOM_READER_WAS_SYMLINK ' + str((runtime / 'reader.py').is_symlink()))
+        install_runtime()
+        sys.path.insert(0, str(Path(sys.argv[2]).resolve()))
+        import room_bridge
+        bridge = room_bridge.RoomBridge(str(room_directory()))
+        try:
+            capabilities = bridge.execute({'op': 'capabilities', 'room_messages': 1})
+            print(json.dumps(capabilities, sort_keys=True))
+            if not capabilities['live_send']:
+                raise SystemExit('fixture runtime does not support room sends')
+        finally:
+            bridge.close()
+        print('ROOM_RUNTIME_READY')
     elif command == 'block-rules':
         print(block_lines(sys.argv[2]))
     elif command == 'composer':

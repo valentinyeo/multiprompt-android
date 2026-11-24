@@ -66,7 +66,6 @@ room_order_journey() {
     sudo -u verifyssh env HOME=/home/verifyssh python3 "$stage/scripts/room-order-check.py" install "$stage/assets" \
         | tee "$EVIDENCE/room-fixture.txt"
     grep -F 'ROOM_READY' "$EVIDENCE/room-fixture.txt"
-    rm -rf "$stage"
     getent ahosts account.multiprompt.dev | awk '{print $1}' | sort -u > "$EVIDENCE/account-origin-ips.txt"
     python3 "$scripts/room-order-check.py" block-rules "$EVIDENCE/account-origin-ips.txt" > "$EVIDENCE/account-origin-blocked.txt"
     while read -r family ip; do
@@ -83,6 +82,10 @@ room_order_journey() {
     python3 "$scripts/mpa" screenshot room-inbox
     python3 "$scripts/mpa" tap text 'Order room'
     python3 "$scripts/mpa" read --wait-text 'No messages yet'
+    sudo -u verifyssh env HOME=/home/verifyssh python3 "$stage/scripts/room-order-check.py" activate-runtime "$stage/assets" \
+        | tee "$EVIDENCE/room-runtime.txt"
+    grep -F 'ROOM_RUNTIME_READY' "$EVIDENCE/room-runtime.txt"
+    rm -rf "$stage"
     setup_failure=0
     python3 "$scripts/mpa" screenshot room-empty
     room_order_submits "$EVIDENCE/room-submits-before.txt"

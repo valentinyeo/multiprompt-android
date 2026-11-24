@@ -22,6 +22,8 @@ The fixture login is stored already expired. Launch refreshes it at `account.mul
 
 Inbox uses a lazy, reversed session list. Its room strip can sit beyond the visible sessions, so `mpa read --select contains` cannot establish that a room is absent. The driver uses the scrolling action resolver to reveal the exact room row before asserting and opening it. If the room has not loaded, it backgrounds and resumes the app for another room load, with four bounded reveal attempts. Missing rooms still fail the journey.
 
+Phone startup publishes its normal reader runtime over the fixture runtime. After opening the room, the driver activates the fixture again without changing the room database or its messages. `room-runtime.txt` records the replaced selection and requires the bundled bridge to report `live_send: true` before any send.
+
 `mpa fill 'Message Order room' …` dismisses the keyboard before Send is tapped, so the room keyboard never covers the button. Text still inside the composer is not a message row.
 
 Account OTP, a live Claude session, mention-only delivery, an agent that stays offline until later, restart without a repeat send, and the longest message that still fits in one delivery are outside this recipe.
