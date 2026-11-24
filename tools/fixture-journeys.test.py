@@ -492,7 +492,7 @@ session['db'].close()
             transcript.parent.mkdir(parents=True)
             transcript.write_text('')
             sources = {name: base64.b64encode((ROOT / 'app/src/main/assets/chat_connectors' / (name + '.py')).read_bytes()).decode() for name in ('claude', 'codex')}
-            namespace = dict(reader=reader, SID=queue.SID, HOME=home, TRANSCRIPT=transcript, RECEIPTS=home / 'receipts.txt', draft='', native=[], redraw=lambda: None, closing=closing, datetime=datetime_module, json=json, uuid=uuid)
+            namespace = dict(reader=reader, SID=queue.SID, HOME=home, TRANSCRIPT=transcript, RECEIPTS=home / 'receipts.txt', draft='', native=[], redraw=lambda: None, closing=closing, datetime=datetime_module, json=json, uuid=uuid, time=time)
             exec(compile(ast.Module(body=functions, type_ignores=[]), '<queued-fixture-controller>', 'exec'), namespace)
             def state():
                 with closing(sqlite3.connect(reader.message_store_path())) as db:
