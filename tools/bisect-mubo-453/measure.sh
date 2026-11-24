@@ -57,6 +57,36 @@ install_side() {
     grep -q Success "$out/install-$sha.txt"
 }
 
+launch_inbox() {
+    local attempt
+    adb shell am force-stop "$package"
+    mpa launch > "$out/launch.json" 2>&1
+    for attempt in 1 2 3; do
+        mpa read --out "$out/screen.json" > /dev/null 2>&1
+        if grep -Fq 'Use without account (debug)' "$out/screen.json"; then
+            mpa tap text 'Use without account (debug)' > "$out/tap-account.json" 2>&1
+        fi
+        if mpa read --wait-text Inbox --timeout 30 > "$out/wait.json" 2>&1; then
+            return 0
+        fi
+        dismiss_anr
+    done
+    printf 'MISSING_TEXT Inbox\n' >> "$out/setup-failures.txt"
+    return 1
+}
+
+trust_host_if_asked() {
+    local attempt
+    for attempt in 1 2 3; do
+        if mpa read --select text --value 'Trust and connect' --timeout 30 > "$out/trust.json" 2>&1; then
+            mpa tap text 'Trust and connect' > "$out/tap-trust.json" 2>&1
+            return 0
+        fi
+        dismiss_anr
+    done
+    return 1
+}
+
 wait_chat() {
     if mpa read --wait-text SPIKE_STREAM --timeout 15 > "$out/wait-chat.json" 2>&1; then
         return 0
@@ -65,8 +95,7 @@ wait_chat() {
 }
 
 open_chat() {
-    adb shell am force-stop "$package"
-    mpa launch --wait-text Inbox > "$out/launch.json" 2>&1 || return 1
+    launch_inbox || return 1
     mpa tap text All > "$out/tap-all.json" 2>&1
     wait_text cl-long-chat || return 1
     mpa tap text cl-long-chat > "$out/tap-chat.json" 2>&1 || return 1
@@ -83,7 +112,7 @@ window() {
         printf '%s,%s,%s,%s,,,,open-failed\n' "$pair" "$side" "$sha" "$trial" >> "$readings"
         return 1
     fi
-    sleep 3
+    sleep 5
     pid=$(adb shell pidof "$package" 2> /dev/null | tr -d '\r ' | awk '{print $1}')
     if [ -z "$pid" ]; then
         printf '%s,%s,%s,%s,,,,no-pid\n' "$pair" "$side" "$sha" "$trial" >> "$readings"
@@ -117,16 +146,12 @@ if ! install_side "$first"; then
 fi
 adb install -r -g "$apks/$first/app-debug-androidTest.apk" > "$out/install-test.txt" 2>&1
 grep -q Success "$out/install-test.txt" || { printf 'SETUP_FAILED test apk\n' | tee -a "$out/setup-failures.txt"; exit 1; }
-adb shell am force-stop "$package"
-mpa launch --wait-text Inbox > "$out/launch.json" 2>&1
-mpa tap text 'Use without account (debug)' > "$out/tap-account.json" 2>&1
-wait_text Inbox || exit 1
+launch_inbox || exit 1
 key=$(base64 -w0 "$FIXTURE/user-key")
 adb shell "am instrument -w -e class dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture -e host_label 'Bisect probe' -e ssh_host 10.0.2.2 -e ssh_port 2222 -e ssh_user verifyssh -e ssh_private_key '$key' $package.test/androidx.test.runner.AndroidJUnitRunner" > "$out/host-seed.txt" 2>&1
 grep -q 'OK (1 test)' "$out/host-seed.txt" || { printf 'SETUP_FAILED host seed\n' | tee -a "$out/setup-failures.txt"; exit 1; }
-adb shell am force-stop "$package"
-mpa launch --wait-text Trust > "$out/launch-trust.json" 2>&1
-mpa tap text 'Trust and connect' > "$out/tap-trust.json" 2>&1
+launch_inbox || exit 1
+trust_host_if_asked || true
 wait_text Inbox || exit 1
 mpa tap text All > /dev/null 2>&1
 wait_text cl-long-chat || exit 1
@@ -152,4 +177,5 @@ while read -r base suspect; do
     done
 done < <(python3 -B tools/bisect-mubo-453/plan.py "$rounds" --pairs)
 
+adb logcat -d > "$out/logcat.txt" 2>&1 || true
 python3 -B tools/bisect-mubo-453/report.py --readings "$readings" --versions .bisect/versions.json --out "$out" | tee "$out/report.txt"
