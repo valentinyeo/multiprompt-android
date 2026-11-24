@@ -286,8 +286,8 @@ internal fun ChatHistoryList(
     val hitsByMessage = remember(findHits) { findHits.groupBy { it.message } }
     SideEffect { onFindCount(findHits.size) }
     val showDots = working || awaitingReply(presentation.messages, questions.size)
-    val piLogin = remember(presentation.messages, agent) {
-        if (agent == AgentKind.PI) PiLoginPrompt.current(presentation.messages) else null
+    val piLogin = remember(presentation.messages) {
+        PiLoginPrompt.current(presentation.messages)
     }
     val firstUnreadKey = remember(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds) {
         ChatOpenAnchor.unreadKey(presentation.messages, unreadMessageKey, unreadSinceEpochSeconds)

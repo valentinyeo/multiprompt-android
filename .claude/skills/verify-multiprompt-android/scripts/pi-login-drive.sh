@@ -2,7 +2,7 @@
 mpa="$scripts/mpa"
 "$mpa" fill 'Message verify-session' PI_LOGIN_PROMPT_2276
 "$mpa" tap desc 'Send prompt'
-"$mpa" read --wait-text 'Open sign-in link'
+"$mpa" read --wait-text 'Sign in to Pi to continue'
 "$mpa" key back
 "$mpa" read --wait-text Inbox
 "$mpa" tap text verify-session

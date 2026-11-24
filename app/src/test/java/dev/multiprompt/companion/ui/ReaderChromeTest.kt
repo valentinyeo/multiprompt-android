@@ -164,6 +164,8 @@ class ReaderChromeTest {
         }
         compose.onNodeWithText("Message ${f.session.displayName}").assertDoesNotExist()
         compose.onNodeWithContentDescription("Start dictation").assertDoesNotExist()
+        println("DICTATION_LAYOUT root=${compose.onRoot().getUnclippedBoundsInRoot()} stop=${compose.onNodeWithTag("dictation-stop").getUnclippedBoundsInRoot()} meter=${compose.onNodeWithTag("dictation-meter").getUnclippedBoundsInRoot()} send=${compose.onNodeWithTag("dictation-send").getUnclippedBoundsInRoot()}")
+        screenshot("dictation-layout")
         compose.onNodeWithTag("dictation-stop").assertIsDisplayed()
         compose.onNodeWithTag("dictation-send").assertIsDisplayed()
         compose.onNodeWithTag("dictation-timer").assertIsDisplayed()
