@@ -152,6 +152,7 @@ elif [[ "${VERIFY_FEATURE:-}" == native-skills.md || "${VERIFY_FEATURE:-}" == sk
     sudo -u verifyssh tmux new-session -d -s verify-session -x 100 -y 32 '/home/verifyssh/claude -u /home/verifyssh/skills-console.py /home/verifyssh/receipts.txt'
 elif [[ "${VERIFY_FEATURE:-}" == owner-skills.md ]]; then
     sudo useradd -m -s /bin/bash skillowner
+    sudo chmod 755 /home/skillowner
     sudo install -d -m 755 -o skillowner -g skillowner /home/skillowner/chat-work
     sudo -u skillowner mkdir -p /home/skillowner/.claude/skills/owner-note
     sudo -u skillowner tee /home/skillowner/.claude/skills/owner-note/SKILL.md >/dev/null <<'SKILL'
