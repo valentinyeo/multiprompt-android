@@ -28,6 +28,7 @@ import dev.multiprompt.companion.room.RoomLoadPolicy
 import dev.multiprompt.companion.room.RoomLoadTrigger
 import dev.multiprompt.companion.notify.ReplyNotificationPolicy
 import dev.multiprompt.companion.notify.ReplyNotifier
+import dev.multiprompt.companion.data.InboxOrder
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.RetiredHosts
 import dev.multiprompt.companion.data.SessionSearch
@@ -40,6 +41,7 @@ import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatMention
 import dev.multiprompt.companion.reader.MentionChat
 import dev.multiprompt.companion.reader.ReaderStatus
+import dev.multiprompt.companion.reader.RestartNewest
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import dev.multiprompt.companion.reader.SwitchAi
 import dev.multiprompt.companion.auth.SyncAuthManager
@@ -74,6 +76,7 @@ import dev.multiprompt.companion.update.UpdateManager
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.upload.ScreencastUploader
 import dev.multiprompt.companion.ui.AppTheme
+import dev.multiprompt.companion.ui.isWorking
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -120,6 +123,7 @@ data class AppUiState(
     val unreadCounts: Map<String, Int> = emptyMap(),
     val repliedSessionKeys: Set<String> = emptySet(),
     val archivedSessionKeys: Set<String> = emptySet(),
+    val pinnedSessionKeys: List<String> = emptyList(),
     val sessionBucket: SessionBucket = SessionBucket.OPEN,
     val unreadOnly: Boolean = false,
     val dissolvedSessions: List<DissolvedSession> = emptyList(),
@@ -226,6 +230,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val hosts = app.hostStore
     private val secrets = app.secretStore
     private val sessionReads = app.sessionReadStore
+    private val pinnedChats = app.pinnedChatStore
     private val botPhotos = BotPhotoCache(java.io.File(app.filesDir, "bot-photos"))
     private val sessionCache = app.sessionCacheStore
     private val dissolvedStore = app.dissolvedSessionStore
@@ -279,6 +284,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountPending = pendingLayout?.dirty == true,
             accountHosts = AccountHostMap.resolve(hosts.load(), accountStore.hostOverrides()),
             newestSessionsAtBottom = sessionReads.newestSessionsAtBottom(),
+            pinnedSessionKeys = pinnedChats.load(),
             allSplitOnRight = sessionReads.allSplitOnRight(),
             readerDefaultFontScale = sessionReads.readerDefaultFontScale(),
             readerTechnicalMode = sessionReads.readerTechnicalMode(),
@@ -653,6 +659,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountStore.setHost(slot, null)
         }
         sessionReads.removeHost(host.id)
+        val remainingPins = pinnedChats.removeHost(host.id)
         dissolvedStore.removeHost(host.id)
         workspaceStore.removeHost(host.id)
         sessionCache.removeHost(host.id)
@@ -683,6 +690,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 unreadSessionKeys = it.unreadSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
                 unreadCounts = it.unreadCounts.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 archivedSessionKeys = it.archivedSessionKeys.filterNot { key -> key.startsWith(sessionPrefix) }.toSet(),
+                pinnedSessionKeys = remainingPins,
                 sessionWorkspaceIds = it.sessionWorkspaceIds.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 sessionInteractionEpochSeconds = it.sessionInteractionEpochSeconds.filterKeys { key -> !key.startsWith(sessionPrefix) },
                 waitingIdleObservations = it.waitingIdleObservations.filterKeys { key -> !key.startsWith(sessionPrefix) },
@@ -1107,6 +1115,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 current.workspaceSelectionInitialized,
             sessionWorkspaceIds = sessionWorkspaceIds,
             sessionInteractionEpochSeconds = interactionEpochSeconds,
+            pinnedSessionKeys = if (final) pinnedChats.prune(
+                results.filter { it.error == null }.associate { result -> result.hostId to result.sessions.map { it.name } },
+            ) else current.pinnedSessionKeys,
             waitingIdleObservations = if (final) idleObservations.filterKeys { it in archivedKeys }
                 else current.waitingIdleObservations,
             refreshing = !final,
@@ -1159,9 +1170,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun openReader(session: TmuxSession, userInitiated: Boolean = false) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
         val swipeOrder = _state.value.readerSwipeOrder.ifEmpty {
-            visibleInboxSessions(_state.value)
-                .let { if (_state.value.newestSessionsAtBottom) it.asReversed() else it }
-                .map { SessionReadStore.key(it.hostId, it.name) }
+            inboxTopToBottom(_state.value).map { SessionReadStore.key(it.hostId, it.name) }
         }
         noteSessionInteraction(session)
         val unreadMessageKey = sessionReads.unreadMessageKey(session)
@@ -1263,6 +1272,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         sessionReads.restore(session)
         val key = SessionReadStore.key(session.hostId, session.name)
         _state.update { it.copy(archivedSessionKeys = it.archivedSessionKeys - key) }
+    }
+
+    fun setSessionPinned(session: TmuxSession, pinned: Boolean) {
+        val updated = if (pinned) pinnedChats.pin(session) else pinnedChats.unpin(session)
+        _state.update { it.copy(pinnedSessionKeys = updated) }
     }
 
     fun toggleArchivedSessions() {
@@ -1568,6 +1582,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private val restoringDissolved = mutableSetOf<String>()
+    private var restartingIdleChats = false
 
     fun restoreDissolvedSession(session: DissolvedSession) {
         val host = _state.value.hosts.firstOrNull { it.id == session.hostId }
@@ -1634,6 +1649,103 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     Toast.makeText(getApplication(), SwitchAi.notice(outcome.provider), Toast.LENGTH_SHORT).show()
                     refresh()
                 }
+            }
+        }
+    }
+
+    fun restartNewest(session: TmuxSession) {
+        val host = _state.value.hosts.firstOrNull { it.id == session.hostId } ?: return
+        val key = SessionReadStore.key(session.hostId, session.name)
+        val reader = warmReaders[key] ?: _state.value.reader?.takeIf {
+            _state.value.readerSession?.let { open -> open.hostId == session.hostId && open.name == session.name } == true
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(sessionActionError = null) }
+            val outcome = if (reader != null) {
+                reader.restartNewest()
+            } else {
+                val target = RestartNewest.target(session)
+                if (target == null) {
+                    RestartNewest.Outcome.Failed(RestartNewest.NOT_HOSTED)
+                } else {
+                    runCatching {
+                        val batch = ssh.restartNewestBatch(host, app.chatHistoryScript, listOf(target))
+                        when {
+                            batch.restarted > 0 -> RestartNewest.Outcome.Restarted
+                            batch.restarting > 0 -> RestartNewest.Outcome.Restarting
+                            batch.waiting > 0 -> RestartNewest.Outcome.Waiting
+                            else -> RestartNewest.Outcome.Failed(RestartNewest.NO_ANSWER)
+                        }
+                    }.getOrElse { throwable ->
+                        RestartNewest.Outcome.Failed(throwable.message ?: RestartNewest.NO_ANSWER)
+                    }
+                }
+            }
+            when (outcome) {
+                is RestartNewest.Outcome.Failed -> _state.update { it.copy(sessionActionError = outcome.message) }
+                else -> {
+                    Toast.makeText(getApplication(), RestartNewest.notice(outcome), Toast.LENGTH_SHORT).show()
+                    refresh()
+                }
+            }
+        }
+    }
+
+    fun restartIdleChats() {
+        if (restartingIdleChats) return
+        restartingIdleChats = true
+        viewModelScope.launch {
+            try {
+                _state.update { it.copy(sessionActionError = null) }
+                val snapshot = _state.value
+                val workingKeys = buildSet {
+                    warmReaders.forEach { (key, reader) ->
+                        if (reader.state.value.isWorking(reader.agent)) add(key)
+                    }
+                    val openReader = snapshot.reader
+                    val openSession = snapshot.readerSession
+                    if (openReader != null && openSession != null && openReader.state.value.isWorking(openSession.agent)) {
+                        add(SessionReadStore.key(openSession.hostId, openSession.name))
+                    }
+                }
+                val freshSessions = snapshot.hosts.map { host ->
+                    async {
+                        runCatching { ssh.listSessions(host).sessions }
+                            .getOrElse { snapshot.sessions.filter { it.hostId == host.id } }
+                    }
+                }.awaitAll().flatten()
+                val targets = RestartNewest.selectIdle(freshSessions, workingKeys)
+                if (targets.isEmpty()) {
+                    Toast.makeText(getApplication(), RestartNewest.batchNotice(RestartNewest.BatchResult()), Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                var restarted = 0
+                var restarting = 0
+                var waiting = 0
+                var failed = 0
+                val hostResults = targets.groupBy { it.hostId }.mapNotNull { (hostId, hostTargets) ->
+                    val host = snapshot.hosts.firstOrNull { it.id == hostId } ?: return@mapNotNull null
+                    async {
+                        runCatching { ssh.restartNewestBatch(host, app.chatHistoryScript, hostTargets) }
+                            .getOrElse { RestartNewest.BatchResult(failed = hostTargets.size) }
+                    }
+                }.awaitAll()
+                hostResults.forEach { result ->
+                    restarted += result.restarted
+                    restarting += result.restarting
+                    waiting += result.waiting
+                    failed += result.failed
+                }
+                val combined = RestartNewest.BatchResult(restarted, restarting, waiting, failed)
+                val message = RestartNewest.batchNotice(combined)
+                if (combined.started == 0 && combined.waiting == 0 && combined.failed > 0) {
+                    _state.update { it.copy(sessionActionError = message) }
+                } else {
+                    Toast.makeText(getApplication(), message, Toast.LENGTH_SHORT).show()
+                }
+                refresh()
+            } finally {
+                restartingIdleChats = false
             }
         }
     }
@@ -1869,39 +1981,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun archiveReaderUntilAndOpenNext(resumeAtEpochSeconds: Long?) {
         val current = _state.value.readerSession ?: return
-        val visible = visibleInboxSessions(_state.value)
+        val visible = inboxTopToBottom(_state.value)
         val currentIndex = visible.indexOfFirst {
             it.hostId == current.hostId && it.name == current.name
         }
         archiveSessionUntil(current, resumeAtEpochSeconds)
-        val remaining = visible.filterNot {
-            it.hostId == current.hostId && it.name == current.name
-        }
-        if (remaining.isEmpty()) {
-            closeReader()
-        } else {
-            val nextIndex = if (currentIndex in remaining.indices) currentIndex else 0
-            openReader(remaining[nextIndex])
-        }
+        val next = InboxOrder.nextAfterRemoving(visible, currentIndex)
+        if (next == null) closeReader() else openReader(next)
     }
 
     private fun neighbourAfterRemoving(key: String): TmuxSession? {
         val state = _state.value
-        val live = visibleInboxSessions(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
+        val live = inboxTopToBottom(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
         val order = state.readerSwipeOrder.ifEmpty { live.keys.toList() }
-        val index = order.indexOf(key)
-        if (index < 0) return null
-        val remaining = order.filterNot { it == key }
-        if (remaining.isEmpty()) return null
-        return live[remaining.getOrNull(index - 1) ?: remaining.getOrNull(index) ?: remaining.first()]
+        val successor = InboxOrder.nextAfterRemoving(order, order.indexOf(key)) ?: return null
+        return live[successor]
     }
 
     fun openAdjacentReaderSession(delta: Int) {
         val state = _state.value
         val current = state.readerSession ?: return
-        val live = visibleInboxSessions(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
+        val live = inboxTopToBottom(state).associateBy { SessionReadStore.key(it.hostId, it.name) }
         val sessions = state.readerSwipeOrder.mapNotNull { live[it] }
-            .ifEmpty { visibleInboxSessions(state) }
+            .ifEmpty { inboxTopToBottom(state) }
         if (sessions.size < 2) return
         val index = sessions.indexOfFirst { it.hostId == current.hostId && it.name == current.name }
         if (index < 0) return
@@ -2298,7 +2400,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val hostKey: PresentedHostKey? = null,
     )
 
-    private fun visibleInboxSessions(state: AppUiState): List<TmuxSession> = state.inboxSessions
+    private fun inboxTopToBottom(state: AppUiState): List<TmuxSession> = state.inboxSessions
         .filterNot { isHiddenAsMuted(it, state.accountLayout, state.accountHosts, state.selectedWorkspaceId) }
         .filter { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
@@ -2320,6 +2422,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 frequentSessions(sessions, state.accountLayout, state.accountHosts, System.currentTimeMillis())
             } else SessionSearch.newestFirst(sessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
         }
+        .let { InboxOrder.topToBottom(it, state.pinnedSessionKeys, state.newestSessionsAtBottom) }
 
     private companion object {
         const val ROOM_POLL_MS = 4_000L

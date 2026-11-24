@@ -1,0 +1,1 @@
+Android: cancel a dictation and drop the recording

@@ -516,6 +516,58 @@ class SshRepository(private val secrets: SecretStorage) {
         return outcome
     }
 
+    suspend fun restartNewest(
+        client: SshClient,
+        script: ByteArray,
+        provider: String,
+        sid: String,
+        tmux: String = "",
+    ): dev.multiprompt.companion.reader.RestartNewest.Outcome {
+        val query = dev.multiprompt.companion.reader.RestartNewest.query(1, provider, sid, tmux)
+        var outcome: dev.multiprompt.companion.reader.RestartNewest.Outcome =
+            dev.multiprompt.companion.reader.RestartNewest.Outcome.Failed(dev.multiprompt.companion.reader.RestartNewest.NO_ANSWER)
+        streamChatHistory(client, script) { exchange ->
+            outcome = dev.multiprompt.companion.reader.RestartNewest.outcome(exchange(query), 1)
+        }
+        return outcome
+    }
+
+    suspend fun restartNewestBatch(
+        host: HostProfile,
+        script: ByteArray,
+        targets: List<dev.multiprompt.companion.reader.RestartNewest.Target>,
+    ): dev.multiprompt.companion.reader.RestartNewest.BatchResult = withContext(Dispatchers.IO) {
+        if (targets.isEmpty()) return@withContext dev.multiprompt.companion.reader.RestartNewest.BatchResult()
+        withTimeout(CONNECTION_TIMEOUT_MS + targets.size * 15_000L) {
+            withAuthenticatedClient(host) { client ->
+                var restarted = 0
+                var restarting = 0
+                var waiting = 0
+                var failed = 0
+                streamChatHistory(client, script) { exchange ->
+                    targets.forEachIndexed { index, target ->
+                        val id = index + 1L
+                        val query = dev.multiprompt.companion.reader.RestartNewest.query(
+                            id, target.provider, target.sid, target.tmux,
+                        )
+                        when (dev.multiprompt.companion.reader.RestartNewest.outcome(exchange(query), id)) {
+                            dev.multiprompt.companion.reader.RestartNewest.Outcome.Restarted -> restarted++
+                            dev.multiprompt.companion.reader.RestartNewest.Outcome.Restarting -> restarting++
+                            dev.multiprompt.companion.reader.RestartNewest.Outcome.Waiting -> waiting++
+                            is dev.multiprompt.companion.reader.RestartNewest.Outcome.Failed -> failed++
+                        }
+                    }
+                }
+                dev.multiprompt.companion.reader.RestartNewest.BatchResult(
+                    restarted = restarted,
+                    restarting = restarting,
+                    waiting = waiting,
+                    failed = failed,
+                )
+            }
+        }
+    }
+
     suspend fun sendPrompt(client: SshClient, sessionName: String, prompt: String) {
         require(prompt.isNotBlank()) { "Enter a prompt first" }
         val bytes = prompt.toByteArray(Charsets.UTF_8)
@@ -582,11 +634,7 @@ class SshRepository(private val secrets: SecretStorage) {
                 val stamp = System.currentTimeMillis().toString(36)
                 val sessionName = if (agent != null) AgentKind.liveChatName(agent, project, stamp) else "${harness.namePrefix}-$project-$stamp"
                 val sid = if (live) UUID.randomUUID().toString() else ""
-                val command = if (live) {
-                    TmuxCommands.createLiveChat(sessionName, remotePath, sid, harness)
-                } else {
-                    TmuxCommands.createAgentSession(sessionName, remotePath, harness)
-                }
+                val command = TmuxCommands.newSessionCommand(sessionName, remotePath, harness, sid)
                 val result = execute(client, command, stdin = if (live) readerScript else null)
                 result.requireSuccess("create the ${harness.label} session")
                 require(result.stdout.lineSequence().any {

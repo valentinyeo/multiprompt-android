@@ -2,6 +2,7 @@ name: Historical message projection proof
 
 on:
   workflow_call:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,9 +15,10 @@ jobs:
   message-projection-replay:
     name: message projection replay (${{ matrix.fix }})
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - fix: ce2d32d9
@@ -42,7 +44,7 @@ jobs:
           gradle-version: "9.5.1"
       - name: Require the named assertion on the old source and success on the historical fix
         env:
-          GRADLE: gradle
+          GRADLE: tools/ci/gradle-retry.sh
         run: bash tools/message-projection/replay.sh "${{ matrix.fix }}" "${{ matrix.method }}"
       - uses: actions/upload-artifact@v4
         if: always()

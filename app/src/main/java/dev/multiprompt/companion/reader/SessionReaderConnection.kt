@@ -387,6 +387,24 @@ class SessionReaderConnection(
         }
     }
 
+    suspend fun restartNewest(): RestartNewest.Outcome {
+        val provider = ChatHistoryProtocol.hostedProvider(agent, hostSessionId)
+        if (!RestartNewest.supported(provider, hostSessionId)) {
+            return RestartNewest.Outcome.Failed(RestartNewest.NOT_HOSTED)
+        }
+        return try {
+            withTimeout(RESTART_NEWEST_TIMEOUT_MS) {
+                withFreshClient { client ->
+                    repository.restartNewest(client, historyScript, requireNotNull(provider), hostSessionId, tmuxSessionName)
+                }
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (throwable: Throwable) {
+            RestartNewest.Outcome.Failed(throwable.message ?: RestartNewest.NO_ANSWER)
+        }
+    }
+
     fun interrupt() {
         requests.trySend(Request.Action(TmuxAction.INTERRUPT))
     }
@@ -729,6 +747,7 @@ class SessionReaderConnection(
         const val CONNECT_TIMEOUT_MS = 20_000L
         const val REQUEST_TIMEOUT_MS = 20_000L
         const val SWITCH_TIMEOUT_MS = 75_000L
+        const val RESTART_NEWEST_TIMEOUT_MS = 30_000L
         const val RECONNECT_DELAY_MS = 3_000L
         const val REUSE_FIRST_BYTES_MS = 2_000L
         const val SENT_PROMPT_MEMORY = 3

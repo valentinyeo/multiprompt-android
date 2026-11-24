@@ -23,7 +23,7 @@ class PendingQuestionTest {
         assertTrue(question.multiSelect)
         assertTrue(question.other)
         assertTrue(history.messages.isEmpty())
-        assertEquals(question, ChatHistoryProtocol.parseRow(history.rows.single().json()).questions.single())
+        assertEquals(question, requireNotNull(ChatHistoryProtocol.parseRow(history.rows.single().json())).questions.single())
     }
 
     @Test fun historicalRowsNeverRevivePendingQuestions() {

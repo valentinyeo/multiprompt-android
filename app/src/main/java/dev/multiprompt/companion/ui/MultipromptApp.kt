@@ -263,6 +263,8 @@ import dev.multiprompt.companion.skills.NativeSkills
 import dev.multiprompt.companion.data.ReminderTimeParser
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.data.UnreadOnlyFilter
+import dev.multiprompt.companion.data.InboxOrder
+import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.data.SnippetStore
 import dev.multiprompt.companion.data.Snippets
@@ -460,6 +462,12 @@ private fun AppScreens(viewModel: MainViewModel) {
             onOpenMentionedSession = viewModel::openMentionedSession,
             unread = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.unreadSessionKeys,
             archived = SessionReadStore.key(readerSession.hostId, readerSession.name) in state.archivedSessionKeys,
+            pinned = PinnedChats.isPinned(state.pinnedSessionKeys, readerSession),
+            pinEnabled = PinnedChats.isPinned(state.pinnedSessionKeys, readerSession) ||
+                state.sessionBucket != SessionBucket.ARCHIVE,
+            onTogglePin = {
+                viewModel.setSessionPinned(readerSession, !PinnedChats.isPinned(state.pinnedSessionKeys, readerSession))
+            },
             initialFontScale = viewModel.readerFontScale(readerSession),
             onBack = viewModel::closeReader,
             onReleaseNotes = viewModel::openReleaseNotes,
@@ -485,6 +493,7 @@ private fun AppScreens(viewModel: MainViewModel) {
             onBotAppearance = viewModel::setAccountBotAppearance,
             onReattach = { viewModel.reattachReader(readerSession) },
             onSwitchAi = { to -> viewModel.switchAi(readerSession, to) },
+            onRestartNewest = { viewModel.restartNewest(readerSession) },
             onSessionInteraction = { viewModel.noteSessionInteraction(readerSession) },
             onSessionInput = { viewModel.stampSessionInput(readerSession) },
             technicalMode = state.readerTechnicalMode,
@@ -594,9 +603,11 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onMoveSession = viewModel::moveSession,
                     onRenameSession = viewModel::renameSession,
                     onSetFavorite = { tab, value -> viewModel.editAccountLayout { it.setFavorite(tab.identity, value) } },
+                    onSetPinned = viewModel::setSessionPinned,
                     onSetMuted = { tab, value -> viewModel.editAccountLayout { it.setMuted(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onRefreshRooms = { viewModel.refreshRooms() },
+                    onRestartIdleChats = viewModel::restartIdleChats,
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
                     onOpenRoom = viewModel::openRoom,
@@ -1273,6 +1284,8 @@ internal fun SessionsScreen(
     onUngroup: (String, Boolean) -> String? = { _, _ -> null },
     onShowAiUsage: () -> Unit = {},
     onDismissAiUsage: () -> Unit = {},
+    onRestartIdleChats: () -> Unit = {},
+    onSetPinned: (TmuxSession, Boolean) -> Unit = { _, _ -> },
 ) = MultipromptTheme(
     sunlight = when (appTheme) {
         AppTheme.SYSTEM -> !isSystemInDarkTheme()
@@ -1895,9 +1908,11 @@ internal fun SessionsScreen(
                     workspaceName = workspaceNames[state.sessionWorkspaceIds[key]].orEmpty(),
                 )
         }
-    val visibleSessions = if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
+    val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
+    val visibleSessions = (if (state.selectedWorkspaceId == FREQUENT_SPLIT_ID) {
         frequentSessions(matchingSessions, state.accountLayout, state.accountHosts, etaNowMillis)
-    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts)
+    } else SessionSearch.newestFirst(matchingSessions, state.sessionInteractionEpochSeconds, state.accountLayout, state.accountHosts))
+        .let { InboxOrder.display(it, state.pinnedSessionKeys, reversedSessions) }
     val visibleDissolvedSessions = if (state.sessionBucket == SessionBucket.ARCHIVE && state.selectedWorkspaceId != FAVORITES_SPLIT_ID && state.selectedWorkspaceId != FREQUENT_SPLIT_ID) {
         state.dissolvedSessions.filter { session ->
             normalizedQuery.isBlank() ||
@@ -1938,11 +1953,17 @@ internal fun SessionsScreen(
             }
         }
     }
-    val reversedSessions = normalizedQuery.isBlank() && state.newestSessionsAtBottom
-    val sessionGroups = SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
-        val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
-        tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+    val pinnedSessions = if (state.pinnedSessionKeys.isEmpty()) emptyList() else visibleSessions.filter {
+        SessionReadStore.key(it.hostId, it.name) in state.pinnedSessionKeys
     }
+    val sessionGroups = SessionGroups.withPinned(
+        SessionGroups.split(visibleSessions, state.accountLayout?.groupOrder?.let { if (reversedSessions) it.asReversed() else it }) { session ->
+            val tab = state.accountLayout?.let { AccountHostMap.tabFor(session, it, state.accountHosts) }
+            tab?.groupIn(state.selectedWorkspaceId == FAVORITES_SPLIT_ID)
+        },
+        pinnedSessions,
+        reversedSessions,
+    )
     val sessionListEntries = sessionGroups.sumOf { group ->
         group.items.size + if (SessionGroups.heading(group, sessionGroups) != null) 1 else 0
     } + (if (rooms.isNotEmpty()) 1 else 0) +
@@ -1953,6 +1974,14 @@ internal fun SessionsScreen(
     LaunchedEffect(sessionListState, listEnd, openSplitId, sessionListEntries) {
         if (listEnd.revealsNewest(openSplitId, sessionListEntries, sessionListState.firstVisibleItemIndex)) {
             sessionListState.scrollToItem(0)
+        }
+    }
+    var lastPinnedKeys by remember { mutableStateOf(state.pinnedSessionKeys) }
+    LaunchedEffect(state.pinnedSessionKeys, reversedSessions, sessionListEntries) {
+        val added = state.pinnedSessionKeys - lastPinnedKeys.toSet()
+        lastPinnedKeys = state.pinnedSessionKeys
+        if (added.isNotEmpty() && sessionListEntries > 0) {
+            sessionListState.scrollToItem(if (reversedSessions) sessionListEntries - 1 else 0)
         }
     }
     Scaffold(
@@ -2037,6 +2066,7 @@ internal fun SessionsScreen(
                                 onRefresh()
                                 onRefreshRooms()
                             },
+                            onRestartIdleChats = onRestartIdleChats,
                             onAiUsage = onShowAiUsage,
                             onReleaseNotes = onReleaseNotes,
                         )
@@ -2211,8 +2241,8 @@ internal fun SessionsScreen(
                 val heading: () -> Unit = {
                     val title = SessionGroups.heading(group, sessionGroups)
                     if (title != null) {
-                        item(key = group.name?.let { "group:$it" } ?: "recents") {
-                            val name = group.name
+                        item(key = SessionGroups.key(group)) {
+                            val name = SessionGroups.renameTarget(group)
                             KitSectionLabel(
                                 title,
                                 if (name == null) Modifier else Modifier.combinedClickable(
@@ -2252,6 +2282,9 @@ internal fun SessionsScreen(
                             unread = key in state.unreadSessionKeys,
                             unreadCount = state.unreadCounts[key] ?: 1,
                             archived = key in state.archivedSessionKeys,
+                            pinned = key in state.pinnedSessionKeys,
+                            pinEnabled = key in state.pinnedSessionKeys || state.sessionBucket != SessionBucket.ARCHIVE,
+                            onTogglePin = { onSetPinned(session, key !in state.pinnedSessionKeys) },
                             starred = starred,
                             hasDraft = key in draftKeys,
                             onToggleFavorite = if (tab != null && state.signedIn) {
@@ -2505,6 +2538,9 @@ private fun SessionCard(
     onToggleMute: (() -> Unit)? = null,
     onMoveToGroup: (() -> Unit)? = null,
     inFavoritesView: Boolean = false,
+    pinned: Boolean = false,
+    pinEnabled: Boolean = false,
+    onTogglePin: (() -> Unit)? = null,
 ) {
     var menuExpanded by remember(session.hostId, session.name) { mutableStateOf(false) }
     val dismissState = rememberSwipeToDismissBoxState(
@@ -2594,7 +2630,11 @@ private fun SessionCard(
                             )
                         }
                         Text(
-                            SessionPreview.line(session.preview),
+                            SessionPreview.line(
+                                session.preview,
+                                agent = session.agent,
+                                replyWaiting = session.replyWaiting,
+                            ),
                             modifier = Modifier.weight(1f).testTag("Session preview"),
                             fontSize = 14.sp,
                             lineHeight = 20.sp,
@@ -2632,6 +2672,17 @@ private fun SessionCard(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false },
                 ) {
+                    if (pinEnabled) {
+                        onTogglePin?.let { toggle ->
+                            KitMenuRow(
+                                label = if (pinned) PinnedChats.UNPIN_LABEL else PinnedChats.PIN_LABEL,
+                                onClick = {
+                                    menuExpanded = false
+                                    toggle()
+                                },
+                            )
+                        }
+                    }
                     onToggleFavorite?.let { toggle ->
                         KitMenuRow(
                             label = if (starred) "Unfavorite" else "Favorite",
@@ -3029,6 +3080,7 @@ internal fun ReaderScreen(
     onBotAppearance: (String, Int?, Int?) -> Unit = { _, _, _ -> },
     onReattach: () -> Unit = {},
     onSwitchAi: (String) -> Unit = {},
+    onRestartNewest: () -> Unit = {},
     onSessionInteraction: () -> Unit,
     onSessionInput: () -> Unit,
     technicalMode: Boolean,
@@ -3047,6 +3099,9 @@ internal fun ReaderScreen(
     mentionChats: List<MentionChat> = emptyList(),
     onOpenMentionedSession: (String) -> Unit = {},
     unreadSinceEpochSeconds: Long? = null,
+    pinned: Boolean = false,
+    pinEnabled: Boolean = false,
+    onTogglePin: (() -> Unit)? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
     val reader by connection.state.collectAsState()
@@ -3092,6 +3147,9 @@ internal fun ReaderScreen(
         promptFocusRequester.requestFocus()
     }
     val prompt = promptField.text
+    val pillSkills = remember(reader.nativeSkills, session.agent) {
+        if (session.agent == AgentKind.CLAUDE) NativeSkills.catalogue(reader.nativeSkills) else reader.nativeSkills
+    }
     val skillQuery = if (session.agent == AgentKind.CLAUDE && promptField.selection.collapsed) {
         NativeSkills.query(prompt, promptField.selection.start)
     } else null
@@ -3105,7 +3163,8 @@ internal fun ReaderScreen(
         ChatMention.query(prompt, promptField.selection.start)
     } else null
     val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
-    var dictationPrefix by remember(connection) { mutableStateOf("") }
+    var dictationBefore by remember(connection) { mutableStateOf(DictationDraft.captured("")) }
+    var dictationCanceled by remember(connection) { mutableStateOf(false) }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var recordingPrompt by remember(connection) { mutableStateOf(false) }
@@ -3395,9 +3454,7 @@ internal fun ReaderScreen(
             }
         }
     }
-    val dictationActive = dictationState.status == DictationStatus.CONNECTING ||
-        dictationState.status == DictationStatus.LISTENING ||
-        dictationState.status == DictationStatus.FINISHING
+    val dictationActive = dictationState.status.active
     val readerView = LocalView.current
     DisposableEffect(readerView, dictationActive) {
         val previousKeepScreenOn = readerView.keepScreenOn
@@ -3417,7 +3474,8 @@ internal fun ReaderScreen(
         }
     }
     val startDictation = {
-        dictationPrefix = prompt.trimEnd()
+        dictationBefore = DictationDraft.captured(prompt)
+        dictationCanceled = false
         dictationSubmissionStarted.set(false)
         microphoneError = null
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -3427,6 +3485,14 @@ internal fun ReaderScreen(
         } else {
             microphonePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    val cancelDictation = {
+        dictationCanceled = true
+        dictationSubmissionStarted.set(false)
+        sendAfterDictation = false
+        dictation.discard()
+        setPrompt(dictationBefore.restored())
     }
 
     LaunchedEffect(acceptedQueuedPrompts, queuedDraft) {
@@ -3459,15 +3525,16 @@ internal fun ReaderScreen(
         }
     }
     LaunchedEffect(dictationState.transcript) {
-        val spoken = dictationState.transcript.trim()
-        if (spoken.isNotBlank()) {
-            setPrompt(PromptComposer.appendDictation(dictationPrefix, spoken))
-        }
+        val live = dictation.state.value.takeIf { it.sessionKey == sessionKey }?.status
+            ?: DictationStatus.IDLE
+        val next = DictationDraft.spokenPrompt(dictationBefore, dictationState.transcript, live, dictationCanceled)
+            ?: return@LaunchedEffect
+        setPrompt(next)
     }
     DisposableEffect(connection) {
         onDispose {
             if (dictation.state.value.sessionKey == sessionKey) {
-                if (dictation.state.value.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)) {
+                if (dictation.state.value.status.active) {
                     android.widget.Toast.makeText(context, "Dictation stopped: session changed", android.widget.Toast.LENGTH_SHORT).show()
                 }
                 dictation.discard()
@@ -3600,10 +3667,7 @@ internal fun ReaderScreen(
         when (dictationState.status) {
             DictationStatus.IDLE -> {
                 if (!dictationSubmissionStarted.compareAndSet(true, false)) return@LaunchedEffect
-                val finalPrompt = PromptComposer.appendDictation(
-                    dictationPrefix,
-                    dictationState.transcript,
-                )
+                val finalPrompt = dictationBefore.withSpoken(dictationState.transcript)
                 setPrompt(finalPrompt)
                 sendAfterDictation = false
                 sendDraft(finalPrompt)
@@ -4027,6 +4091,15 @@ internal fun ReaderScreen(
                                         },
                                     )
                                 }
+                                if (dev.multiprompt.companion.reader.RestartNewest.supported(ChatHistoryProtocol.hostedProvider(session.agent, session.hostSessionId), session.hostSessionId)) {
+                                    KitMenuRow(
+                                        label = dev.multiprompt.companion.reader.RestartNewest.CHAT_LABEL,
+                                        onClick = {
+                                            menuExpanded = false
+                                            onRestartNewest()
+                                        },
+                                    )
+                                }
                                 KitDivider()
                                 KitSectionLabel("Session")
                                 if (session.agent != dev.multiprompt.companion.model.AgentKind.OTHER) {
@@ -4050,6 +4123,17 @@ internal fun ReaderScreen(
                                             android.widget.Toast.makeText(context, dev.multiprompt.companion.model.ChatId.COPIED, android.widget.Toast.LENGTH_SHORT).show()
                                         },
                                     )
+                                }
+                                if (pinEnabled) {
+                                    onTogglePin?.let { toggle ->
+                                        KitMenuRow(
+                                            label = if (pinned) PinnedChats.UNPIN_LABEL else PinnedChats.PIN_LABEL,
+                                            onClick = {
+                                                menuExpanded = false
+                                                toggle()
+                                            },
+                                        )
+                                    }
                                 }
                                 KitMenuRow(
                                     label = "Remind Me…",
@@ -4353,6 +4437,7 @@ internal fun ReaderScreen(
                     DictationBar(
                         level = dictation.level,
                         sending = reader.sending || sendAfterDictation || pendingPromptAction != null || recordingPrompt,
+                        onCancel = cancelDictation,
                         onStop = { dictation.stop() },
                         onSend = submitPrompt,
                     )
@@ -4601,7 +4686,7 @@ internal fun ReaderScreen(
                             draftEmpty = prompt.isEmpty() && imageAttachments.isEmpty(),
                         ) == ComposerSlot.STOP
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
-                        val skillSpans = remember(prompt, reader.nativeSkills) { NativeSkills.spans(prompt, reader.nativeSkills) }
+                        val skillSpans = remember(prompt, pillSkills) { NativeSkills.spans(prompt, pillSkills) }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
@@ -4983,7 +5068,7 @@ internal fun ReaderScreen(
                                 ChatLinkText(message.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
-                                        skills = reader.nativeSkills,
+                                        skills = pillSkills,
                                         color = bodyColor,
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),
@@ -5076,7 +5161,7 @@ internal fun ReaderScreen(
                                 ChatLinkText(block.text) { line, start ->
                                     SkillMessageText(
                                         text = line,
-                                        skills = reader.nativeSkills,
+                                        skills = pillSkills,
                                         color = chatTextColor(sunlightMode),
                                         fontSize = transcriptFontSize,
                                         lineHeight = chatLineHeight((transcriptFontSize.value * 1.5f).sp, transcriptZoom),

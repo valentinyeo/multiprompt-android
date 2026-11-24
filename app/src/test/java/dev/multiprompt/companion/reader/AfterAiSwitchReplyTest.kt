@@ -25,7 +25,7 @@ class AfterAiSwitchReplyTest {
             val stage = stages.getJSONObject(index)
             val rows = stage.getJSONArray("rows")
             val history = ChatHistory(sid = sid, inode = 7, rows = (0 until rows.length()).map {
-                ChatHistoryProtocol.parseRow(rows.getJSONObject(it))
+                requireNotNull(ChatHistoryProtocol.parseRow(rows.getJSONObject(it)))
             })
             val snapshot = JSONObject().put("id", 1).put("message_protocol", 1).put("result", JSONObject()
                 .put("snapshot_id", "switched").put("epoch", 1).put("seq", stage.getJSONArray("events").length())

@@ -392,6 +392,29 @@ adb() { printf '%s\n' "$*" >> "$TEST_DIR/actions"; }
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((folder / 'actions').read_text().splitlines(), ['shell input swipe 540 940 540 460 500', 'shell input tap 260 940'])
 
+    def test_delayed_tap_change_succeeds_without_retrying_disabled_control(self):
+        source = (SCRIPTS / 'drive.sh').read_text()
+        helper = source[source.index('session_name() {'):source.index('\ntap_text()')]
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            ready = window('<node class="android.widget.Button" content-desc="Send prompt" clickable="true" enabled="true" bounds="[922,1647][1048,1773]" />')
+            sent = window('<node class="android.widget.Button" content-desc="Send prompt" clickable="true" enabled="false" bounds="[922,1647][1048,1773]" />')
+            (folder / 'ready.xml').write_text(ready)
+            (folder / 'sent.xml').write_text(sent)
+            shell = '''set -eu
+scripts=$SCRIPTS
+EVIDENCE=$TEST_DIR
+calls=0
+dump_ui() {
+    calls=$((calls + 1))
+    if (( calls <= 2 )); then cp "$TEST_DIR/ready.xml" "$EVIDENCE/current.xml"; else cp "$TEST_DIR/sent.xml" "$EVIDENCE/current.xml"; fi
+}
+adb() { printf '%s\\n' "$*" >> "$TEST_DIR/actions"; }
+'''
+            result = subprocess.run(['bash', '-c', shell + helper + '\ntap_node desc "Send prompt"'], env={**os.environ, 'SCRIPTS': str(SCRIPTS), 'TEST_DIR': directory, 'PYTHONDONTWRITEBYTECODE': '1'}, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((folder / 'actions').read_text().splitlines(), ['shell input tap 985 1710'])
+
 
 if __name__ == '__main__':
     unittest.main()

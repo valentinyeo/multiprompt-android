@@ -8,7 +8,7 @@ The independent SSH fixture writes a Claude JSONL transcript. Two replies contai
 
 ## Journey
 
-Every step retains a numbered PNG/XML pair and checks the resulting text. Search states also retain `search-<state>.json` from the actual XML and screenshot.
+Every step retains a numbered PNG/XML pair and checks the resulting text. Search states also retain `search-<state>.json` from the actual XML and screenshot. Before a highlighted capture the driver dumps the UI until two consecutive dumps give the same bounds for the target message, so the list has stopped scrolling to the match. If the pixels and the dump still disagree, it retakes the dump and screenshot up to five times and only then fails; the retake count and any settle failure are in `search-settle.txt`.
 
 1. Open `verify-session`. Require `VERIFY_SEARCH_READY_2540`, the message box, and `orchard south`. Require `orchard north` to be off screen. Capture `search-chat`.
 2. Open **Session actions**. Require **Search in chat**. Capture `search-menu`.

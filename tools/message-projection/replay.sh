@@ -4,6 +4,7 @@ set -euo pipefail
 fix=${1:?Fix commit}
 method=${2:?Replay method}
 root=$(pwd)
+gradle=("${GRADLE:-$root/tools/ci/gradle-retry.sh}")
 output="$root/app/build/reports/message-projection/$fix"
 mkdir -p "$output"
 for side in before after; do
@@ -26,10 +27,13 @@ for side in before after; do
         class=HistoricalProjectionReplayTest
     fi
     status=0
-    "${GRADLE:-gradle}" -p "$directory" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests "$target" > "$output/$side-gradle.txt" 2>&1 || status=$?
+    "${gradle[@]}" -p "$directory" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests "$target" > "$output/$side-gradle.txt" 2>&1 || status=$?
     cat "$output/$side-gradle.txt"
     result="$directory/app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.reader.$class.xml"
-    test -f "$result"
+    if [[ ! -f "$result" ]]; then
+        printf 'MESSAGE_PROJECTION_REPLAY_INVALID: %s %s never ran %s.%s. Fix the replay build, do not weaken the assertion.\n' "$fix" "$side" "$class" "$name" >&2
+        exit 1
+    fi
     cp "$result" "$output/$side.xml"
     printf '%s\n' "$source" > "$output/$side-source-sha.txt"
     python3 - "$result" "$side" "$name" "$status" <<'PY'

@@ -6,11 +6,6 @@
       "boundary": "app/src/main/java/dev/multiprompt/companion/account/AccountHostMap.kt"
     },
     {
-      "script": ".github/workflows/android-full.yml",
-      "revision": "099a8e7",
-      "boundary": "app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt"
-    },
-    {
       "script": "tools/check-approved-style.sh",
       "revision": "ce2d32d",
       "boundary": "app/src/androidTest"

@@ -42,7 +42,7 @@ test('all six phone jobs and historical replays run periodically, never on PRs',
   assert.match(periodic, /bash tools\/kit-controls\/replay\.sh/);
   assert.doesNotMatch(periodic, /  pull_request:|phone-routing|needs: build/);
   for (const job of [...phones, 'baseline-profile', 'message-projection-replays', 'historical-controls']) assert.ok(jobs(periodic).includes(job), job);
-  for (const name of ['account-journey', 'app-name', 'reply-notifications', 'top-fade', 'multiprompt-parity']) {
+  for (const name of ['account-journey', 'app-name', 'reply-notifications', 'top-fade', 'multiprompt-parity', 'scroll-jank']) {
     const workflow = read(`.github/workflows/${name}.yml`);
     assert.doesNotMatch(workflow, /^  pull_request:/m, name);
     assert.match(workflow, /^  schedule:/m, name);
@@ -106,4 +106,27 @@ test('expensive periodic workflows cancel superseded runs without cancelling sib
     assert.ok(workflow.includes(`\nconcurrency:\n  group: ${name}-` + '${{ github.event.pull_request.number || github.ref }}\n  cancel-in-progress: true\n\njobs:\n'), name);
     assert.equal((workflow.match(/concurrency:/g) ?? []).length, 1, name);
   }
+});
+
+test('the weekly maintenance PR keeps one branch, updates it, and mints a token that makes its checks run', () => {
+  const weekly = read('.github/workflows/maintain-verification.yml');
+  const script = read('.claude/skills/verify-multiprompt-android/scripts/maintain.py');
+  const report = weekly.split('\n  report:\n')[1];
+  assert.match(script, /^MAINTAIN_BRANCH = 'maintain\/feature-map'$/m);
+  assert.doesNotMatch(script, /datetime|'maintain\/' \+/);
+  assert.match(script, /run\('git', 'switch', '-C', branch, f'origin\/\{base\}'\)/);
+  assert.match(script, /--force-with-lease=/);
+  assert.match(script, /'gh', 'pr', 'edit'/);
+  assert.doesNotMatch(script, /'merge'|--auto|gh pr merge/);
+  assert.match(report, /uses: actions\/create-github-app-token@[0-9a-f]{40} # v[0-9]+\n/);
+  assert.ok(report.indexOf('create-github-app-token') < report.indexOf('actions/checkout@v4'));
+  assert.match(report, /id: token\n        continue-on-error: true/);
+  assert.match(report, /app-id: \$\{\{ secrets\.CI_APP_ID \}\}/);
+  assert.match(report, /private-key: \$\{\{ secrets\.CI_APP_PRIVATE_KEY \}\}/);
+  assert.match(report, /permission-contents: write/);
+  assert.match(report, /permission-pull-requests: write/);
+  assert.equal((report.match(/token: \$\{\{ steps\.token\.outputs\.token \|\| github\.token \}\}/g) ?? []).length, 1);
+  assert.equal((report.match(/GH_TOKEN: \$\{\{ steps\.token\.outputs\.token \|\| github\.token \}\}/g) ?? []).length, 1);
+  assert.match(report, /Open one correction PR, never merge/);
+  assert.doesNotMatch(weekly, /gh pr merge|--auto|merge_method/);
 });

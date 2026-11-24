@@ -507,7 +507,7 @@
     },
     "session-summaries.md": {
       "name": "Useful inbox summaries",
-      "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
+      "description": "Android inbox rows show the waiting question, current work, or the first sentence of the last assistant reply. Model footers and shell prompts never become summaries.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -524,17 +524,21 @@
     },
     "sessions.md": {
       "name": "Sessions",
-      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, and an exact search result for that same session below the search box and above the keyboard. Does not assert all 46 rows render.",
+      "description": "Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin at the visual top of the Inbox list across replies and app restart, plus archiving the pinned chat opening the row below it. Does not assert all 46 rows render.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/pin-chat-drive.sh"
+        ]
       },
       "outcomes": [
         "inbox.search",
-        "legacy.igsh-414"
+        "legacy.igsh-414",
+        "inbox.pin-chat"
       ],
       "evidence": {
         "seed-counts.json": 2500,
@@ -544,7 +548,26 @@
         "seed-deep-choice.json": 900,
         "search-keyboard.json": 1200,
         "row-long-press-actions.xml": 1500,
-        "start-agent-picker.xml": 1400
+        "pin-chat-state.json": 1400
+      }
+    },
+    "send-blocked.md": {
+      "name": "Blocked prompt shows not sent",
+      "description": "The fixture host records a hook-blocked prompt the phone sent, and the message shows Not sent with the blocked reason within seconds instead of after the ten-minute wait.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "chat.send-blocked"
+      ],
+      "evidence": {
+        "send-blocked-not-sent.xml": 1500,
+        "send-blocked-store.json": 1500,
+        "send-blocked-state.json": 1500
       }
     },
     "settings-navigation.md": {
@@ -742,7 +765,7 @@
     },
     "skill-pills.md": {
       "name": "Skills within messages",
-      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text. SOFT-2543.",
+      "description": "insert a skill mid-message, check composer and sent pills, remove a pill and send the remaining text, refuse a file path and pill a built-in command. SOFT-2543, MUBO-146.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -757,8 +780,8 @@
         "skills.pills"
       ],
       "evidence": {
-        "skill-pills-state.json": 4000,
-        "skill-pills-receipts.txt": 1000
+        "skill-pills-state.json": 6000,
+        "skill-pills-receipts.txt": 1500
       }
     },
     "chat-table.md": {
@@ -1031,12 +1054,37 @@
         ]
       },
       "outcomes": [
-        "reader.host-restart"
+        "reader.host-restart",
+        "chat.restart-newest"
       ],
       "evidence": {
         "host-restart-state.json": 2500,
         "host-restart-host.json": 6000,
-        "host-restart-processes.txt": 1000
+        "host-restart-processes.txt": 1000,
+        "phone-restart-state.json": 1500,
+        "phone-restart-host.json": 500
+      }
+    },
+    "live-chat-freshness.md": {
+      "name": "Live chat shows new messages",
+      "description": "The real-size restarted chat shows its newest rows on open, and a row appended on the host reaches the phone within seconds with a host receipt.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/live-chat-freshness-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "reader.live-tail"
+      ],
+      "evidence": {
+        "live-chat-freshness.json": 2500,
+        "live-chat-host.txt": 1500,
+        "live-chat-freshness.txt": 200
       }
     },
     "folder-bar.md": {
@@ -1185,6 +1233,33 @@
         "pi-login-browser.json": 1000,
         "pi-login-completed.json": 2000,
         "pi-login-after.json": 1000
+      }
+    },
+    "workspace-group-controls.md": {
+      "name": "Workspace and group controls",
+      "description": "Create a workspace through the inbox menu, cancel and dismiss it, then long-press a chat group to rename and ungroup it, with the stored account layout checked. MUBO-288.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [
+          "Local authenticated account fixture; live production email OTP is not exercised."
+        ],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/workspace-group-drive.sh"
+        ]
+      },
+      "outcomes": [
+        "inbox.workspace-groups"
+      ],
+      "evidence": {
+        "group-headings.json": 1200,
+        "new-workspace-open.json": 800,
+        "workspace-created.json": 1200,
+        "rename-group-open.json": 1200,
+        "group-renamed.json": 1200,
+        "group-renamed-host.json": 1200
       }
     }
   },
@@ -1381,10 +1456,12 @@
       ]
     },
     "inbox.summaries": {
-      "description": "Android inbox rows show the first sentence of the last assistant reply, or current work. Model footers and shell prompts never become summaries.",
+      "description": "Android inbox rows show the waiting question, current work, or the first sentence of the last assistant reply. Model footers and shell prompts never become summaries.",
       "journey": "session-summaries.md",
       "sideEffect": false,
-      "match": []
+      "match": [
+        "SessionPreview"
+      ]
     },
     "inbox.search": {
       "description": "authenticated tmux discovery and search.",
@@ -1393,6 +1470,30 @@
       "match": [
         "SessionSearch|SessionFinder"
       ]
+    },
+    "inbox.pin-chat": {
+      "description": "Pinning a chat from the chat menu puts it at the visual top of the Inbox list in both sort orders, above every group when grouping is on, keeps it there when another chat gets a new reply, survives app restart, and unpinning restores normal order. Archiving the pinned chat opens the chat that sits below it rather than the newest chat.",
+      "journey": "sessions.md",
+      "sideEffect": false,
+      "match": [
+        "PinnedChats|PinnedChatStore|pinnedSessionKeys|setSessionPinned|Pin to top|UNPIN_LABEL|PIN_LABEL",
+        "InboxOrder|SessionGroups|withPinned|nextAfterRemoving|PINNED"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/data/PinnedChats\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/data/InboxOrder\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/ui/SessionGroups\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa tap text 'Pin to top'"
+        },
+        "result": {
+          "file": "pin-chat-state.json",
+          "quote": "\"allPassed\":true"
+        }
+      }
     },
     "settings-navigation.journey": {
       "description": "sessions-first settings, host mapping and account handoff on the signed APK.",
@@ -1518,11 +1619,11 @@
       }
     },
     "skills.pills": {
-      "description": "Insert skills mid-message and render visible skill pills.",
+      "description": "Insert skills mid-message and render visible skill pills, refuse file paths and pill built-in commands.",
       "journey": "skill-pills.md",
       "sideEffect": true,
       "match": [
-        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|NativeSkills\\.(?:token|query|spans|insert)|skills/NativeSkills\\.kt"
+        "SkillMessageText|skillPill|SkillPill|SkillSpan|SkillInsertion|pillSkills|NativeSkills\\.(?:token|query|spans|insert|catalogue|menu)|skills/NativeSkills\\.kt"
       ],
       "citations": {
         "action": {
@@ -1607,10 +1708,14 @@
       "match": []
     },
     "legacy.igsh-434": {
-      "description": "Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions → More → Dictation API key**, **API key → Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates.",
+      "description": "Deepgram credential, microphone permission, controlled speech/silence and network/audio evidence. Reader **Session actions → More → Dictation API key**, **API key → Save and dictate**, then **Start dictation / Stop dictation**. Verify transcript and silence gating; short pre-roll/hangover is intentional. IGSH-2286: on a phone with no key, sign in and the Dictation API key field reads Replacement API key with nothing typed; signed out, a hand-typed key still dictates. MUBO-142: **Cancel dictation** drops the recording and puts the message box back to what it held before. No CI journey reaches the dictation bar: it needs a stored Deepgram key and controlled microphone audio, so the cancel behaviour is proven by `DictationDraftTest` on the JVM, not by a phone journey.",
       "journey": null,
       "sideEffect": true,
-      "match": []
+      "match": [
+        "DictationBar\\.kt",
+        "DictationDraft\\.kt",
+        "DeepgramDictation\\.kt"
+      ]
     },
     "legacy.igsh-423": {
       "description": "saving needs OTP and a pulled account layout. **Session list actions → Settings → Show Frequent split**, Back, check **Frequent**; repeat off and compare another device. Not dispatchable in CI.",
@@ -1813,6 +1918,9 @@
       "description": "Choose and retain themes and font sizes; navigate settings, host mapping and update menus. SOFT-2670.",
       "journey": "settings-controls.md",
       "sideEffect": true,
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/ui/Theme\\.kt$"
+      ],
       "match": [
         "settingsPage|SettingsPage|Session list settings|Default Reader font size|KitSegmented|HostMappingDialog|Desktop tmux hosts|Open navigation|AppSection.UPDATE to \"Update\"|Dictation key|VersionLabel",
         "onSetReaderDefaultFontScale|readerDefaultFontScale|fontOptions|AppTheme|onSetAppTheme|AppSection\\.UPDATE|onSelect\\(destination\\)"
@@ -1889,6 +1997,54 @@
         "sideEffect": {
           "file": "host-restart-host.json",
           "quote": "\"reply\": \"REPLY_DESKTOP_AFTER_2681\""
+        }
+      }
+    },
+    "chat.restart-newest": {
+      "description": "Restart one hosted chat on the newest version from the chat menu while keeping its history and name, and restart every idle chat from the Inbox menu while skipping working chats. MUBO-2.",
+      "journey": "host-restart.md",
+      "sideEffect": true,
+      "match": [
+        "RestartNewest|restartNewest|restartIdleChats|Restart on newest version|Restart all idle chats|host_restart"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/RestartNewest\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "Restart all idle chats"
+        },
+        "result": {
+          "file": "phone-restart-state.json",
+          "quote": "Restart on newest version"
+        },
+        "sideEffect": {
+          "file": "phone-restart-host.json",
+          "quote": "\"working_untouched\": true"
+        }
+      }
+    },
+    "reader.live-tail": {
+      "description": "The live chat renders the newest host rows on open and a message appended on the host appears within seconds, proven by the phone screen and a host receipt.",
+      "journey": "live-chat-freshness.md",
+      "sideEffect": true,
+      "match": [],
+      "paths": [
+        "^tools/real-chat/fixture\\.py$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "append --role user --text LIVE_CHAT_APPEND_2781"
+        },
+        "result": {
+          "file": "live-chat-freshness.json",
+          "quote": "\"verdict\": \"LIVE_CHAT_NEWEST_WITHIN_SECONDS\""
+        },
+        "sideEffect": {
+          "file": "live-chat-host.txt",
+          "quote": "LIVE_CHAT_APPENDED:LIVE_CHAT_APPEND_2781"
         }
       }
     },
@@ -1972,6 +2128,55 @@
         "sideEffect": {
           "file": "clear-store-after.json",
           "quote": "\"CLEARED_BEFORE_2474\": \"cancelled\""
+        }
+      }
+    },
+    "chat.send-blocked": {
+      "description": "A prompt a hook blocked shows Not sent within seconds with the blocked reason, not after the ten-minute waiting limit, and adds no delivered bubble of its own.",
+      "journey": "send-blocked.md",
+      "sideEffect": true,
+      "match": [
+        "blocked_settlement|blocked_by_hook|promptSubmitEnding"
+      ],
+      "paths": [
+        "^app/src/main/assets/chat_connectors/claude\\.py$",
+        "^app/src/main/java/dev/multiprompt/companion/reader/NotSentReason\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message verify-session' BLOCKED_BY_HOOK_266"
+        },
+        "result": {
+          "file": "send-blocked-not-sent.xml",
+          "quote": "Chat blocked this message, nothing was sent"
+        },
+        "sideEffect": {
+          "file": "send-blocked-store.json",
+          "quote": "\"reason\": \"blocked_by_hook\""
+        }
+      }
+    },
+    "inbox.workspace-groups": {
+      "description": "Create a workspace from the inbox menu and rename or ungroup a chat group through a long press on its heading, with the stored account layout checked. MUBO-288.",
+      "journey": "workspace-group-controls.md",
+      "sideEffect": true,
+      "match": [
+        "workspaceDialogVisible|onCreateWorkspace|createWorkspace",
+        "renameGroupPrompt|onRenameGroup|onUngroup|groupDraft|renameAccountGroup"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa hold text ORIGINAL"
+        },
+        "result": {
+          "file": "group-renamed.json",
+          "quote": "\"group\":\"Renamed\""
+        },
+        "sideEffect": {
+          "file": "group-renamed-receipts.txt",
+          "quote": "\"group\": \"Renamed\""
         }
       }
     }

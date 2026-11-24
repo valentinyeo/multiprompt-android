@@ -106,7 +106,7 @@ object TmuxParser {
             replies[hosted.name]?.takeIf { hosted.liveChat }?.let {
                 hosted.copy(replyAtEpochSeconds = it.atEpochSeconds, replyWaiting = it.waiting)
             } ?: hosted
-        }.sortedWith(
+        }.distinctBy { it.name }.sortedWith(
             compareByDescending<TmuxSession> { it.lastActivityEpochSeconds }.thenBy { it.name },
         )
     }

@@ -1,0 +1,1 @@
+Android: restart a chat on the newest version
