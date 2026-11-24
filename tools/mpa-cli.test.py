@@ -490,6 +490,7 @@ class MigratedJourneyTest(unittest.TestCase):
 FAKE_SCREEN_ADB = """#!/usr/bin/env python3
 import json
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -553,6 +554,13 @@ SHEET = (text('AI usage', 120)
          + text('AHEAD', 780) + text('WEEK 62.5% | 5H 25% | EMPTY IN 18H', 860) + '</node>')
 
 
+def wire(value):
+    first = value.split("\\n")[0]
+    if re.fullmatch(r"/[A-Za-z0-9_:.@-]{1,64}", first.split(" ")[0]):
+        return first + "\\n> REPLY_BUBBLE_418"
+    return "> REPLY_BUBBLE_418\\n\\n" + value
+
+
 def xml_for(data):
     screen = data["screen"]
     if screen == "inbox":
@@ -565,7 +573,7 @@ def xml_for(data):
         if screen == "mention-sent":
             return window(REPLY_CHAT + text('@Mention 2953', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data))
         if screen == "sent":
-            return window(REPLY_CHAT + text('REPLY_BODY_418', 320) + text('REPLY_DELIVERED_418', 1000) + composer(data)
+            return window(REPLY_CHAT + text(data.get("sent", "REPLY_BODY_418"), 320) + text('REPLY_DELIVERED_418', 1000) + composer(data)
                           + (MENTION if mention_open(data) else ''))
         return window(REPLY_CHAT + composer(data) + (MENTION if mention_open(data) else ''))
     if mode == "usage":
@@ -616,9 +624,10 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
                 if mode == "ranking":
                     stream.write("VERIFY_RECEIVED:/clear\\n")
                 elif mention:
-                    stream.write("> REPLY_BUBBLE_418\\n@Mention 2953{live-cl_mention-2953}\\n")
+                    stream.write("> REPLY_BUBBLE_418\\n\\n@Mention 2953{live-cl_mention-2953}\\n")
                 else:
-                    stream.write("> REPLY_BUBBLE_418\\n" + data["text"] + "\\n")
+                    stream.write(wire(data["text"]) + "\\n")
+            data["sent"] = data["text"] if not mention else "@Mention 2953"
             data["text"] = ""
         elif "/clear" in texts:
             data["text"] = "/clear "
@@ -641,7 +650,7 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
         sys.exit(0)
     if args[2] == "swipe":
         texts, descs, classes = containing((int(args[3]), int(args[4])))
-        if "REPLY_BUBBLE_418" in texts and data["screen"] == "chat":
+        if data["screen"] in ("chat", "sent", "mention-sent") and any("REPLY_BUBBLE_418" in value for value in texts):
             data["screen"] = "menu"
         save(data)
         sys.exit(0)
@@ -718,11 +727,16 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         cancelled = json.loads((self.evidence / 'reply-cancelled.json').read_text())
         self.assertTrue(cancelled['passed'])
         self.assertEqual('MESSAGE_REPLY_JOURNEY_OK', (self.evidence / 'reply-proof.txt').read_text().splitlines()[0])
-        self.assertEqual(['> REPLY_BUBBLE_418', 'REPLY_BODY_418'], (self.evidence / 'reply-receipts.txt').read_text().splitlines()[:2])
+        self.assertEqual(['> REPLY_BUBBLE_418', '', 'REPLY_BODY_418'], (self.evidence / 'reply-receipts.txt').read_text().splitlines()[:3])
         sent = json.loads((self.evidence / 'reply-sent.json').read_text())
         self.assertTrue(sent['passed'])
         self.assertEqual(['present', 'present', 'absent', 'absent', 'absent', 'absent', 'absent'], [check['kind'] for check in sent['checks']])
         self.assertEqual(['REPLY_BODY_418', 'REPLY_DELIVERED_418', 'Replying', 'Not sent', 'Send again', 'Remove', 'Cancel reply'], [check['value'] for check in sent['checks']])
+        self.assertEqual(['/review REPLY_BODY_419', '> REPLY_BUBBLE_418'], (self.evidence / 'reply-command-receipts.txt').read_text().splitlines())
+        command = json.loads((self.evidence / 'reply-command.json').read_text())
+        self.assertTrue(command['passed'])
+        self.assertEqual(['/review', 'REPLY_BODY_419', 'Not sent', 'Send again'], [check['value'] for check in command['checks']])
+        self.assertEqual('REPLY_COMMAND_FIRST', (self.evidence / 'reply-command-proof.txt').read_text().splitlines()[0])
         self.assertRegex(self.log.read_text(), r'shell input swipe 540 640 540 640 800')
         mention_list = json.loads((self.evidence / 'mention-list.json').read_text())
         self.assertTrue(mention_list['passed'])
@@ -734,7 +748,7 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertEqual(['present', 'absent', 'absent'], [check['kind'] for check in mention_sent['checks']])
         self.assertEqual(['@Mention 2953', 'live-cl_mention-2953', '{live-cl_mention-2953}'], [check['value'] for check in mention_sent['checks']])
         self.assertEqual('MENTION_ROUTES_TO_SESSION', (self.evidence / 'mention-sent-proof.txt').read_text().splitlines()[0])
-        for name in ('01-reply-menu.xml', '02-reply-open.xml', '03-reply-cancelled.xml', '04-reply-sent.xml'):
+        for name in ('01-reply-menu.xml', '02-reply-open.xml', '03-reply-cancelled.xml', '04-reply-sent.xml', '05-reply-command-draft.xml', '06-reply-command.xml'):
             self.assertTrue((self.evidence / name).is_file(), name)
 
     def test_the_clear_ranking_journey_runs_end_to_end_through_the_cli(self):
