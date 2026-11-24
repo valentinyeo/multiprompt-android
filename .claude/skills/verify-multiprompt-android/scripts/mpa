@@ -15,7 +15,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parent
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
-from journey_action import Unreachable, plan
+from journey_action import Unreachable, confirm, plan
 
 ADB = os.environ.get("ADB", "adb")
 REMOTE_DUMP = "/sdcard/verify-ui.xml"
@@ -119,13 +119,15 @@ def resolve(root, mode, value, extra=(), inside=None):
         texts = [node.get("text") for node in root.iter("node") if node.get("text")]
         descriptions = [node.get("content-desc") for node in root.iter("node") if node.get("content-desc")]
         return {"mode": mode, "value": value, "stdout": json.dumps({"texts": texts, "descriptions": descriptions}, indent=2), "snapshot": {"texts": texts, "descriptions": descriptions}}
-    if mode.startswith("reach-"):
+    if mode.startswith("reach-") or mode.startswith("confirm-"):
         direction = extra[0] if extra else "forward"
         axis = extra[1] if len(extra) > 1 else None
+        label_mode = mode.removeprefix("reach-").removeprefix("confirm-")
+        planner = confirm if mode.startswith("confirm-") else plan
         try:
-            planned = plan(root, mode.removeprefix("reach-"), value, direction, axis)
+            planned = planner(root, label_mode, value, direction, axis)
         except Unreachable as error:
-            raise MpaError("JOURNEY_ACTION_UNREACHABLE", f"JOURNEY_ACTION_UNREACHABLE: {value or mode.removeprefix('reach-')!r}: {error}", "Scroll the control into view or use an enabled label that is inside the active window.")
+            raise MpaError("JOURNEY_ACTION_UNREACHABLE", f"JOURNEY_ACTION_UNREACHABLE: {value or label_mode!r}: {error}", "Scroll the control into view or use an enabled label that is inside the active window.")
         return {"mode": mode, "value": value, "stdout": planned, "plan": planned}
     if mode == "terminal":
         anchors = []
@@ -314,6 +316,13 @@ def tap(mode, value, xml_path=None, reveal=False, dry_run=False, attempts=24):
                 return {"ok": True, "command": "tap", "action": "reveal", "mode": target_mode, "value": target_value, "attempts": attempt, "xml": str(current), "dry_run": dry_run}
             if dry_run:
                 return {"ok": True, "command": "tap", "action": "tap", "mode": target_mode, "value": target_value, "point": list(map(int, coordinates)), "attempts": attempt, "xml": str(current), "dry_run": True}
+            if not xml_path:
+                current = dump_ui()
+                planned = resolve(load_tree(current), f"confirm-{target_mode}", target_value, (direction,))
+                action, *coordinates = planned["plan"].split()
+                if action != "tap":
+                    adb("shell", "input", "swipe", *coordinates, "500")
+                    continue
             adb("shell", "input", "tap", coordinates[0], coordinates[1])
             return {"ok": True, "command": "tap", "action": "tap", "mode": target_mode, "value": target_value, "point": list(map(int, coordinates)), "attempts": attempt, "xml": str(current), "dry_run": False}
         if action == "swipe":
