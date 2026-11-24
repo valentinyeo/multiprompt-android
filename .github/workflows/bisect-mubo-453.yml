@@ -1,0 +1,133 @@
+name: MUBO-453 bisect probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      rounds:
+        description: Round file naming the revisions to measure
+        type: string
+        default: .bisect/rounds.json
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - .bisect/**
+      - tools/bisect-mubo-453/**
+      - tools/speed-check/**
+      - .github/workflows/bisect-mubo-453.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bisect-mubo-453-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      shas: ${{ steps.plan.outputs.shas }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the revisions in this round
+        id: plan
+        env:
+          ROUNDS: ${{ github.event.inputs.rounds || '.bisect/rounds.json' }}
+        run: |
+          echo "shas=$(python3 -B tools/bisect-mubo-453/plan.py "$ROUNDS" --json)" >> "$GITHUB_OUTPUT"
+          python3 -B tools/bisect-mubo-453/plan.py "$ROUNDS" --pairs
+
+  counters:
+    name: counters
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        sha: ${{ fromJSON(needs.plan.outputs.shas) }}
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
+      GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: robolectric-warm-v1 # gitleaks:allow
+      EVIDENCE: ${{ github.workspace }}/bisect-evidence
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: ./.github/actions/gradle-ci
+        with:
+          read-only: 'true'
+      - name: Count the chat list and inbox work
+        run: bash tools/bisect-mubo-453/counters.sh "${{ matrix.sha }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: bisect-counters-${{ matrix.sha }}
+          path: bisect-evidence/
+          if-no-files-found: warn
+          retention-days: 14
+
+  probe:
+    name: probe
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
+      EVIDENCE: ${{ github.workspace }}/bisect-evidence
+      APKS: ${{ github.workspace }}/bisect-apks
+      ROUNDS: ${{ github.event.inputs.rounds || '.bisect/rounds.json' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: ./.github/actions/gradle-ci
+      - name: Start the ephemeral SSH and tmux fixture
+        env:
+          VERIFY_FEATURE: session-reader.md
+          FIXTURE: ${{ runner.temp }}/verify-ssh
+        run: |
+          echo "FIXTURE=$FIXTURE" >> "$GITHUB_ENV"
+          .claude/skills/verify-multiprompt-android/scripts/fixture.sh
+      - name: Build both sides' debug APKs
+        run: bash tools/bisect-mubo-453/build.sh
+      - name: Measure the streaming long chat on the emulator
+        uses: ./.github/actions/android-proof
+        with:
+          stage: bisect
+          target: default
+          script: bash tools/bisect-mubo-453/measure.sh
+      - name: Report the readings to the job summary
+        if: always()
+        run: |
+          if [ -s "$EVIDENCE/bisect/table.md" ]; then
+            cat "$EVIDENCE/bisect/table.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -s "$EVIDENCE/bisect/readings.csv" ]; then
+            cat "$EVIDENCE/bisect/readings.csv" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Stop the fixture and keep the evidence
+        if: always()
+        env:
+          VERIFY_FEATURE: session-reader.md
+        run: |
+          .claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE" || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          overwrite: true
+          name: bisect-probe-${{ github.run_id }}
+          path: bisect-evidence/
+          if-no-files-found: warn
+          retention-days: 14
