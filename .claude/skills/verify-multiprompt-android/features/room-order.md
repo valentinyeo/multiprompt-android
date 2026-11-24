@@ -19,7 +19,7 @@ The app before this change delivers Beta `two` without the earlier answer, so th
 
 The fixture login is stored already expired. Launch refreshes it at `account.multiprompt.dev`. A live `invalid_grant` clears that login and the screen returns to Sign in, so **Order room** never stays up. Before relaunch the runner rejects TCP port 443 to every address that name resolves to. The refresh fails as a network error, the local login stays, and the room still loads through the fixture SSH host.
 
-Rooms load only when the app resumes (`RoomLoadPolicy`), and that load is bounded by the shared server link timeout. On the first cold launch the link itself takes longer than that to answer on a busy runner, so the room row can be missing from an Inbox that already lists sessions. The driver sends the app Home and brings it back, up to four times, and waits for the room row after each resume. A missing row after those resumes is a real failure, not a timing one.
+Rooms load only when the app resumes (`RoomLoadPolicy`), and a load that reuses the shared server link is capped by that link's timeout. On the first cold launch the link takes longer than that to answer on a busy runner, so the room row can be missing from an Inbox that already lists sessions. The driver sends the app to the launcher and brings it back, up to four times, waiting for the room row after each resume, and it fails if the app never leaves the foreground. A missing row after those resumes is a real failure, not a timing one.
 
 `mpa fill 'Message Order room' …` dismisses the keyboard before Send is tapped, so the room keyboard never covers the button. Text still inside the composer is not a message row.
 

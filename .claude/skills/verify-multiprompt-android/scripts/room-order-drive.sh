@@ -21,12 +21,25 @@ room_order_submits() {
     fi
 }
 
+room_order_background() {
+    local attempt
+    for attempt in {1..3}; do
+        adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null 2>&1 || true
+        sleep 3
+        if ! python3 "$scripts/mpa" read --select contains --value 'Inbox' >/dev/null 2>&1; then return 0; fi
+        adb shell input keyevent KEYCODE_APP_SWITCH >/dev/null 2>&1 || true
+        sleep 2
+        if ! python3 "$scripts/mpa" read --select contains --value 'Inbox' >/dev/null 2>&1; then return 0; fi
+    done
+    printf 'The app stayed in the foreground, so it never resumed\n' >&2
+    return 1
+}
+
 room_order_inbox() {
     local cycle attempt
     for cycle in {1..4}; do
         if python3 "$scripts/mpa" read --select contains --value 'Order room' >/dev/null 2>&1; then return 0; fi
-        adb shell input keyevent KEYCODE_HOME
-        sleep 2
+        room_order_background || true
         adb shell am start -W -n "$package/dev.multiprompt.companion.MainActivity" >/dev/null
         for attempt in {1..25}; do
             if python3 "$scripts/mpa" read --select contains --value 'Order room' >/dev/null 2>&1; then return 0; fi
