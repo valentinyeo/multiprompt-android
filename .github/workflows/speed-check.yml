@@ -1,0 +1,138 @@
+name: Android speed check
+
+on:
+  workflow_call:
+    inputs:
+      base_sha:
+        description: Base revision to build and time
+        required: true
+        type: string
+      head_sha:
+        description: Head revision to build and time
+        required: true
+        type: string
+      rounds:
+        description: Measured rounds per side, 3 to 5
+        required: false
+        type: string
+        default: '3'
+  workflow_dispatch:
+    inputs:
+      base_sha:
+        description: Base revision to build and time
+        required: true
+        type: string
+      head_sha:
+        description: Head revision to build and time
+        required: true
+        type: string
+      rounds:
+        description: Measured rounds per side, 3 to 5
+        required: false
+        type: string
+        default: '3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: speed-check-${{ inputs.base_sha }}-${{ inputs.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  speed:
+    name: inbox and chat speed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      BASE_SHA: ${{ inputs.base_sha }}
+      HEAD_SHA: ${{ inputs.head_sha }}
+      SPEED_ROUNDS: ${{ inputs.rounds }}
+      SPEED_VERSION: 0.1.2-speed.${{ github.run_number }}
+      EXPECTED_VERSION: 0.1.2-speed.${{ github.run_number }}-debug
+      EVIDENCE: ${{ github.workspace }}/speed-evidence
+      SPEED_OUT: ${{ github.workspace }}/speed-evidence/speed
+      SPEED_BASE_REVISION: ${{ inputs.base_sha }}
+      SPEED_HEAD_REVISION: ${{ inputs.head_sha }}
+    steps:
+      - name: Check the revisions, the round count and the fixture path
+        run: |
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$BASE_SHA" != "$HEAD_SHA" ]]
+          [[ "$SPEED_ROUNDS" =~ ^[3-5]$ ]]
+          echo "FIXTURE=$RUNNER_TEMP/speed-ssh" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check out the base and head revisions beside this workflow's revision
+        run: |
+          git fetch --no-tags origin '+refs/heads/*:refs/remotes/origin/*'
+          for sha in "$BASE_SHA" "$HEAD_SHA"; do
+            git cat-file -e "$sha^{commit}" || { echo "Revision $sha is not in this repository" >&2; exit 1; }
+          done
+          git worktree add --detach app-base "$BASE_SHA"
+          git worktree add --detach app-head "$HEAD_SHA"
+          mkdir -p "$EVIDENCE"
+          {
+            printf 'harness_revision=%s\n' "$(git rev-parse HEAD)"
+            printf 'base_revision=%s\n' "$(git -C app-base rev-parse HEAD)"
+            printf 'head_revision=%s\n' "$(git -C app-head rev-parse HEAD)"
+          } | tee "$EVIDENCE/revisions.txt"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: ./.github/actions/gradle-ci
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Build the base revision
+        timeout-minutes: 25
+        run: |
+          mkdir -p "$EVIDENCE"
+          tools/ci/gradle-retry.sh -p app-base --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="$SPEED_VERSION" assembleDebug 2>&1 | tee "$EVIDENCE/base-build.txt"
+          echo "SPEED_BASE_APK=$GITHUB_WORKSPACE/app-base/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+      - name: Build the head revision and the host-seed instrumentation
+        timeout-minutes: 25
+        run: |
+          tools/ci/gradle-retry.sh -p app-head --no-daemon -Dorg.gradle.jvmargs=-Xmx3g -PversionName="$SPEED_VERSION" assembleDebug assembleDebugAndroidTest 2>&1 | tee "$EVIDENCE/head-build.txt"
+          echo "SPEED_HEAD_APK=$GITHUB_WORKSPACE/app-head/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+          echo "SPEED_TEST_APK=$GITHUB_WORKSPACE/app-head/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" >> "$GITHUB_ENV"
+      - name: Check both APKs exist
+        run: |
+          test -s "$SPEED_BASE_APK"
+          test -s "$SPEED_HEAD_APK"
+          test -s "$SPEED_TEST_APK"
+          sha256sum "$SPEED_BASE_APK" "$SPEED_HEAD_APK" "$SPEED_TEST_APK" | tee "$EVIDENCE/apk-shas.txt"
+      - name: Start the SSH and tmux fixture and seed the inbox
+        run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
+      - name: Time the inbox and the long chat on both revisions
+        uses: ./.github/actions/android-proof
+        with:
+          stage: speed-check
+          script: |
+            bash tools/speed-check/measure.sh
+      - name: Publish the speed report to the job summary
+        if: always()
+        run: |
+          if [ -s "$SPEED_OUT/report.md" ]; then
+            cat "$SPEED_OUT/report.md" >> "$GITHUB_STEP_SUMMARY"
+            cat "$SPEED_OUT/info.txt" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No speed report was produced. The emulator artifact holds the diagnostics.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Stop the fixture processes and keep the evidence
+        if: always()
+        timeout-minutes: 2
+        continue-on-error: true
+        run: .claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"
+      - name: Retain the measurements even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          name: speed-check-${{ github.run_id }}
+          path: speed-evidence/
+          if-no-files-found: warn
+          retention-days: 14

@@ -253,7 +253,7 @@ function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {})
   return ids.some(id => saysBug(tickets[id]));
 }
 
-function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '', direct = [] }) {
+function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '', direct = [], speed = null }) {
   const notes = [];
   let verdict = 'PASS';
   const knownRed = Array.isArray(redOnMain) ? redOnMain : [];
@@ -281,6 +281,14 @@ function applyRules({ features, conclusions, notDrivenReason, smoke = false, fea
   }
   if (redOnMainNote) {
     notes.push(redOnMainNote);
+  }
+  if (speed?.required === true) {
+    if (speed.result === 'success') {
+      notes.push('The inbox and chat speed check passed: head is within the noise margin of the base revision on cold open, fling scroll and long chat open.');
+    } else {
+      verdict = 'FAIL';
+      notes.push(`The inbox and chat speed check did not pass (${speed.result || 'no result'}). Head is slower than the base revision past the tuned margin, or the measurements were incomplete; open that run for the per-journey medians.`);
+    }
   }
   if ((!features.length || smoke) && verdict === 'PASS') {
     verdict = 'PASS+NOTES';
@@ -551,7 +559,7 @@ async function preparePick(env) {
     const reason = 'No product change. Only documentation or verification tooling changed. No Android journey is scheduled.';
     const mergeBase = fetchMergeBase(repo, pr.base.ref, head);
     console.log(reason);
-    setOutputs({ no_product_change: 'true', features: '[]', smoke: 'no', reason, number, head_sha: head, merge_base: mergeBase, change_kind: 'tooling', changed_outcomes: '[]', need_ladder: 'false' });
+    setOutputs({ no_product_change: 'true', features: '[]', smoke: 'no', reason, number, head_sha: head, merge_base: mergeBase, change_kind: 'tooling', changed_outcomes: '[]', need_ladder: 'false', speed: coverageGate.speedRelevant('', files) ? 'yes' : 'no' });
     return null;
   }
   if (pr.head.repo?.full_name !== repo) throw new Error('Product changes from forks cannot be verified with repository secrets');
@@ -566,7 +574,7 @@ async function preparePick(env) {
     ? `Mapped by rule for these changed paths (they stand; add guards on top): ${JSON.stringify(codePlan.outcomes)}`
     : 'No changed path maps to a registered outcome by rule.';
   const user = `Directly edited recipes (must run): ${JSON.stringify(recipes)}\n${mapped}\nRequired candidates (rank repro first, then relevant guards): ${JSON.stringify(deterministic.features)}\n\nJourney catalog (the only names you may choose):\n${journeyCatalog(env.ROOT ?? process.cwd())}\n\n${prContext(pr, diff, PICK_DIFF_CHARS)}`;
-  return { repo, number, head, mergeBase, diff, changed, files, codePlan, user };
+  return { repo, number, head, mergeBase, diff, changed, files, codePlan, user, speed: coverageGate.speedRelevant(diff, files) };
 }
 
 async function pickRequest(env) {
@@ -587,7 +595,7 @@ async function finishPick(state, env, picked) {
   const reason = picked.reason || 'Journeys chosen for this change.';
   const harness = selected.harnessSmoke?.length ? ` harness_smoke=${JSON.stringify(selected.harnessSmoke)}` : '';
   console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} cap=${selected.features.length}/${coverageGate.MAX_PR_JOURNEYS}${harness} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
-  setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind });
+  setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, speed: state.speed ? 'yes' : 'no' });
 }
 
 async function pick(env) {
@@ -713,6 +721,7 @@ async function judge(env) {
     features, conclusions, notDrivenReason: env.PICK_REASON, smoke, featureProof,
     redOnMain: red.journeys, redOnMainUrl: red.url, redOnMainNote: red.note,
     direct: coverageGate.selectionForChange(diff).direct,
+    speed: { required: String(env.SPEED_REQUIRED ?? '') === 'yes', result: String(env.SPEED_RESULT ?? '') },
   });
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {
