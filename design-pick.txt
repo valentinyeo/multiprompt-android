@@ -1,1 +1,0 @@
-Design check for MUBO-146: Valentin approved pick A: a dark pill with a thin outline, Kit colours only, the skill pill added to the kit (Figma https://www.figma.com/design/8Yzu3N21UlCL7lA3YXm45D?node-id=277-2). Blue stays for unread only.
