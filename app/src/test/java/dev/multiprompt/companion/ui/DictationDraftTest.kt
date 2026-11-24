@@ -1,6 +1,8 @@
 package dev.multiprompt.companion.ui
 
+import dev.multiprompt.companion.dictation.DictationStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class DictationDraftTest {
@@ -42,5 +44,35 @@ class DictationDraftTest {
 
         assertEquals("First line", before.appendBase)
         assertEquals("First line\n\n", before.restored())
+    }
+
+    @Test
+    fun spokenTextTouchesTheBoxOnlyWhileDictationIsActive() {
+        val before = DictationDraft.captured("Fix the failing test")
+
+        assertEquals(
+            "Fix the failing test buy milk",
+            DictationDraft.spokenPrompt(before, "buy milk", DictationStatus.LISTENING, canceled = false),
+        )
+        assertEquals(
+            "Fix the failing test buy milk",
+            DictationDraft.spokenPrompt(before, "  buy milk  ", DictationStatus.FINISHING, canceled = false),
+        )
+        assertNull(DictationDraft.spokenPrompt(before, "buy milk", DictationStatus.IDLE, canceled = false))
+        assertNull(DictationDraft.spokenPrompt(before, "buy milk", DictationStatus.FAILED, canceled = false))
+        assertNull(DictationDraft.spokenPrompt(before, "buy milk", DictationStatus.LISTENING, canceled = true))
+        assertNull(DictationDraft.spokenPrompt(before, "  ", DictationStatus.LISTENING, canceled = false))
+    }
+
+    @Test
+    fun aTranscriptCollectedJustBeforeCancelCannotReapplySpokenText() {
+        val before = DictationDraft.captured("Fix the failing test")
+
+        assertEquals(
+            "Fix the failing test buy milk",
+            DictationDraft.spokenPrompt(before, "buy milk", DictationStatus.LISTENING, canceled = false),
+        )
+        assertNull(DictationDraft.spokenPrompt(before, "buy milk", DictationStatus.LISTENING, canceled = true))
+        assertEquals("Fix the failing test", before.restored())
     }
 }

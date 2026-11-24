@@ -3106,6 +3106,7 @@ internal fun ReaderScreen(
     } else null
     val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
     var dictationBefore by remember(connection) { mutableStateOf(DictationDraft.captured("")) }
+    var dictationCanceled by remember(connection) { mutableStateOf(false) }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
     var pendingPromptAction by remember(connection) { mutableStateOf<Long?>(null) }
     var recordingPrompt by remember(connection) { mutableStateOf(false) }
@@ -3395,9 +3396,7 @@ internal fun ReaderScreen(
             }
         }
     }
-    val dictationActive = dictationState.status == DictationStatus.CONNECTING ||
-        dictationState.status == DictationStatus.LISTENING ||
-        dictationState.status == DictationStatus.FINISHING
+    val dictationActive = dictationState.status.active
     val readerView = LocalView.current
     DisposableEffect(readerView, dictationActive) {
         val previousKeepScreenOn = readerView.keepScreenOn
@@ -3418,6 +3417,7 @@ internal fun ReaderScreen(
     }
     val startDictation = {
         dictationBefore = DictationDraft.captured(prompt)
+        dictationCanceled = false
         dictationSubmissionStarted.set(false)
         microphoneError = null
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
@@ -3430,6 +3430,7 @@ internal fun ReaderScreen(
     }
 
     val cancelDictation = {
+        dictationCanceled = true
         dictationSubmissionStarted.set(false)
         sendAfterDictation = false
         dictation.discard()
@@ -3466,15 +3467,16 @@ internal fun ReaderScreen(
         }
     }
     LaunchedEffect(dictationState.transcript) {
-        val spoken = dictationState.transcript.trim()
-        if (spoken.isNotBlank()) {
-            setPrompt(dictationBefore.withSpoken(spoken))
-        }
+        val live = dictation.state.value.takeIf { it.sessionKey == sessionKey }?.status
+            ?: DictationStatus.IDLE
+        val next = DictationDraft.spokenPrompt(dictationBefore, dictationState.transcript, live, dictationCanceled)
+            ?: return@LaunchedEffect
+        setPrompt(next)
     }
     DisposableEffect(connection) {
         onDispose {
             if (dictation.state.value.sessionKey == sessionKey) {
-                if (dictation.state.value.status in setOf(DictationStatus.CONNECTING, DictationStatus.LISTENING, DictationStatus.FINISHING)) {
+                if (dictation.state.value.status.active) {
                     android.widget.Toast.makeText(context, "Dictation stopped: session changed", android.widget.Toast.LENGTH_SHORT).show()
                 }
                 dictation.discard()
