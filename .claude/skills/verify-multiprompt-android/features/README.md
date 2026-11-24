@@ -41,7 +41,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
   - Outcomes: `launcher-icon.journey`. Runner: `verify.yml` (debug).
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
-  - Outcomes: `claude.skills-model-effort`, `reader.follow-newest`. Runner: `verify.yml` (debug). Priority evidence: `native-menu-state.txt` (5000 characters), `native-receipts.txt` (2500 characters), `native-result.json` (1000 characters).
+  - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug). Priority evidence: `native-menu-state.txt` (5000 characters), `native-receipts.txt` (2500 characters), `native-result.json` (1000 characters).
 - [Skills for another server account](owner-skills.md): a chat under another server account lists that account's skills.
   - Outcomes: `skills.other-account`. Runner: `verify.yml` (debug). Priority evidence: `owner-skill-list.xml` (1500 characters), `owner-skill-inserted.xml` (800 characters), `owner-receipts.txt` (800 characters), `owner-receipts-before.txt` (400 characters), `owner-session-path.txt` (200 characters), `owner-sudo.txt` (600 characters).
 - [Robot inbox and chat](robot-faces.md): Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.
