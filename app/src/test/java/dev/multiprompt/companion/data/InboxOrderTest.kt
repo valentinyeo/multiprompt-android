@@ -33,18 +33,71 @@ class InboxOrderTest {
     }
 
     @Test
+    fun topToBottomPutsPinsFirstInPinOrderInBothSortOrders() {
+        val newest = session("newest")
+        val middle = session("middle")
+        val oldest = session("oldest")
+        val firstPin = session("first-pin")
+        val secondPin = session("second-pin")
+        val listed = listOf(newest, middle, firstPin, oldest, secondPin)
+        val pins = listOf(PinnedChats.key(firstPin), PinnedChats.key(secondPin))
+
+        assertEquals(
+            listOf("first-pin", "second-pin", "oldest", "middle", "newest"),
+            InboxOrder.topToBottom(listed, pins, newestAtBottom = true).map { it.name },
+        )
+        assertEquals(
+            listOf("first-pin", "second-pin", "newest", "middle", "oldest"),
+            InboxOrder.topToBottom(listed, pins, newestAtBottom = false).map { it.name },
+        )
+    }
+
+    @Test
     fun archivingThePinnedTopRowOpensTheRowBelowIt() {
         val newest = session("newest")
         val middle = session("middle")
-        val pinned = session("pinned")
-        val displayed = InboxOrder.display(listOf(newest, middle, pinned), listOf(PinnedChats.key(pinned)), newestAtBottom = true)
-        assertEquals(listOf("newest", "middle", "pinned"), displayed.map { it.name })
-        assertEquals(middle, InboxOrder.nextAfterRemoving(displayed, displayed.lastIndex))
-
         val oldest = session("oldest")
-        val flat = InboxOrder.display(listOf(pinned, middle, oldest), listOf(PinnedChats.key(pinned)), newestAtBottom = false)
-        assertEquals(listOf("pinned", "middle", "oldest"), flat.map { it.name })
-        assertEquals(middle, InboxOrder.nextAfterRemoving(flat, 0))
+        val pinned = session("pinned")
+        val pins = listOf(PinnedChats.key(pinned))
+
+        val newestAtBottom = InboxOrder.topToBottom(listOf(newest, middle, oldest, pinned), pins, newestAtBottom = true)
+        assertEquals(listOf("pinned", "oldest", "middle", "newest"), newestAtBottom.map { it.name })
+        assertEquals(oldest, InboxOrder.nextAfterRemoving(newestAtBottom, 0))
+
+        val newestAtTop = InboxOrder.topToBottom(listOf(newest, middle, oldest, pinned), pins, newestAtBottom = false)
+        assertEquals(listOf("pinned", "newest", "middle", "oldest"), newestAtTop.map { it.name })
+        assertEquals(newest, InboxOrder.nextAfterRemoving(newestAtTop, 0))
+    }
+
+    @Test
+    fun archivingALowerPinnedRowOpensTheUnpinnedRowBelowItNotThePinAboveIt() {
+        val newest = session("newest")
+        val oldest = session("oldest")
+        val firstPin = session("first-pin")
+        val secondPin = session("second-pin")
+        val pins = listOf(PinnedChats.key(firstPin), PinnedChats.key(secondPin))
+
+        val topToBottom = InboxOrder.topToBottom(listOf(newest, firstPin, oldest, secondPin), pins, newestAtBottom = true)
+        assertEquals(listOf("first-pin", "second-pin", "oldest", "newest"), topToBottom.map { it.name })
+        assertEquals(oldest, InboxOrder.nextAfterRemoving(topToBottom, 1))
+        assertEquals(firstPin, InboxOrder.nextAfterRemoving(topToBottom, 2))
+    }
+
+    @Test
+    fun archivingAnUnpinnedRowOpensTheRowBelowItAndTheRowAboveOnlyAtTheBottom() {
+        val newest = session("newest")
+        val middle = session("middle")
+        val oldest = session("oldest")
+        val pinned = session("pinned")
+        val topToBottom = InboxOrder.topToBottom(
+            listOf(newest, middle, oldest, pinned),
+            listOf(PinnedChats.key(pinned)),
+            newestAtBottom = true,
+        )
+
+        assertEquals(listOf("pinned", "oldest", "middle", "newest"), topToBottom.map { it.name })
+        assertEquals(newest, InboxOrder.nextAfterRemoving(topToBottom, 2))
+        assertEquals(middle, InboxOrder.nextAfterRemoving(topToBottom, 3))
     }
 
     @Test

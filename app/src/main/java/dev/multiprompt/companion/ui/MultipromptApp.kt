@@ -2237,8 +2237,8 @@ internal fun SessionsScreen(
                 val heading: () -> Unit = {
                     val title = SessionGroups.heading(group, sessionGroups)
                     if (title != null) {
-                        item(key = group.name?.let { "group:$it" } ?: "recents") {
-                            val name = group.name
+                        item(key = SessionGroups.key(group)) {
+                            val name = SessionGroups.renameTarget(group)
                             KitSectionLabel(
                                 title,
                                 if (name == null) Modifier else Modifier.combinedClickable(

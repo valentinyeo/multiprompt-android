@@ -57,7 +57,7 @@ class SessionGroupsTest {
         val pinned = SessionGroups.withPinned(groups, listOf("c"), atEnd = false)
         assertEquals(
             listOf(
-                SessionGroup("Pinned", listOf("c")), SessionGroup(null, listOf("d")),
+                SessionGroup("Pinned", listOf("c"), pinned = true), SessionGroup(null, listOf("d")),
                 SessionGroup("Runners", listOf("b")), SessionGroup("Design", listOf("a")),
             ),
             pinned,
@@ -70,7 +70,7 @@ class SessionGroupsTest {
         val groups = SessionGroups.split(listOf("a", "b", "c"), null) { of[it] }
 
         assertEquals(
-            listOf(SessionGroup("Pinned", listOf("c")), SessionGroup("Runners", listOf("a", "b"))),
+            listOf(SessionGroup("Pinned", listOf("c"), pinned = true), SessionGroup("Runners", listOf("a", "b"))),
             SessionGroups.withPinned(groups, listOf("c"), atEnd = false),
         )
     }
@@ -80,9 +80,27 @@ class SessionGroupsTest {
         val groups = SessionGroups.split(listOf("a", "b", "c"), null) { of[it] }
 
         assertEquals(
-            listOf(SessionGroup("Design", listOf("c")), SessionGroup("Runners", listOf("b")), SessionGroup("Pinned", listOf("a"))),
+            listOf(SessionGroup("Design", listOf("c")), SessionGroup("Runners", listOf("b")), SessionGroup("Pinned", listOf("a"), pinned = true)),
             SessionGroups.withPinned(groups, listOf("a"), atEnd = true),
         )
+    }
+
+    @Test fun realGroupNamedPinnedNeverSharesTheSyntheticSectionKey() {
+        val groups = SessionGroups.split(listOf("a", "b"), null) { "Pinned" }
+        val pinned = SessionGroups.withPinned(groups, listOf("b"), atEnd = false)
+
+        assertEquals(listOf("pinned-section", "group:Pinned"), pinned.map { SessionGroups.key(it) })
+        assertEquals(2, pinned.map { SessionGroups.key(it) }.distinct().size)
+        assertEquals(listOf("recents", "group:Design"), SessionGroups.split(listOf("a", "b"), null) { mapOf("a" to "Design")[it] }.map { SessionGroups.key(it) })
+        assertEquals(listOf("pinned-section"), SessionGroups.withPinned(groups, listOf("a", "b"), atEnd = true).map { SessionGroups.key(it) })
+    }
+
+    @Test fun onlyRealNamedGroupsOfferTheRenameSheet() {
+        val groups = SessionGroups.split(listOf("a", "b"), null) { "Pinned" }
+        val pinned = SessionGroups.withPinned(groups, listOf("b"), atEnd = false)
+
+        assertEquals(listOf(null, "Pinned"), pinned.map { SessionGroups.renameTarget(it) })
+        assertEquals(listOf(null), SessionGroups.split(listOf("a"), null) { null }.map { SessionGroups.renameTarget(it) })
     }
 
     @Test fun anUngroupedListKeepsPinsInPlaceWithoutAPinnedHeading() {
