@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import datetime
 import json
 import os
 from pathlib import Path
@@ -14,6 +13,7 @@ DEDICATED = {
     'bot-photo-refresh.md': ('android-full.yml', 'photo'),
 }
 FLAGS = ('released_chat', 'released_robots', 'release_choices', 'pins_scroll', 'candidate')
+MAINTAIN_BRANCH = 'maintain/feature-map'
 
 
 def plan(registry):
@@ -90,18 +90,14 @@ def run(*args):
 def publish(evidence, text, source, failures, blocked):
     repo = os.environ['GITHUB_REPOSITORY']
     base = os.environ['DEFAULT_BRANCH']
-    branch = 'maintain/' + datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+    branch = MAINTAIN_BRANCH
     existing = json.loads(run('gh', 'pr', 'list', '--repo', repo, '--state', 'open', '--head', branch, '--json', 'number,baseRefName,url'))
     if existing and existing[0]['baseRefName'] != base:
         raise RuntimeError('Maintenance branch already has a PR against another base')
     corrected = (evidence / 'controls.json').read_bytes() if (evidence / 'controls.json').is_file() else None
     run('git', 'fetch', 'origin', base)
-    remote = run('git', 'ls-remote', '--heads', 'origin', branch)
-    if remote:
-        run('git', 'fetch', 'origin', branch)
-        run('git', 'switch', '-c', branch, 'FETCH_HEAD')
-    else:
-        run('git', 'switch', '-c', branch, f'origin/{base}')
+    remote = run('git', 'ls-remote', '--heads', 'origin', branch).split()
+    run('git', 'switch', '-C', branch, f'origin/{base}')
     if corrected is not None and source['before'] != 0:
         (ROOT / SKILL / 'features/controls.json').write_bytes(corrected)
     (ROOT / SKILL / 'maintenance.md').write_text(text)
@@ -109,7 +105,8 @@ def publish(evidence, text, source, failures, blocked):
     changed = subprocess.run(['git', 'diff', '--cached', '--quiet'], cwd=ROOT).returncode
     if changed:
         run('git', '-c', 'user.name=github-actions[bot]', '-c', 'user.email=41898282+github-actions[bot]@users.noreply.github.com', 'commit', '-m', 'IGSH-2665: Refresh Android feature-map evidence')
-        run('git', 'push', 'origin', f'HEAD:refs/heads/{branch}')
+        lease = ['--force-with-lease=' + f'{branch}:{remote[0]}'] if remote else []
+        run('git', 'push', *lease, 'origin', f'HEAD:refs/heads/{branch}')
     pr_body = evidence / 'pr-body.md'
     pr_body.write_text('\n'.join([
         '## Why',

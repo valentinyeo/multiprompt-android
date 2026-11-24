@@ -31,6 +31,7 @@ class MaintenanceTest(unittest.TestCase):
         self.assertIn('  workflow_call:', workflow)
         self.assertIn('  group: maintain-android-feature-map\n  cancel-in-progress: true', workflow)
         self.assertIn('      fail-fast: false\n      max-parallel: 2', workflow)
+        self.assertIn('GH_TOKEN: ${{ steps.token.outputs.token || github.token }}', workflow)
         self.assertIn('uses: ./.github/workflows/verify.yml', workflow)
         self.assertIn('side: ${{ matrix.journey }}', workflow)
         bridge = (ROOT / '.github/workflows/emulator-stability.yml').read_text()
@@ -156,10 +157,44 @@ class MaintenanceTest(unittest.TestCase):
                 mutations = [c for c in calls if c[:3] in [('gh', 'pr', 'create'), ('gh', 'pr', 'edit')]]
                 self.assertEqual(1, len(mutations))
                 self.assertEqual('edit' if existing else 'create', mutations[0][2])
-                self.assertFalse(any('merge' in c or '--force' in c for c in calls))
+                self.assertFalse(any('merge' in arg or arg == '--force' for c in calls for arg in c))
                 self.assertEqual('{"corrected":true}\n', (root / M.SKILL / 'features/controls.json').read_text())
                 self.assertLessEqual(len((evidence / 'pr-body.md').read_text().splitlines()), 40)
                 self.assertIn('`sessions.md` (failure)', (evidence / 'pr-body.md').read_text())
+
+    def test_one_fixed_branch_is_reused_and_its_pr_updates_in_place(self):
+        self.assertEqual('maintain/feature-map', M.MAINTAIN_BRANCH)
+        for existing in [[], [{'number': 7, 'baseRefName': 'main', 'url': 'https://example.test/pr/7'}]]:
+            with self.subTest(existing=bool(existing)), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / M.SKILL / 'features').mkdir(parents=True)
+                evidence = root / 'evidence'
+                evidence.mkdir()
+                (evidence / 'controls.json').write_text('{"corrected":true}\n')
+                calls = []
+                def command(*args):
+                    calls.append(args)
+                    if args[:3] == ('gh', 'pr', 'list'):
+                        return json.dumps(existing)
+                    if args[:3] == ('git', 'ls-remote', '--heads'):
+                        return 'abc123\trefs/heads/maintain/feature-map' if existing else ''
+                    return 'https://example.test/pr/7'
+                env = {'GITHUB_REPOSITORY': 'owner/repo', 'DEFAULT_BRANCH': 'main', 'RUN_URL': 'https://example.test/run/9'}
+                with patch.object(M, 'ROOT', root), patch.object(M, 'run', side_effect=command), patch.object(M.subprocess, 'run') as diff, patch.dict(os.environ, env):
+                    diff.return_value.returncode = 1
+                    url = M.publish(evidence, 'Drift report\n', {'before': 1, 'after': 0}, {}, {})
+                self.assertEqual('https://example.test/pr/7', url)
+                switches = [c for c in calls if c[:2] == ('git', 'switch')]
+                self.assertEqual([('git', 'switch', '-C', 'maintain/feature-map', 'origin/main')], switches)
+                pushes = [c for c in calls if c[:2] == ('git', 'push')]
+                self.assertEqual(1, len(pushes))
+                lease = ['--force-with-lease=maintain/feature-map:abc123'] if existing else []
+                self.assertEqual(lease, [arg for arg in pushes[0] if arg.startswith('--force-with-lease')])
+                self.assertFalse([arg for arg in pushes[0] if arg == '--force' or arg == '-f'])
+                self.assertIn('HEAD:refs/heads/maintain/feature-map', pushes[0])
+                self.assertFalse(any('merge' in arg for c in calls for arg in c))
+                self.assertEqual('{"corrected":true}\n', (root / M.SKILL / 'features/controls.json').read_text())
+                self.assertIn('never auto-merge', (evidence / 'pr-body.md').read_text())
 
     def test_clean_automated_routes_do_not_claim_manual_coverage(self):
         failures, blocked = M.conclusions(REGISTRY, [{'jobs': passed_jobs()}])
