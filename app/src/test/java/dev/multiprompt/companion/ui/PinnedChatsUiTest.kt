@@ -156,9 +156,12 @@ class PinnedChatsUiTest {
         compose.waitForIdle()
 
         assertEquals(emptyList<String>(), state.value.pinnedSessionKeys)
-        compose.onNodeWithText("row-20").assertIsDisplayed()
-        assertTrue(topY("row-20") < topY("row-19"))
-        compose.onNodeWithText("beta").assertDoesNotExist()
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        compose.waitForIdle()
+
+        compose.onNodeWithText("alpha").assertIsDisplayed()
+        assertTrue(topY("beta") < topY("alpha"))
+        compose.onNodeWithText("row-20").assertDoesNotExist()
     }
 
     @Test
