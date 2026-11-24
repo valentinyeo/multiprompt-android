@@ -1,0 +1,1 @@
+Chat search phone test waits for the scroll to stop
