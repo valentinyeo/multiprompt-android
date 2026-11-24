@@ -382,7 +382,7 @@ dump_ui() {
     calls=$((calls + 1))
     case "$calls" in
         1) cp "$TEST_DIR/before.xml" "$EVIDENCE/current.xml" ;;
-        2) cp "$TEST_DIR/after.xml" "$EVIDENCE/current.xml" ;;
+        2|3) cp "$TEST_DIR/after.xml" "$EVIDENCE/current.xml" ;;
         *) cp "$TEST_DIR/opened.xml" "$EVIDENCE/current.xml" ;;
     esac
 }
@@ -414,6 +414,49 @@ adb() { printf '%s\\n' "$*" >> "$TEST_DIR/actions"; }
             result = subprocess.run(['bash', '-c', shell + helper + '\ntap_node desc "Send prompt"'], env={**os.environ, 'SCRIPTS': str(SCRIPTS), 'TEST_DIR': directory, 'PYTHONDONTWRITEBYTECODE': '1'}, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((folder / 'actions').read_text().splitlines(), ['shell input tap 985 1710'])
+
+    def tap_between_dumps(self, helper, directory, label='Model ›'):
+        shell = '''set -eu
+scripts=$SCRIPTS
+EVIDENCE=$TEST_DIR
+calls=0
+dump_ui() {
+    calls=$((calls + 1))
+    case "$calls" in
+        1) cp "$TEST_DIR/before.xml" "$EVIDENCE/current.xml" ;;
+        2) cp "$TEST_DIR/late.xml" "$EVIDENCE/current.xml" ;;
+        *) cp "$TEST_DIR/page.xml" "$EVIDENCE/current.xml" ;;
+    esac
+}
+adb() { printf '%s\\n' "$*" >> "$TEST_DIR/actions"; }
+'''
+        return subprocess.run(['bash', '-c', shell + helper + f'\ntap_node text "{label}"'], env={**os.environ, 'SCRIPTS': str(SCRIPTS), 'TEST_DIR': directory, 'PYTHONDONTWRITEBYTECODE': '1'}, capture_output=True, text=True)
+
+    def test_row_inserted_between_the_dump_and_the_tap_is_retargeted(self):
+        fixtures = Path(__file__).parent / 'fixtures'
+        dumps = {name: (fixtures / f'mubo450-{name}.xml').read_text()
+                 for name in ('attach-menu-before', 'attach-menu-late-row', 'model-page')}
+        late_tree = dumps['attach-menu-late-row']
+        late = ET.fromstring(late_tree)
+        self.assertEqual(action.confirm(ET.fromstring(dumps['attach-menu-before']), 'text', 'Model ›'), 'tap 534 540')
+        self.assertEqual(action.confirm(late, 'text', 'Model ›'), 'tap 534 640')
+        self.assertEqual(action.row_labels(late, 534, 540), ['Host settings ›', 'On'])
+        self.assertEqual(action.row_labels(late, 534, 640), ['Model ›', 'Opus 5.5'])
+        covered = late_tree.replace('</node></hierarchy>', '<node class="android.view.View" text="Host settings ›" bounds="[0,600][1080,680]" /></node></hierarchy>')
+        with self.assertRaisesRegex(action.Unreachable, "the label under the tap point is 'Host settings ›', not 'Model ›'"):
+            action.confirm(ET.fromstring(covered), 'text', 'Model ›')
+        stale = subprocess.check_output(['git', 'show', '2a913189:.claude/skills/verify-multiprompt-android/scripts/drive.sh'], cwd=ROOT, text=True)
+        current = (SCRIPTS / 'drive.sh').read_text()
+        for name, source, expected in (('2a913189', stale, 'shell input tap 534 540'), ('head', current, 'shell input tap 534 640')):
+            with self.subTest(driver=name), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                (folder / 'before.xml').write_text(dumps['attach-menu-before'])
+                (folder / 'late.xml').write_text(late_tree)
+                (folder / 'page.xml').write_text(dumps['model-page'])
+                result = self.tap_between_dumps(source[source.index('session_name() {'):source.index('\ntap_text()')], directory)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((folder / 'actions').read_text().splitlines(), [expected])
+        print('MUBO450_REPLAY: 2a913189 taps Host settings › at 534 540; head taps Model › at 534 640')
 
 
 if __name__ == '__main__':

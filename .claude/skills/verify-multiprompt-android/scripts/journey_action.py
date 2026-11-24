@@ -23,6 +23,69 @@ def intersection(a, b):
     return max(a[0], b[0]), max(a[1], b[1]), min(a[2], b[2]), min(a[3], b[3])
 
 
+LABELLED = ("text", "desc", "desc-prefix", "text-containing")
+
+
+def active_window(root):
+    windows = [n for n in root if n.tag == "node" and n.get("visible-to-user") != "false"]
+    if not windows:
+        raise Unreachable("active window is missing")
+    return windows[-1]
+
+
+def readable_bounds(node):
+    try:
+        return bounds(node)
+    except Unreachable:
+        return None
+
+
+def shown(node, parents):
+    while node in parents:
+        if node.get("visible-to-user") == "false":
+            return False
+        node = parents[node]
+    return True
+
+
+def row_labels(root, x, y):
+    window = active_window(root)
+    parents = {child: parent for parent in root.iter() for child in parent}
+    held = [node for node in window.iter("node")
+            if shown(node, parents)
+            and (rect := readable_bounds(node)) is not None
+            and rect[0] <= x < rect[2] and rect[1] <= y < rect[3]]
+    if not held:
+        return []
+    row = held[-1]
+    while row in parents and parents[row] is not window and row.get("clickable") != "true":
+        row = parents[row]
+    labels = [row.get("text"), row.get("content-desc")]
+    for node in row.iter("node"):
+        labels.append(node.get("text"))
+        labels.append(node.get("content-desc"))
+    return [label for label in dict.fromkeys(labels) if label]
+
+
+def named(label, mode, value):
+    if mode in ("text", "desc"):
+        return label == value
+    if mode == "desc-prefix":
+        return label.startswith(value)
+    return value in label
+
+
+def confirm(root, mode, value, direction="forward", search_axis=None):
+    planned = plan(root, mode, value, direction, search_axis)
+    action, *coordinates = planned.split()
+    if action != "tap" or mode not in LABELLED:
+        return planned
+    labels = row_labels(root, int(coordinates[0]), int(coordinates[1]))
+    if labels and not any(named(label, mode, value) for label in labels):
+        raise Unreachable(f"the label under the tap point is {labels[0]!r}, not {value!r}")
+    return planned
+
+
 def plan(root, mode, value, direction="forward", search_axis=None):
     parents = {child: parent for parent in root.iter() for child in parent}
     windows = [n for n in root if n.tag == "node" and n.get("visible-to-user") != "false"]

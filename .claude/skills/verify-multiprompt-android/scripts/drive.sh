@@ -168,7 +168,7 @@ select_node() {
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "$mode" "$value"
 }
 tap_node() {
-    local attempt action x1 y1 x2 y2 direction plan before taps=0 session= expected=${4:-}
+    local attempt action x1 y1 x2 y2 direction plan before px py taps=0 session= expected=${4:-}
     if [[ "$1" =~ ^(text|desc)$ ]]; then session=$(session_name "$2") || session=; fi
     for attempt in {1..24}; do
         dump_ui || return
@@ -185,6 +185,21 @@ tap_node() {
         if [[ "$action" == tap && "${3:-tap}" == reveal ]]; then return; fi
         case "$action" in
             tap)
+                px=$x1
+                py=$y1
+                dump_ui || return
+                if ! plan=$(python3 "$scripts/ui.py" "$EVIDENCE/current.xml" "confirm-$1" "$2" "$direction"); then
+                    printf 'JOURNEY_TAP_MOVED: %s: the label left the tap point before the tap; reading the screen again\n' "$2" >&2
+                    continue
+                fi
+                read -r action x1 y1 x2 y2 <<< "$plan"
+                if [[ "$action" == swipe ]]; then
+                    adb shell input swipe "$x1" "$y1" "$x2" "$y2" 500
+                    continue
+                fi
+                if [[ "$x1 $y1" != "$px $py" ]]; then
+                    printf 'JOURNEY_TAP_RESOLVED: %s moved from %s %s to %s %s before the tap\n' "$2" "$px" "$py" "$x1" "$y1" >&2
+                fi
                 before=$(sha256sum "$EVIDENCE/current.xml")
                 adb shell input tap "$x1" "$y1" || return
                 dump_ui || return
@@ -1112,6 +1127,11 @@ fi
 if [[ "$feature" == chat-search.md ]]; then
     source "$scripts/chat-search-drive.sh"
     exit 0
+fi
+
+if [[ "$feature" == room-order.md ]]; then
+    source "$scripts/room-order-drive.sh"
+    room_order_journey
 fi
 
 if [[ "$feature" == session-drafts.md ]]; then

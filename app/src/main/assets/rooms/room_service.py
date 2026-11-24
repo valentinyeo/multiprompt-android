@@ -8,6 +8,11 @@ import sys
 import uuid
 from pathlib import Path
 
+CONTEXT_BYTES = 24000
+REPLY_CONTEXT_CHARS = 4000
+DELIVERY_BYTES = 60000
+CONTEXT_FRAME_BYTES = 200
+
 
 class RoomError(Exception):
     def __init__(self, code):
@@ -267,6 +272,23 @@ class RoomStore:
         self.db.execute('INSERT INTO responses VALUES (?, ?, ?, ?, ?)', (room_id, r['member_id'], r['response_id'], response_body, encoded(result)))
         return result
 
+    def conversation(self, room_id, member_id, event_seq, message):
+        previous = self.db.execute('SELECT COALESCE(MAX(event_seq), 0) FROM deliveries WHERE member_id=? AND event_seq<?', (member_id, event_seq)).fetchone()[0]
+        lines = []
+        for row in self.db.execute("SELECT e.body, m.alias FROM events e JOIN members m ON m.id=json_extract(e.body, '$.member_id') WHERE e.room_id=? AND e.seq>? AND e.seq<? AND json_extract(e.body, '$.type')='agent_reply' AND m.id<>? AND EXISTS (SELECT 1 FROM deliveries d WHERE d.member_id=? AND d.event_id=json_extract(e.body, '$.parent_event_id')) ORDER BY e.seq", (room_id, previous, event_seq, member_id, member_id)):
+            lines.append(row['alias'] + ': ' + json.loads(row['body'])['text'][:REPLY_CONTEXT_CHARS])
+        kept = []
+        used = 0
+        budget = min(CONTEXT_BYTES, DELIVERY_BYTES - CONTEXT_FRAME_BYTES - len(message.encode('utf-8')))
+        for line in reversed(lines):
+            used += len(line.encode('utf-8')) + 2
+            if used > budget:
+                break
+            kept.append(line)
+        if not kept:
+            return message
+        return 'Room messages since your last turn, oldest first:\n\n' + '\n\n'.join(reversed(kept)) + '\n\nNew message from the user:\n\n' + message
+
     def view(self, r):
         op = r['op']
         if op == 'capabilities':
@@ -317,7 +339,7 @@ class RoomStore:
             if row is None:
                 fail('invalid_scope')
             event = json.loads(row['body'])
-            return {'message_id': row['id'], 'room_id': r['room_id'], 'parent_event_id': row['event_id'], 'event_seq': row['event_seq'], 'member_id': row['member_id'], 'host_uuid': row['host_uuid'], 'provider': row['provider'], 'provider_sid': row['provider_sid'], 'session_identity': row['session_identity'], 'text': event['text']}
+            return {'message_id': row['id'], 'room_id': r['room_id'], 'parent_event_id': row['event_id'], 'event_seq': row['event_seq'], 'member_id': row['member_id'], 'host_uuid': row['host_uuid'], 'provider': row['provider'], 'provider_sid': row['provider_sid'], 'session_identity': row['session_identity'], 'text': self.conversation(r['room_id'], row['member_id'], row['event_seq'], event['text'])}
         if op == 'deliveries':
             fields(r, ('op', 'room_id', 'after', 'through', 'limit'))
             room = self.room(r['room_id'])

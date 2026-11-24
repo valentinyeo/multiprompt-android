@@ -324,8 +324,7 @@
         ]
       },
       "outcomes": [
-        "claude.skills-model-effort",
-        "reader.follow-newest"
+        "claude.skills-model-effort"
       ],
       "evidence": {
         "native-menu-state.txt": 5000,
@@ -1244,6 +1243,31 @@
         "00-clear-state.json": 1500,
         "clear-store-after.json": 1500,
         "clear-store-final.json": 1500
+      }
+    },
+    "room-order.md": {
+      "name": "Room message order",
+      "description": "A room shows the first send above the second, and the second agent's reply carries the first agent's earlier answer before the new message, while the host submit log shows the same order.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/room-order-drive.sh",
+          ".claude/skills/verify-multiprompt-android/scripts/room-order-check.py",
+          ".claude/skills/verify-multiprompt-android/scripts/room-order-runtime.py"
+        ]
+      },
+      "outcomes": [
+        "rooms.order"
+      ],
+      "evidence": {
+        "room-ordered.xml": 3000,
+        "room-submits.txt": 1500,
+        "room-existing.json": 1500,
+        "room-existing-submits.txt": 1500
       }
     },
     "pi-login.md": {
@@ -2192,6 +2216,28 @@
         }
       }
     },
+    "rooms.order": {
+      "description": "Two room sends stay in post order on the phone, and the second agent's reply starts with the first agent's earlier answer before the new message.",
+      "journey": "room-order.md",
+      "sideEffect": true,
+      "match": [
+        "Room messages since your last turn|COALESCE\\(q\\.checked,0\\)"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "mpa fill 'Message Order room' two"
+        },
+        "result": {
+          "file": "room-ordered.xml",
+          "quote": "Room messages since your last turn, oldest first:"
+        },
+        "sideEffect": {
+          "file": "room-submits.txt",
+          "quote": "\"sid\":\"beta\",\"text\":\"Room messages since your last turn, oldest first:"
+        }
+      }
+    },
     "chat.send-blocked": {
       "description": "A prompt a hook blocked shows Not sent within seconds with the blocked reason, not after the ten-minute waiting limit, and adds no delivered bubble of its own.",
       "journey": "send-blocked.md",
@@ -2240,14 +2286,6 @@
           "quote": "\"group\": \"Renamed\""
         }
       }
-    },
-    "reader.follow-newest": {
-      "description": "A chat already showing its newest reply keeps incoming replies on screen through the working indicator and message layout changes, without tapping Jump to newest. The native-skills journey requires each model and effort reply on screen after its independent host receipt.",
-      "journey": "native-skills.md",
-      "sideEffect": true,
-      "match": [
-        "NewestFollower"
-      ]
     }
   }
 }

@@ -1,6 +1,6 @@
 # Reachable journey actions
 
-Phone journeys must tap what a person can reach. `drive.sh` owns taps through `tap_node`, `tap_text` and `tap_desc`. `journey_action.py` plans each action from a fresh accessibility tree. Observation selectors stay separate from action reachability.
+Phone journeys must tap what a person can reach. `drive.sh` owns taps through `tap_node`, `tap_text` and `tap_desc`. `journey_action.py` plans each action from a fresh accessibility tree. A tap is planned twice: once to find the label and once from a second dump taken right before the finger lands, so a menu that grows while host settings arrive cannot shift the row under the finger. `confirm` also refuses a tap whose point sits on a row that carries another label, and prints `JOURNEY_TAP_RESOLVED` when the row moved between the two dumps. Observation selectors stay separate from action reachability.
 
 ## Run the checks
 
@@ -16,6 +16,8 @@ The action boundary is the highest useful architectural enforcement. It centrali
 ## Historical proof
 
 The tests reconstruct the geometry and two-axis failure conditions described by the correction commits. These are minimized replay trees, not downloaded original emulator XML.
+
+- MUBO-450, `2a913189`, tapped a menu row planned from a dump taken before an extra row arrived. The replay feeds a table dump, then a dump with one row inserted above Model, and shows `2a913189` tapping `Host settings ›` at 534 540 while the head driver re-resolves `Model ›` at 534 640.
 
 - PR #129, `f6594348`, corrected a pin label peeking below fixed tabs while its clickable center was obscured. The replay runs `f6594348^`'s real selector, which returns `100 200` inside Frequent. The shared planner rejects that overlap.
 - PR #383, `8dada246`, corrected terminal sheet navigation and horizontal key-row interference. The replay runs `8dada246^`'s real selector on a tree containing both scroll axes. It fails with `Ambiguous scroll-back`; the planner returns a vertical swipe within the sheet.
