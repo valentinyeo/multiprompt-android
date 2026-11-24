@@ -172,18 +172,23 @@ class RoomBridge:
         return result
 
     def sync_replies(self, room_id):
-        deliveries = self.store.db.execute("SELECT d.id FROM deliveries d JOIN members m ON m.id=d.member_id LEFT JOIN reply_progress p ON p.delivery_id=d.id WHERE d.room_id=? AND d.status='pending' AND m.active=1 AND COALESCE(p.done,0)=0 ORDER BY COALESCE(p.checked,0),d.delivery_seq LIMIT 64", (room_id,)).fetchall()
+        deliveries = self.store.db.execute("SELECT d.id, d.member_id FROM deliveries d JOIN members m ON m.id=d.member_id LEFT JOIN reply_progress p ON p.delivery_id=d.id WHERE d.room_id=? AND d.status='pending' AND m.active=1 AND COALESCE(p.done,0)=0 ORDER BY (SELECT MAX(COALESCE(q.checked,0)) FROM deliveries e LEFT JOIN reply_progress q ON q.delivery_id=e.id WHERE e.member_id=d.member_id AND e.status='pending' AND COALESCE(q.done,0)=0),d.member_id,d.delivery_seq LIMIT 64", (room_id,)).fetchall()
         deadline = time.monotonic() + 2
+        waiting = set()
         for delivery in deliveries:
             if time.monotonic() >= deadline:
                 break
+            if delivery['member_id'] in waiting:
+                continue
             self.store.db.execute("INSERT INTO reply_progress VALUES (?,NULL,NULL,'[]',0,?) ON CONFLICT(delivery_id) DO UPDATE SET checked=excluded.checked", (delivery['id'], time.time()))
             work = self.store.execute(dict(op='delivery_work', room_id=room_id, delivery_id=delivery['id']))
             if work['provider'] != 'claude' or work['host_uuid'] != self.store.host_uuid or work['session_identity'] != 'claude:' + work['provider_sid']:
+                waiting.add(delivery['member_id'])
                 continue
             progress = self.store.db.execute('SELECT * FROM reply_progress WHERE delivery_id=?', (work['message_id'],)).fetchone()
             status = host_status(work['provider_sid'])
             if not status['enabled'] and progress['after_seq'] is None:
+                waiting.add(delivery['member_id'])
                 continue
             tmux = status.get('tmux')
             if not isinstance(tmux, str) or re.fullmatch(r'[A-Za-z0-9_.:-]{1,80}', tmux) is None:
@@ -208,6 +213,7 @@ class RoomBridge:
                 except RoomError as error:
                     self.store.db.execute('ROLLBACK')
                     if error.code == 'invalid_scope':
+                        waiting.add(delivery['member_id'])
                         continue
                     raise
                 except BaseException:
