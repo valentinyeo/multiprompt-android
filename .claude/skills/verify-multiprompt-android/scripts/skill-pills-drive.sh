@@ -74,6 +74,7 @@ tap_node editor ''
 select_node focused-field '' >/dev/null
 adb shell input keyevent KEYCODE_MOVE_END
 adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
+adb shell input keyevent KEYCODE_DPAD_LEFT
 wait_for_text '/clear'
 tap_text '/clear'
 dump_ui
