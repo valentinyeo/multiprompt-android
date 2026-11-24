@@ -3590,6 +3590,7 @@ internal fun ReaderScreen(
             recordingPrompt = true
             val editing = editingMessageId
             readerScope.launch {
+                var copyPrompt: String? = null
                 val sent = if (editing == null) connection.sendPrompt(composedPrompt) else when (val edit = connection.editWaiting(editing, composedPrompt)) {
                     is QueuedEdit.Outcome.Sent -> edit.admission
                     is QueuedEdit.Outcome.TooLate -> dev.multiprompt.companion.reader.PromptAdmission.Rejected(QueuedEdit.TOO_LATE_NOTICE)
@@ -3617,17 +3618,17 @@ internal fun ReaderScreen(
                             replyTo = null
                         }
                         sendMarkPending = true
-                        if (editing == null) {
-                            val copySource = session.displayName
-                            connection.sendMentionCopies(composedPrompt, mentionChats, copySource).firstOrNull()?.let { name ->
-                                android.widget.Toast.makeText(context, "Could not send the FYI copy to $name", android.widget.Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                        if (editing == null) copyPrompt = composedPrompt
                         onSessionInteraction()
                         onSessionInput()
                     }
                 }
                 recordingPrompt = false
+                copyPrompt?.let { prompt ->
+                    connection.sendMentionCopies(prompt, mentionChats, session.displayName).firstOrNull()?.let { name ->
+                        android.widget.Toast.makeText(context, "Could not send the FYI copy to $name", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
