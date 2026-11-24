@@ -290,6 +290,15 @@ test('only an unexpanded journey matrix may skip, and a journey never fails', as
   assert.throws(() => checkStatus(pr), /Checks not green/);
 });
 
+test('a skipped speed check passes and a failed one blocks the merge', async () => {
+  const { checkStatus } = await gate;
+  const skipped = await green();
+  skipped.statusCheckRollup.push({ ...skipped.statusCheckRollup[0], name: 'chat list remeasures', conclusion: 'SKIPPED' });
+  assert.equal(checkStatus(skipped).ready, true);
+  skipped.statusCheckRollup.at(-1).conclusion = 'FAILURE';
+  assert.throws(() => checkStatus(skipped), /Checks not green: chat list remeasures/);
+});
+
 test('a picked journey that skipped blocks the merge', async () => {
   const { checkStatus } = await gate;
   const pr = await green();
