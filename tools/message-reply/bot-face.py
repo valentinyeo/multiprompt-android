@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""Compare the bot a chat draws for itself with the bot its mention row draws.
-
-The mention list gained each chat's own bot appearance in PR 520. The bot face
-is drawn vector art with no accessibility identity of its own, so the identity
-is read in two steps: the UI tree names the avatar node ("Robot <session>"),
-and the pixels inside that node are compared with the same chat's own avatar
-in its reader top bar. Comparing those two crops is what proves the row draws
-the chat's bot, not a borrowed one.
-
-Measured on the shared 1080x1920 emulator, 28 dp avatars are 74x74 px. The same
-bot rendered twice differs by a mean of 0.1 per channel, a one pixel
-anti-aliasing shift by about 3.2, and two different bots by about 59. The
-thresholds below sit between those bands, not at the edge of one.
-"""
-
 import argparse
 import json
 import re

@@ -4,8 +4,6 @@ mpa="$scripts/mpa"
 shot_pair() {
     "$mpa" screenshot "$1" | python3 -B -c 'import json, sys; shot = json.load(sys.stdin); print(shot["xml"], shot["png"])'
 }
-# The mention chat chooses its own bot look through the app first, so the row
-# that names it can be compared with the bot that chat draws for itself.
 "$mpa" tap text 'Mention 2953'
 "$mpa" read --select desc --value 'Session actions' --timeout 20
 read -r before_xml before_png <<< "$(shot_pair mention-bot-before)"

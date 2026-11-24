@@ -31,11 +31,6 @@ class BotFaceTest(unittest.TestCase):
         self.root = Path(self.directory.name)
 
     def shot(self, name, colours, bounds=(20, 20, 100, 100), descriptions=None):
-        """Write a screenshot plus a UI tree with the avatar node.
-
-        colours is a list of (offset, fill) inner rectangles; the same drawing
-        in two shots is how a chat's own bot renders twice.
-        """
         image = Image.new("RGB", (140, 140), (18, 18, 18))
         draw = ImageDraw.Draw(image)
         for offset, fill in colours:
@@ -114,8 +109,6 @@ class BotFaceTest(unittest.TestCase):
         self.assertIn("differ in size", str(raised.exception))
 
     def test_one_pixel_of_anti_aliasing_still_matches(self):
-        # A real 28 dp avatar is mostly dark tile, so a one pixel rendering
-        # offset moves few pixels far: the same bot keeps a small mean.
         bot = [(0, (60, 60, 60))]
         shifted = [(1, (60, 60, 60))]
         before = self.shot("before", [(0, (143, 203, 107))])
