@@ -60,10 +60,10 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 
 ## Git workflow
 
-- Follow [pstack shipping step 1](https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/shipping.md). Acquire the shared merge lock with `node tools/merge-lock.mjs acquire`, wait on CI with `node tools/pr-checks.mjs <PR> --wait`, merge when it reports green on the current head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`, then `node tools/merge-lock.mjs release`. Merge-gating check names are in `tools/pr-checks.mjs`; compare branch protection with `node tools/branch-protection.mjs --check`. Never push directly to `main`.
+- Follow [pstack shipping step 1](https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/playbooks/shipping.md). Acquire the shared merge lock with `node tools/merge-lock.mjs acquire`, wait on CI with `node tools/pr-checks.mjs <PR> --wait`, merge the checked head with `node tools/merge-lock.mjs merge <PR> <checked-sha>`, then `node tools/merge-lock.mjs release`. The lock is held per chat, so a later call in the same chat renews or releases it. Merge-gating check names are in `tools/pr-checks.mjs`; compare branch protection with `node tools/branch-protection.mjs --check`. Never push directly to `main`.
 - One wait per PR; five-minute polls; thirty-minute maximum. A new push to the PR head stops the wait. Update the branch only when it conflicts with main (GitHub shows mergeable CONFLICTING); main's post-merge runs are the integration gate. Never use bare `gh pr checks --watch` or `gh-green` as complete-check proof.
 - Emergency regression: revert the bad change first through a PR with the same verifier and cheap checks. Restore service before attempting a forward fix. Never bypass the signed launch gate or branch protection.
-- Merge the checked head with `gh pr merge <PR> --squash --delete-branch --match-head-commit <checked-sha>`.
+- Merge the checked head with `node tools/merge-lock.mjs merge <PR> <checked-sha>`. It merges through the GitHub API with a squash and then deletes the branch, so it works from a worktree where `gh pr merge --delete-branch` fails trying to check out and delete the local branch.
 - Never finish a task with changes parked in a branch, in the stash, or as untracked files. A task is done when its PR is merged and its branch deleted.
 
 ## Design system
