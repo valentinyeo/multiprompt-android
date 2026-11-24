@@ -1034,11 +1034,11 @@
         "chat.restart-newest"
       ],
       "evidence": {
-        "host-restart-state.json": 2000,
-        "host-restart-host.json": 4500,
+        "host-restart-state.json": 2500,
+        "host-restart-host.json": 6000,
         "host-restart-processes.txt": 1000,
-        "phone-restart-state.json": 2000,
-        "phone-restart-host.json": 2000
+        "phone-restart-state.json": 1500,
+        "phone-restart-host.json": 500
       }
     },
     "live-chat-freshness.md": {
