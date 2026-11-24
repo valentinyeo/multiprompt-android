@@ -209,8 +209,10 @@ if [ "$json" = yes ]; then printf '{"success": true, "task": {"ticketNumber": "M
     def test_helper_reads_the_token_at_run_time(self):
         self.run_helper()
         self.token_path.write_text('sentinel-token-two\n')
+        (self.home / 'calls').unlink()
         self.run_helper()
-        self.assertEqual('sentinel-token-two', self.args(2)[self.args(2).index('--token') + 1])
+        args = self.args()
+        self.assertEqual('sentinel-token-two', args[args.index('--token') + 1])
 
     def test_helper_posts_no_log_when_the_journal_holds_no_probe_line(self):
         (self.home / 'journal.txt').write_text('disk noise\n')
