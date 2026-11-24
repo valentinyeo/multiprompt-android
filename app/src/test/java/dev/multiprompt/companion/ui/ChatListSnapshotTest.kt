@@ -18,6 +18,9 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.dp
 import dev.multiprompt.companion.AppUiState
+import dev.multiprompt.companion.account.AccountLayout
+import dev.multiprompt.companion.account.AccountTab
+import dev.multiprompt.companion.data.PinnedChats
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.model.TmuxSession
 import dev.multiprompt.companion.reader.ChatHistoryMessage
@@ -123,16 +126,23 @@ class ChatListSnapshotTest {
             snapshot.value = index + 1
         }
         compose.runOnIdle { assertEquals("All 50 updates reached the production list", 50, observed) }
+        var beforeChange = 0
         compose.runOnIdle {
+            beforeChange = compositions["HistoryBubble"] ?: 0
             val visibleKey = listState.layoutInfo.visibleItemsInfo.first().key
             messages.value = messages.value.map { if (it.key == visibleKey) it.copy(text = "Changed reply") else it }
         }
         compose.onNodeWithText("Changed reply").assertIsDisplayed()
-        compose.runOnIdle { assertTrue((compositions["HistoryBubble"] ?: 0) > 0) }
+        compose.runOnIdle { assertTrue("A changed chat row must compose", (compositions["HistoryBubble"] ?: 0) > beforeChange) }
     }
 
     @Test
-    fun inboxSnapshotsDoNotRecomposeRowsOrRemeasure() {
+    fun inboxSnapshotsDoNotRecomposeRowsOrRemeasure() = inboxSnapshots(grouped = false)
+
+    @Test
+    fun pinnedGroupedInboxSnapshotsStayQuiet() = inboxSnapshots(grouped = true)
+
+    private fun inboxSnapshots(grouped: Boolean) {
         val state = mutableStateOf(AppUiState(
             hosts = listOf(host),
             sessions = (0 until 80).map { index ->
@@ -141,13 +151,19 @@ class ChatListSnapshotTest {
                     preview = "● Reply $index is ready.\n\n❯ \n  ? for shortcuts", replyWaiting = false)
             },
             newestSessionsAtBottom = false,
+            signedIn = grouped,
+            accountHosts = if (grouped) mapOf(0 to host) else emptyMap(),
+            accountLayout = if (grouped) AccountLayout(revision = 1, workspaces = listOf("Other"), tabs = (0 until 80).map { index ->
+                AccountTab("cl-project-$index", "cl-project-$index", 0, "Other", group = if (index < 40) "Projects" else "Runners")
+            }) else null,
+            pinnedSessionKeys = if (grouped) listOf(PinnedChats.key(host.id, "cl-project-0")) else emptyList(),
         ), neverEqualPolicy())
         var observed = 0
         compose.setContent {
             MaterialTheme {
                 SessionsScreen(
                     state = state.value,
-                    signedIn = false,
+                    signedIn = grouped,
                     onSignIn = {}, onSignOut = {}, onOpen = {}, onOpenTerminal = {},
                     onArchive = {}, onArchiveUntil = { _, _ -> }, onRestore = {}, onDissolve = {}, onEnd = {},
                     onRestoreDissolved = {}, onForgetDissolved = {}, onMarkUnread = {}, onToggleArchived = {},
@@ -164,14 +180,29 @@ class ChatListSnapshotTest {
             }
         }
         assertQuiet("SessionCard") { index ->
-            state.value = state.value.copy(sessions = state.value.sessions.map { it.copy() }, accountSyncing = index % 2 == 0)
+            state.value = state.value.copy(
+                sessions = state.value.sessions.map { it.copy() },
+                unreadSessionKeys = state.value.unreadSessionKeys.toMutableSet(),
+                unreadCounts = state.value.unreadCounts.toMutableMap(),
+                pinnedSessionKeys = state.value.pinnedSessionKeys.toMutableList(),
+                accountLayout = state.value.accountLayout?.let { it.copy(tabs = it.tabs.map { tab -> tab.copy() }) },
+                accountSyncing = index % 2 == 0,
+            )
         }
         compose.runOnIdle { assertTrue("Snapshot updates must actually compose", observed >= 51) }
+        var beforeChange = 0
         compose.runOnIdle {
-            state.value = state.value.copy(sessions = state.value.sessions.mapIndexed { index, session ->
-                if (index == 0) session.copy(accountName = "Changed chat") else session
-            })
+            beforeChange = compositions["SessionCard"] ?: 0
+            state.value = state.value.copy(
+                sessions = state.value.sessions.mapIndexed { index, session ->
+                    if (index == 0) session.copy(accountName = "Changed chat") else session
+                },
+                accountLayout = state.value.accountLayout?.let { layout ->
+                    layout.copy(tabs = layout.tabs.mapIndexed { index, tab -> if (index == 0) tab.copy(name = "Changed chat") else tab })
+                },
+            )
         }
         compose.onNodeWithText("Changed chat").assertIsDisplayed()
+        compose.runOnIdle { assertTrue("A changed inbox row must compose", (compositions["SessionCard"] ?: 0) > beforeChange) }
     }
 }
