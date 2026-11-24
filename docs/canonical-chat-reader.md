@@ -2,7 +2,7 @@
 
 Desktop owns the reader and connectors.
 Desktop also owns the test files.
-Source: [Desktop master](https://github.com/valentinyeo/multiprompt/tree/4e43135910fd38cb8939506a29a07c2ea62c1066).
+Source: [Desktop master](https://github.com/valentinyeo/multiprompt/tree/6572511ca37a48b58bc6cc88d0fa4898d2bf4d71).
 
 `tools/sync-chat-reader.sh` holds the one pin: the desktop revision and the SHA-256 of every bundled file.
 It copies those files into `app/src/main/assets/` and writes two pin files from that one revision: `app/src/main/assets/chat_history_reader.sha` for the app, and `app/src/androidTest/assets/chat_reader_pin.txt` with the revision and the bundle length and SHA-256 for the phone test.

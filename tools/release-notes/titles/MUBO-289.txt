@@ -1,1 +1,0 @@
-New replies stay on screen during model changes

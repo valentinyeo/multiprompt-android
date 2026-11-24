@@ -41,7 +41,7 @@ A product change must name every changed outcome. The second-AI verifier require
 - [Launcher icon](launcher-icon.md): the robot launcher icon in the emulator's app drawer, with the themed-icon layer present in the built APK.
   - Outcomes: `launcher-icon.journey`. Runner: `verify.yml` (debug).
 - [Native Claude controls](native-skills.md): slash filtering, shared plus entry, actual session model/effort and retained image picker.
-  - Outcomes: `claude.skills-model-effort`, `reader.follow-newest`. Runner: `verify.yml` (debug). Priority evidence: `native-menu-state.txt` (5000 characters), `native-receipts.txt` (2500 characters), `native-result.json` (1000 characters).
+  - Outcomes: `claude.skills-model-effort`. Runner: `verify.yml` (debug). Priority evidence: `native-menu-state.txt` (5000 characters), `native-receipts.txt` (2500 characters), `native-result.json` (1000 characters).
 - [Robot inbox and chat](robot-faces.md): Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.
   - Outcomes: `robot-faces.journey`. Runner: `verify.yml` (signed). Inputs: `{"released_robots":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Inbox draft label](session-drafts.md): unsent composer text shows Draft before the inbox preview, and sending that text removes it.
@@ -66,6 +66,8 @@ A product change must name every changed outcome. The second-AI verifier require
   - Outcomes: `inbox.summaries`. Runner: `verify.yml` (debug).
 - [Sessions](sessions.md): Default seed readback: 46 real tmux sessions including a 3 MB tool-heavy restarted chat, runtime-selected off-screen reader entry, an exact search result for that same session below the search box and above the keyboard, and local chat pin/unpin at the visual top of the Inbox list across replies and app restart, plus archiving the pinned chat opening the row below it. Does not assert all 46 rows render.
   - Outcomes: `inbox.search`, `legacy.igsh-414`, `inbox.pin-chat`. Runner: `verify.yml` (debug). Priority evidence: `seed-counts.json` (2500 characters), `seed-check.json` (1200 characters), `seed-search.xml` (2000 characters), `seed-deep-target.xml` (1000 characters), `seed-deep-choice.json` (900 characters), `search-keyboard.json` (1200 characters), `row-long-press-actions.xml` (1500 characters), `pin-chat-state.json` (1400 characters).
+- [Blocked prompt shows not sent](send-blocked.md): The fixture host records a hook-blocked prompt the phone sent, and the message shows Not sent with the blocked reason within seconds instead of after the ten-minute wait.
+  - Outcomes: `chat.send-blocked`. Runner: `verify.yml` (debug). Priority evidence: `send-blocked-not-sent.xml` (1500 characters), `send-blocked-store.json` (1500 characters), `send-blocked-state.json` (1500 characters).
 - [Settings navigation](settings-navigation.md): sessions-first settings, host mapping and account handoff on the signed APK.
   - Outcomes: `settings-navigation.journey`. Runner: `verify.yml` (signed). Inputs: `{"release_choices":true,"candidate":true}`. Prerequisites: Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.
 - [Sign in](sign-in.md): real account browser handoff; OTP remains manual.

@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.reader
 
+import dev.multiprompt.companion.model.AgentKind
 import java.io.File
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -9,6 +10,7 @@ import org.junit.Test
 
 class BlockedByHookTest {
     private val sid = "blocked-proof"
+    private val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "blocked-query-1f4c", "/home/me/multiprompt", sid)
 
     private val fixture: List<JSONObject> = sequenceOf(
         File("src/test/resources/reader/MUBO-246/blocked-by-hook.jsonl"),
@@ -29,12 +31,21 @@ class BlockedByHookTest {
         assertTrue(ChatHistory(rows = listOf(row)).messages.isEmpty())
     }
 
+    @Test fun theHistoryQueryAsksTheReaderForTheBlockedSettlement() {
+        val query = JSONObject(ChatHistoryProtocol.request(1, identity, ChatHistory(sid = sid)))
+        assertTrue(query.getBoolean("blocked_settlement"))
+        assertTrue(query.getBoolean("settlement"))
+        assertEquals(sid, query.getString("sid"))
+    }
+
     @Test fun blockedSendFromTheFixtureShowsNotSentAtOnce() {
         val id = "blockedmessage123456"
+        val recent = MessageProtocol.Row(id, "claude", sid, prompt, 1, "a1", MessageProtocol.State.SENT, null, null, 1, 100.0)
+        assertNull(ChatHistory(sid = sid).projectMessages(MessageReplica(1, 1, mapOf(id to recent)), now = 101.0).single().delivery)
         val receipt = JSONObject().put("kind", "not_sent").put("sid", sid).put("reason", reason)
             .put("id", id).put("attempt", "a1").toString()
-        val row = MessageProtocol.Row(id, "claude", sid, prompt, 1, "a1", MessageProtocol.State.FAILED, null, receipt, 1, 1.0)
-        val message = ChatHistory(sid = sid).projectMessages(MessageReplica(1, 1, mapOf(id to row)), now = 1.0).single()
+        val row = recent.copy(state = MessageProtocol.State.FAILED, receipt = receipt)
+        val message = ChatHistory(sid = sid).projectMessages(MessageReplica(1, 1, mapOf(id to row)), now = 101.0).single()
         assertEquals(ChatHistory.NOT_SENT, message.delivery)
         assertEquals("Chat blocked this message, nothing was sent", message.notSentDetail)
     }
