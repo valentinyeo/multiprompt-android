@@ -23,11 +23,11 @@ def inventory():
     return {"track_since": "2026-10-29T22:55:59Z", "features": [], "catch_up_tickets": []}
 
 
-def stub(links=None, twin="MUBO-2001", calls=None):
+def stub(links=None, twin="MUBO-2001", calls=None, direction="incoming"):
     links = links or {}
     def api(*args):
         if args[:2] == ("task", "relations"):
-            return {"relations": [{"relationType": "RelatedTo", "direction": "incoming",
+            return {"relations": [{"relationType": "RelatedTo", "direction": direction,
                                    "otherTask": {"ticketNumber": other}}
                                   for other in links.get(args[2], [])]}
         if calls is not None:
@@ -98,12 +98,15 @@ class ParityTests(unittest.TestCase):
     def test_link_pairs_in_either_direction(self):
         desktop = task("MUBO-3000")
         android = task("MUBO-3001", "Multiprompt Android")
-        for linked in ({"MUBO-3000": ["MUBO-3001"]}, {"MUBO-3001": ["MUBO-3000"]}):
-            with self.subTest(linked=linked):
-                self.assertEqual(parity.pairs(inventory(), [desktop, android], stub(links=linked)), [])
+        linked = {"MUBO-3000": ["MUBO-3001"], "MUBO-3001": ["MUBO-3000"]}
+        for direction in ("incoming", "outgoing"):
+            with self.subTest(direction=direction):
+                self.assertEqual(parity.pairs(inventory(), [desktop, android],
+                                              stub(links=linked, direction=direction)), [])
         self.assertEqual(parity.pairs(inventory(), [android], stub(links={"MUBO-3001": ["IGSH-2000"]})), [])
         self.assertEqual(parity.pairs(inventory(), [desktop], stub(links={"MUBO-3000": ["IGSH-2000"]})),
                          [(desktop, "android")])
+        self.assertEqual(parity.pairs(inventory(), [desktop], stub(links={"MUBO-3000": ["MUBO-3002"]})), [])
 
     def test_cap_refuses_a_big_plan_and_creates_nothing(self):
         rows = [task(f"MUBO-{3000 + index}") for index in range(6)]
