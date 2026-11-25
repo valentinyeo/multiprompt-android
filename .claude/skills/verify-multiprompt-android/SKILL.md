@@ -168,6 +168,10 @@ Every chat journey listed in `scripts/real-chat-screen.sh` runs the same shared 
 
 A server frame, a reader reply or a host receipt never counts as chat screen proof: the assertion is the phone's own text. On a signed package the cache seed is skipped and recorded as `REAL_CHAT_CACHE_SKIPPED`, because `run-as` needs a debuggable app; the rendered checks still run. A journey that cannot show the newest assistant reply fails as a product assertion and must not be weakened.
 
+## Owner-scale timing
+
+The owner's phone is slow with about 40 chats whose transcripts reach 54 MB, while the shared fixtures stay tiny. `scale-timing.yml` runs the same signed-in phone twice, once on the default fixture and once on 40 synthetic chats at the owner's distribution, and records wall clock, app CPU time from `/proc/<pid>/stat`, and the reader's bytes and response time per history and sync call counted by the fixture host. Frame totals are secondary only: this emulator draws about 4 fps for every build. Read [tools/scale-timing/README.md](../../../../../../tools/scale-timing/README.md) before quoting a number, and pass `-f app_ref=<sha>` to time a historical app revision built in its own worktree.
+
 ## Evidence
 Normal debug journeys check `seed-counts.json` against live tmux names and transcript bytes/rows before any action; missing, undersized or mismatched seeds fail setup. `sessions.md` records a runtime-selected reader and its exact one-result search in `seed-search.xml`; it does not assert that all 45 rows render. Find targets by exact name rather than assuming a single row.
 
