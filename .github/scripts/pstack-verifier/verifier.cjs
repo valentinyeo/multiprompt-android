@@ -22,6 +22,10 @@ const EXIT_LINES_CHARS = 1_200;
 const RESULT_FILE = 'side-result.json';
 const SOURCE_FILE = 'app-source-sha.txt';
 const VERDICT_SUMMARY = 'Head journey results decide this check.';
+const PASSING = ['PASS', 'PASS+NOTES'];
+const NAMED_UNCOVERED = 10;
+const NO_COVERAGE_RECORD = 'No coverage record: the pick step recorded no changed product files, so a pass is not evidence that everything was covered. Re-run the verifier so its pick step writes the selection.';
+const UNCOVERED_FIX = 'Add or select a journey that exercises';
 
 const ALLOWLIST = coverageGate.prJourneys;
 const BUG_WORD = /\b(?:fix|fixed|fixes|fixing|bug|bugs|bugfix)\b/i;
@@ -265,7 +269,30 @@ function isVisibleChange({ diff = '', files = [], changeKind = '', changedOutcom
   return true;
 }
 
-function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '', direct = [], speed = null }) {
+function uncoveredReason(files) {
+  const plural = files.length > 1;
+  const named = files.slice(0, NAMED_UNCOVERED).join(', ') + (files.length > NAMED_UNCOVERED ? ` and ${files.length - NAMED_UNCOVERED} more` : '');
+  return `${files.length} changed product file${plural ? 's' : ''} no planned journey exercises: ${named}. ${UNCOVERED_FIX} ${plural ? 'them' : 'it'}, then re-run the verifier.`;
+}
+
+function uncovered_gate(selection, verdict = 'PASS') {
+  if (!PASSING.includes(verdict)) return '';
+  if (!selection || typeof selection !== 'object' || !Array.isArray(selection.unmapped)) return NO_COVERAGE_RECORD;
+  const files = coverageGate.productFiles(selection.unmapped);
+  return files.length ? uncoveredReason(files) : '';
+}
+
+function coverageSelection(env) {
+  if (String(env.COVERAGE_RECORDED ?? '') !== 'yes') return null;
+  try {
+    const unmapped = JSON.parse(env.UNMAPPED ?? 'null');
+    return Array.isArray(unmapped) ? { unmapped } : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '', direct = [], speed = null, coverage = null }) {
   const notes = [];
   let verdict = 'PASS';
   const knownRed = Array.isArray(redOnMain) ? redOnMain : [];
@@ -313,6 +340,11 @@ function applyRules({ features, conclusions, notDrivenReason, smoke = false, fea
   }
   if (featureProof?.errors.length) {
     notes.push(...featureProof.errors);
+  }
+  const uncovered = uncovered_gate(coverage, verdict);
+  if (uncovered) {
+    verdict = 'FAIL';
+    notes.push(uncovered);
   }
   return { verdict, journeys, notes };
 }
@@ -615,7 +647,7 @@ async function preparePick(env) {
     const reason = 'No product change. Only documentation or verification tooling changed. No Android journey is scheduled.';
     const mergeBase = fetchMergeBase(repo, pr.base.ref, head);
     console.log(reason);
-    setOutputs({ no_product_change: 'true', features: '[]', smoke: 'no', reason, number, head_sha: head, merge_base: mergeBase, change_kind: 'tooling', changed_outcomes: '[]', need_ladder: 'false', speed: coverageGate.speedRelevant('', files) ? 'yes' : 'no', visible: 'no' });
+    setOutputs({ no_product_change: 'true', features: '[]', smoke: 'no', reason, number, head_sha: head, merge_base: mergeBase, change_kind: 'tooling', changed_outcomes: '[]', need_ladder: 'false', speed: coverageGate.speedRelevant('', files) ? 'yes' : 'no', visible: 'no', unmapped: '[]', coverage_recorded: 'yes' });
     return null;
   }
   if (pr.head.repo?.full_name !== repo) throw new Error('Product changes from forks cannot be verified with repository secrets');
@@ -651,8 +683,9 @@ async function finishPick(state, env, picked) {
   const reason = picked.reason || 'Journeys chosen for this change.';
   const harness = selected.harnessSmoke?.length ? ` harness_smoke=${JSON.stringify(selected.harnessSmoke)}` : '';
   const visible = selected.features.length > 0 && isVisibleChange({ diff: state.diff, files: state.files, changeKind: selected.changeKind, changedOutcomes: plan.outcomes });
-  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} visible=${visible ? 'yes' : 'no'} cap=${selected.features.length}/${coverageGate.MAX_PR_JOURNEYS}${harness} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
-  setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, speed: state.speed ? 'yes' : 'no', visible: visible ? 'yes' : 'no' });
+  const unmapped = coverageGate.uncoveredProductFiles(state.diff, selected.features, state.files);
+  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} visible=${visible ? 'yes' : 'no'} cap=${selected.features.length}/${coverageGate.MAX_PR_JOURNEYS}${harness} dropped=${JSON.stringify(selected.dropped)} unmapped=${JSON.stringify(unmapped)} reason=${reason}`);
+  setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, speed: state.speed ? 'yes' : 'no', visible: visible ? 'yes' : 'no', unmapped: JSON.stringify(unmapped), coverage_recorded: 'yes' });
 }
 
 async function pick(env) {
@@ -779,6 +812,7 @@ async function judge(env) {
     redOnMain: red.journeys, redOnMainUrl: red.url, redOnMainNote: red.note,
     direct: coverageGate.selectionForChange(diff).direct,
     speed: { required: String(env.SPEED_REQUIRED ?? '') === 'yes', result: String(env.SPEED_RESULT ?? '') },
+    coverage: coverageSelection(env),
   });
   const current = fetchPr(repo, number).head.sha;
   if (current !== sha) {
@@ -803,7 +837,7 @@ async function judge(env) {
 
 module.exports = {
   ALLOWLIST, MARKER_PREFIX, VERDICTS, SMOKE_JOURNEY, PRODUCT_ASSERTION, VERDICT_SUMMARY,
-  RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, pickWithFallback, applyRules, parentResult, buildComment,
+  RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, pickWithFallback, applyRules, uncovered_gate, uncoveredReason, coverageSelection, parentResult, buildComment,
   saysBug, loadTicketTitles, isBugFix, isVisibleChange, noProductChange,
   artifactName, videoArtifactName, runArtifacts, videoLinks, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, doneWhen, journeyEvidence, journeyCatalog, includeRequiredJourneys, journeyRunners, prContext,
   buildPickRequest, parseLadderResponse, ladderAnswerContent, ladderFailed,
