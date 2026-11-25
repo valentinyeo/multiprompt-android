@@ -206,7 +206,7 @@ class TmuxPaneFrameCostTest {
         appendLine()
         appendLine("- identical frames: $identicalEmits of $FRAMES emitted a new ReaderState and recomposed (`lastUpdatedAtMillis`, `SessionReaderConnection.kt:622`); changed frames: $changedEmits of $FRAMES.")
         appendLine("- the phone decodes and re-parses every frame it receives; the server is what skips an unchanged pane (`TmuxCommands.kt:417`).")
-        appendLine("- the pane view is not the only reader: `reader.isWorking` parses `screenOutput` on Main even when the chat shows the structured history (`MultipromptApp.kt:3127`, `WorkingDots.kt:27`).")
+        appendLine("- `reader.isWorking` parses `screenOutput` on Main when the server sends no hook state (`hookState` null), including while the chat shows the structured history (`MultipromptApp.kt:3127`, `WorkingDots.kt:27`, `ChatHistoryList.kt:217`).")
     }
 
     private fun ms(value: Double): String = String.format(Locale.US, "%.2f", value)
