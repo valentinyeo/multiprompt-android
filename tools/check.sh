@@ -54,6 +54,7 @@ source_checks() {
   python3 -B tools/reader-ownership/check.py
   python3 -B tools/reader-ownership/check.test.py
   python3 -B tools/reader-ownership/observer.test.py
+  python3 -B tools/pane-stream/proof.test.py
   python3 -B tools/reader-ownership/codex-fixture.test.py
   python3 -B tools/account-journey/ui.test.py
   python3 -B tools/chat-search/ui.test.py

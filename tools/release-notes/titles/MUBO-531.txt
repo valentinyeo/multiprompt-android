@@ -1,0 +1,1 @@
+Android: streaming replies stop resending the whole screen
