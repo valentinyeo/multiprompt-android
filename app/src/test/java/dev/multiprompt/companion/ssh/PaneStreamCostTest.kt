@@ -9,7 +9,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
-class PaneStreamBudgetTest {
+class PaneStreamCostTest {
     private data class Reading(val bytes: Int, val frames: List<String>, val expected: List<String>)
 
     private fun capture(root: File, visibleOnly: Boolean): Reading {
@@ -50,7 +50,7 @@ class PaneStreamBudgetTest {
     @Test
     fun streamingMinuteUsesLessWireDataAndRunsThePhoneDecoderOnEveryFrame() {
         assumeTrue(System.getenv("GITHUB_ACTIONS") == "true")
-        val root = Files.createTempDirectory("pane-stream-budget").toFile()
+        val root = Files.createTempDirectory("pane-stream-cost").toFile()
         try {
             val history = (0 until 5000).joinToString("\n", postfix = "\n") {
                 "tool output line %04d: app/src/main/java/dev/multiprompt/companion/reader/ChatHistory.kt passed".format(it)
@@ -91,8 +91,8 @@ class PaneStreamBudgetTest {
             }
             assertTrue("visible pane did not cut wire bytes", after.bytes < before.bytes / 10)
             val report = """{"fixture":"5000 scrollback lines, 32 visible lines, 60 changing frames at modeled 1 Hz", "runtime":"GitHub JVM, production Android snapshot decoder, not physical phone wall time", "runs":5, "before_bytes_per_minute":${before.bytes}, "after_bytes_per_minute":${after.bytes}, "before_decode_ns_per_minute":${beforeTimes.sorted()[2]}, "after_decode_ns_per_minute":${afterTimes.sorted()[2]}, "before_decode_runs_ns":$beforeTimes, "after_decode_runs_ns":$afterTimes, "decode_errors":0, "frames_per_minute":60}"""
-            File("build/reports/pane-stream-budget.json").apply { parentFile.mkdirs(); writeText(report + "\n") }
-            println("PANE_STREAM_BUDGET $report")
+            File("build/reports/pane-stream-cost.json").apply { parentFile.mkdirs(); writeText(report + "\n") }
+            println("PANE_STREAM_COST $report")
         } finally {
             root.deleteRecursively()
         }
