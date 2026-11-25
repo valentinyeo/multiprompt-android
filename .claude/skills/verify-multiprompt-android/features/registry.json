@@ -1545,7 +1545,11 @@
       "journey": "sessions.md",
       "sideEffect": false,
       "match": [
-        "SessionSearch|SessionFinder"
+        "SessionSearch|SessionFinder",
+        "RefreshMerge|SessionCacheCodec"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/MultipromptApplication\\.kt$"
       ]
     },
     "inbox.pin-chat": {
