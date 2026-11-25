@@ -1,0 +1,49 @@
+@@ -4738,7 +4738,7 @@ def host_auto_switch_redeliver(tmux, message_id, reply):
+         if not changed:
+             return False
+         message_event(db, provider, sid, message_row(db.execute("SELECT * FROM shared_messages WHERE id=?", (message_id,)).fetchone()))
+-    start_message_worker(dict(tmux=tmux, provider=provider, sid=sid), host_reader_source(), only_if_work=True)
++    start_message_worker(dict(tmux=tmux, provider=provider, sid=sid), host_reader_source())
+     message_store_request(dict(message_protocol=1, tmux=tmux, provider=provider, sid=sid, op="message_dispatch"))
+     return True
+ 
+@@ -7515,17 +7515,19 @@ def message_poll_locked(tmux, provider, sid):
+                 message_apply_connector(db, provider, sid, epoch, result)
+ 
+ 
+-def start_message_worker(q, source, only_if_work=False):
++def start_message_worker(q, source):
+     if source is None:
+         return
+-    if only_if_work:
+-        from contextlib import closing
+-        with closing(message_store_db(q['tmux'])) as db:
+-            if not db.execute("SELECT 1 FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent','failed','accepted','started') LIMIT 1", (q['provider'], q['sid'])).fetchone():
+-                return
+-    import fcntl
++    from contextlib import closing
+     path = message_store_path()
+-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
++    if not path.exists():
++        return
++    with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
++        if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='shared_messages'").fetchone():
++            return
++        if not db.execute("SELECT 1 FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent','failed','accepted','started') LIMIT 1", (q['provider'], q['sid'])).fetchone():
++            return
++    import fcntl
+     lock_path = path.with_suffix('.' + hashlib.sha256((q['provider'] + ':' + q['sid']).encode()).hexdigest() + '.message-worker')
+     with lock_path.open('a') as lock:
+         try:
+@@ -8860,10 +8862,8 @@ def serve_request(line, source, subscriptions, lock):
+             return
+         if query.get("op") in ("message_submit", "message_retry", "message_dismiss", "message_dispatch", "message_status", "message_snapshot", "message_events", "message_reset"):
+             result = message_store_request(query)
+-            if query.get('op') in ('message_submit', 'message_retry', 'message_snapshot'):
++            if query.get('op') in ('message_submit', 'message_retry', 'message_snapshot', 'message_events', 'message_status'):
+                 start_message_worker(query, source)
+-            elif query.get('op') in ('message_events', 'message_status'):
+-                start_message_worker(query, source, only_if_work=True)
+             serve_print(dict(id=rid, message_protocol=1, result=result))
+             return
+         if query.get("op") in ("send", "question_text"):
