@@ -11,7 +11,7 @@ internal class SnapshotFingerprint {
         while (index < reply.length) {
             val character = reply[index]
             val marker = when {
-                character == '{' && reply.startsWith(REPLY_ID, index) -> REPLY_ID
+                character == '"' && reply.startsWith(REPLY_ID, index) -> REPLY_ID
                 character == '@' && reply.startsWith(WIRE_ID, index) -> WIRE_ID
                 else -> null
             }
@@ -39,7 +39,7 @@ internal class SnapshotFingerprint {
     private companion object {
         const val BASIS = -3750763034362895579L
         const val PRIME = 1099511628211L
-        const val REPLY_ID = "{\"id\":"
+        const val REPLY_ID = "\"id\":"
         const val WIRE_ID = "@mp\\t"
     }
 }

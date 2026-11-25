@@ -38,7 +38,7 @@ class SnapshotFingerprintTest {
         assertFalse(fingerprint.same(base))
         val other = "b".repeat(64)
         assertFalse(fingerprint.same(base.replace(LongChatSnapshot.PROBE, other)))
-        assertTrue(fingerprint.same(base.replace(LongChatSnapshot.PROBE, other).replace("{\"id\":1", "{\"id\":8")))
+        assertTrue(fingerprint.same(base.replace(LongChatSnapshot.PROBE, other).replace("\"id\":1", "\"id\":8")))
     }
 
     @Test
