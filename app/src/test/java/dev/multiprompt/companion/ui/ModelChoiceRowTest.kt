@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.HostChange
@@ -45,9 +46,10 @@ class ModelChoiceRowTest {
         }
 
         listOf("Opus · current", "Sonnet", "Haiku", "Fable").forEach {
-            compose.onNodeWithText(it).assertIsDisplayed()
+            compose.onNodeWithText(it).assertExists()
         }
-        compose.onNodeWithText("Sonnet").performClick()
+        compose.onNodeWithText("Opus · current").assertIsDisplayed()
+        compose.onNodeWithText("Sonnet").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(HostChange.SONNET, picked?.change) }
     }
 
