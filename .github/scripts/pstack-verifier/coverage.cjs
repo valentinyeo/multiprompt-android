@@ -6,6 +6,17 @@ const { execFileSync } = require('node:child_process');
 const registry = require('../../../.claude/skills/verify-multiprompt-android/features/registry.json');
 const baseline = require('../../../.claude/skills/verify-multiprompt-android/features/coverage-baseline.json');
 const REGISTRY_PATH = '.claude/skills/verify-multiprompt-android/features';
+const PRODUCT_SOURCE = /^app\/src\/(?:main|debug|release|m3)\//;
+const NOT_PRODUCT = [
+  [/^(?:docs?|documentation)\//, 'documentation'],
+  [/\.(?:md|mdx|txt|rst|adoc)$/, 'documentation'],
+  [/^(?:changelog|news)\//i, 'changelog entry'],
+  [/^(?:tools\/ticket-titles|tools\/release-notes\/titles)\//, 'ticket title'],
+  [/^(?:\.github|\.circleci|\.buildkite|ci)\//, 'CI plumbing'],
+  [/^(?:tests?|__tests__|spec|app\/src\/(?:test|androidTest))\//, 'tests'],
+  [/(?:^|\/)(?:test|spec)_[^/]+$|\.(?:test|spec)\.[^/]+$|(?:^|\/)conftest\.py$/, 'tests'],
+  [/^(?:LICENSE|NOTICE|COPYING|AUTHORS)(?:\.\w+)?$|^\.(?:gitignore|gitattributes|editorconfig)$/, 'repo plumbing'],
+];
 const HARNESS = /^(?:tools\/journey-actions\/|\.claude\/skills\/verify-multiprompt-android\/scripts\/|\.github\/workflows\/verify\.yml$)/;
 const PR_NON_JOURNEY_CHECKS = 10;
 const PR_CHECK_CAP = 20;
@@ -28,6 +39,53 @@ function changedPaths(diff, files = []) {
     ...files.flatMap(file => [file.filename, file.previous_filename]).filter(Boolean),
     ...[...String(diff).matchAll(/^diff --git a\/(\S+) b\/(\S+)$/gm)].flatMap(match => match.slice(1)),
   ]);
+}
+
+function notProduct(file) {
+  return NOT_PRODUCT.find(([pattern]) => pattern.test(file))?.[1] ?? '';
+}
+
+function productFiles(paths = []) {
+  const unique = new Set(paths.filter(file => typeof file === 'string').map(file => file.trim().replace(/^\.\//, '')).filter(Boolean));
+  return [...unique].filter(file => PRODUCT_SOURCE.test(file) && !notProduct(file)).sort();
+}
+
+function fileBlocks(diff) {
+  const blocks = new Map();
+  for (const block of String(diff).split(/^diff --git /m).slice(1)) {
+    const lines = block.split('\n');
+    const files = [lines[0].match(/^a\/(\S+)/)?.[1], lines[0].match(/ b\/(\S+)$/)?.[1]].filter(Boolean);
+    const body = [lines[0], ...lines.filter(line => /^[+-](?![+-])/.test(line))].join('\n');
+    for (const file of files) blocks.set(file, body);
+  }
+  return blocks;
+}
+
+function fileOutcomes(file, block) {
+  return Object.entries(registry.outcomes)
+    .filter(([, outcome]) => (outcome.paths ?? []).some(pattern => new RegExp(pattern).test(file))
+      || (outcome.match ?? []).some(pattern => new RegExp(pattern).test(block)))
+    .map(([id]) => id);
+}
+
+function gonePaths(files = []) {
+  const names = new Set();
+  for (const file of files) {
+    if (!file || typeof file !== 'object') continue;
+    if (file.status === 'removed' && typeof file.filename === 'string') names.add(file.filename);
+    if (typeof file.previous_filename === 'string') names.add(file.previous_filename);
+  }
+  return names;
+}
+
+function uncoveredProductFiles(diff, features = [], files = []) {
+  const scheduled = new Set(features);
+  const blocks = fileBlocks(diff);
+  const gone = gonePaths(files);
+  return productFiles([...changedPaths(diff, files)]).filter(file => !gone.has(file)
+    && !fileOutcomes(file, blocks.get(file) ?? '')
+      .map(id => registry.outcomes[id].journey)
+      .some(name => name && scheduled.has(name)));
 }
 
 function changedRecipes(diff, files = []) {
@@ -225,7 +283,8 @@ function renderWorkflow(source) {
 
 module.exports = {
   registry, baseline, REGISTRY_PATH, debugJourneys, prJourneys, HARNESS_SMOKE_JOURNEYS, MAX_PR_JOURNEYS, PR_CHECK_CAP, PR_NON_JOURNEY_CHECKS, speedPatterns,
-  changedRecipes, changedJourneys, directJourneys, speedRelevant, selectionForChange, prioritizeJourneys, capPrJourneys, changedProduct,
+  changedPaths, changedRecipes, changedJourneys, directJourneys, speedRelevant, selectionForChange, prioritizeJourneys, capPrJourneys, changedProduct,
+  productFiles, notProduct, fileOutcomes, gonePaths, uncoveredProductFiles,
   pathOutcomes, recipeOutcomes, changedOutcomes, planChange, featureErrors, catalog, validateRegistry, ratchetErrors,
   renderIndex, renderWorkflow,
 };

@@ -3334,8 +3334,8 @@ internal fun ReaderScreen(
             speech.shutdown()
         }
     }
-    DisposableEffect(connection, voiceLifecycle) {
-        var readerLease = if (voiceLifecycle?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) != false) connection.observe() else null
+    DisposableEffect(connection, voiceLifecycle, historyChat) {
+        var readerLease = if (voiceLifecycle?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.STARTED) != false) connection.observe(pane = !historyChat) else null
         if (voiceLifecycle == null) return@DisposableEffect onDispose { readerLease?.close() }
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -3348,7 +3348,7 @@ internal fun ReaderScreen(
                     reading = false
                 }
                 Lifecycle.Event.ON_START -> {
-                    readerLease = readerLease ?: connection.observe()
+                    readerLease = readerLease ?: connection.observe(pane = !historyChat)
                     appForeground = true
                 }
                 else -> Unit

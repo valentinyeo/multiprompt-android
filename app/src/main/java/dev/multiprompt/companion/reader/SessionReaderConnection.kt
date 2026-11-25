@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
@@ -180,6 +181,7 @@ class SessionReaderConnection(
     val pendingPrompts = PendingPrompts()
     private var historyIdentity: ChatHistoryProtocol.Identity? = null
     private val pollGate = ChatPollGate()
+    private val paneGate = ChatPollGate()
 
     fun matches(host: HostProfile, agent: AgentKind, hostSessionId: String): Boolean =
         this.host == host && this.agent == agent && this.hostSessionId == hostSessionId
@@ -197,7 +199,14 @@ class SessionReaderConnection(
         }
     }
 
-    fun observe(): AutoCloseable = pollGate.acquire()
+    fun observe(pane: Boolean = true): AutoCloseable {
+        val paneLease = if (pane) paneGate.acquire() else null
+        val lease = pollGate.acquire()
+        return AutoCloseable {
+            lease.close()
+            paneLease?.close()
+        }
+    }
 
     fun nudge() {
         if (ReconnectBackoff.shouldNudge(_state.value.status is ReaderStatus.Failed)) streamNudge.trySend(Unit)
@@ -612,7 +621,12 @@ class SessionReaderConnection(
             ReaderStreamPump<SshClient>(
                 wanted = pollGate.active,
                 connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
-                stream = { client, heard -> streamFrames(client, heard) },
+                stream = { client, heard ->
+                    paneGate.active.collectLatest { pane ->
+                        streamFrames(client, heard, visibleOnly = !pane)
+                        error("The tmux reader ended")
+                    }
+                },
                 release = { client -> runCatching { client.disconnect() } },
                 onClient = { streamClient = it },
                 onConnecting = { _state.update { it.copy(status = ReaderStatus.Connecting) } },
@@ -627,13 +641,14 @@ class SessionReaderConnection(
         }
     }
 
-    private suspend fun streamFrames(client: SshClient, heard: () -> Unit) {
+    private suspend fun streamFrames(client: SshClient, heard: () -> Unit, visibleOnly: Boolean) {
         repository.streamSession(
             client,
             tmuxSessionName,
             agent,
             onBytes = heard,
             hosted = hostSessionId.isNotBlank(),
+            visibleOnly = visibleOnly,
         ) { frame ->
             confirmModelSwitchIfAsked(frame.confirmationVisible)
             if (historyMode) {
@@ -753,6 +768,7 @@ class SessionReaderConnection(
     override fun close() {
         _state.update { it.copy(status = ReaderStatus.Closed) }
         pollGate.close()
+        paneGate.close()
         requests.close()
         streamJob?.cancel()
         actionJob?.cancel()

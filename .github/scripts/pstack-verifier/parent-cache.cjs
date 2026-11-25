@@ -18,14 +18,25 @@ function cacheKey(sha, feature, root = process.cwd()) {
   return `verify-base-${sha}-${feature}-${hash.digest('hex')}`;
 }
 
-function reusable(directory, sha) {
+const VIDEO_FILE = 'journey-video.mp4';
+
+function hasVideo(directory) {
+  try {
+    return fs.statSync(path.join(directory, VIDEO_FILE)).size > 0;
+  } catch {
+    return false;
+  }
+}
+
+function reusable(directory, sha, { requireVideo = false } = {}) {
   const files = readSideFiles(directory);
   if (files.sourceSha !== sha) return false;
+  if (requireVideo && !hasVideo(directory)) return false;
   const result = parentResult({ conclusion: 'success', result: files.result, sourceSha: files.sourceSha, mergeBase: sha });
   return result === 'passed' || result === 'product assertion';
 }
 
-function restore({ repo, sha, feature, directory, runId, run = gh, key = cacheKey(sha, feature) }) {
+function restore({ repo, sha, feature, directory, runId, run = gh, key = cacheKey(sha, feature), requireVideo = false }) {
   let pages;
   try {
     pages = JSON.parse(run(['api', '--paginate', '--slurp', `repos/${repo}/actions/artifacts?name=${encodeURIComponent(key)}&per_page=100`]));
@@ -42,7 +53,7 @@ function restore({ repo, sha, feature, directory, runId, run = gh, key = cacheKe
       const workflow = JSON.parse(run(['api', `repos/${repo}/actions/runs/${artifact.workflow_run.id}`]));
       if (workflow.status !== 'completed' || !['.github/workflows/pstack-verifier.yml', '.github/workflows/verify.yml'].includes(workflow.path)) continue;
       run(['run', 'download', String(artifact.workflow_run.id), '-R', repo, '-n', key, '-D', directory]);
-      if (reusable(directory, sha)) {
+      if (reusable(directory, sha, { requireVideo })) {
         fs.writeFileSync(path.join(directory, 'base-cache-origin.json'), JSON.stringify({ run: workflow.html_url, artifact: artifact.id, key }));
         return true;
       }
@@ -54,17 +65,18 @@ function restore({ repo, sha, feature, directory, runId, run = gh, key = cacheKe
   return false;
 }
 
-module.exports = { cacheKey, reusable, restore };
+module.exports = { VIDEO_FILE, cacheKey, hasVideo, reusable, restore };
 
 if (require.main === module) {
   try {
-    const { APP_REF: sha, VERIFY_JOURNEY: journey, VERIFY_FEATURE: driver, EVIDENCE: directory, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId } = process.env;
+    const { APP_REF: sha, VERIFY_JOURNEY: journey, VERIFY_FEATURE: driver, EVIDENCE: directory, GITHUB_REPOSITORY: repo, GITHUB_RUN_ID: runId, RECORD_VIDEO: recordVideo } = process.env;
     const feature = journey || driver;
     const key = cacheKey(sha, feature);
     const command = process.argv[2];
+    const requireVideo = recordVideo === 'true';
     if (!['restore', 'save'].includes(command)) throw new Error('Usage: parent-cache.cjs restore|save');
-    const hit = command === 'restore' && restore({ repo, sha, feature, directory, runId, key });
-    const ready = command === 'save' && reusable(directory, sha);
+    const hit = command === 'restore' && restore({ repo, sha, feature, directory, runId, key, requireVideo });
+    const ready = command === 'save' && reusable(directory, sha, { requireVideo });
     fs.appendFileSync(process.env.GITHUB_OUTPUT, `key=${key}\nhit=${hit}\nready=${ready}\n`);
   } catch (error) {
     console.error(error.message);
