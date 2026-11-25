@@ -12,6 +12,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
@@ -39,6 +40,13 @@ class TypingPerformanceTest {
         val session = requireNotNull(arguments.getString("typing_session"))
         val marker = requireNotNull(arguments.getString("typing_marker"))
         val output = File(compose.activity.getExternalFilesDir(null), "typing").apply { mkdirs() }
+        compose.waitUntil(240_000) {
+            compose.onAllNodesWithText("Use without account (debug)").fetchSemanticsNodes().isNotEmpty() ||
+                compose.onAllNodesWithContentDescription("Search sessions").fetchSemanticsNodes().isNotEmpty()
+        }
+        if (compose.onAllNodesWithText("Use without account (debug)").fetchSemanticsNodes().isNotEmpty()) {
+            compose.onNodeWithText("Use without account (debug)").performClick()
+        }
         compose.waitUntil(240_000) {
             compose.onAllNodesWithContentDescription("Search sessions").fetchSemanticsNodes().isNotEmpty()
         }
