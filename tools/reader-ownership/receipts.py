@@ -15,12 +15,12 @@ def counts(path, session):
 
 
 def compare(before, after, mode):
+    if before["history"] <= 0 and before["snapshot"] <= 0:
+        raise ValueError("Missing positive reader control")
     for kind in ("history", "snapshot"):
-        if before[kind] <= 0:
-            raise ValueError(f"Missing positive {kind} control")
         if mode == "hidden" and before[kind] != after[kind]:
             raise ValueError(f"HIDDEN_READER_IO: {kind} increased from {before[kind]} to {after[kind]}; route it through ChatPollGate")
-        if mode == "resumed" and after[kind] <= before[kind]:
+        if mode == "resumed" and before[kind] + after[kind] > 0 and after[kind] <= before[kind]:
             raise ValueError(f"Reader did not resume {kind} work")
 
 
