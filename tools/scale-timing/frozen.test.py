@@ -1,6 +1,7 @@
 import argparse
 import copy
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
 import sys
@@ -14,6 +15,10 @@ import stream
 from runtime import MeasurementError
 
 PACKAGE = 'dev.multiprompt.companion.debug'
+
+
+def stamp(epoch):
+    return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
 
 
 def samples():
@@ -49,7 +54,7 @@ class StatisticsTest(unittest.TestCase):
         result = results()
         self.assertEqual(frozen.METRICS, ('app_cpu_ms', 'main_thread_ms', 'frames_over_16_ms_secondary',
                                           'list_sessions_per_minute', 'bytes_per_minute', 'errors',
-                                          'platform_warnings'))
+                                          'platform_warnings', 'ssh_logins_per_minute'))
         self.assertEqual(tuple(result['scenarios']), frozen.SCENARIOS)
         for row in result['scenarios'].values():
             self.assertEqual(tuple(row), frozen.METRICS)
@@ -87,7 +92,10 @@ class StatisticsTest(unittest.TestCase):
             self.assertIn('| ' + scenario + ' |', text)
         self.assertIn('30 [10, 50]', text)
         self.assertIn('frames (secondary)', text)
-        self.assertIn('| Errors | Platform warnings |', text)
+        self.assertIn('| Errors | Platform warnings | SSH logins/min |', text)
+        header, separator = text.splitlines()[2:4]
+        self.assertEqual(header.count(' | ') + 1, separator.count(' | ') + 1)
+        self.assertEqual(header.count(' | ') + 1, len(frozen.METRICS) + 1)
 
     def test_report_without_results_cannot_pass_through_tee(self):
         workflow = Path(frozen.__file__).resolve().parents[2] / '.github/workflows/scale-timing.yml'
@@ -168,7 +176,12 @@ class ParsingTest(unittest.TestCase):
         for log, expected_errors, expected_warnings in ((retained, 0, 2), (mixed, 1, 2)):
             with tempfile.TemporaryDirectory() as directory:
                 out = Path(directory)
-                args = argparse.Namespace(package=PACKAGE, clk_tck=100)
+                args = argparse.Namespace(package=PACKAGE, clk_tck=100, fixture=directory,
+                                          auth_log=str(Path(directory, 'auth.log')))
+                Path(directory, 'auth.log').write_text(
+                    stamp(99.0) + ' Accepted publickey for verifyssh from 127.0.0.1 port 1 ssh2: ED25519 SHA256:outside\n'
+                    + stamp(102.0) + ' Accepted publickey for verifyssh from 127.0.0.1 port 2 ssh2: ED25519 SHA256:inside\n'
+                    + stamp(103.0) + ' Accepted publickey for root from 127.0.0.1 port 3 ssh2: ED25519 SHA256:other\n')
                 responses = [
                     subprocess.CompletedProcess([], 0, ''),
                     subprocess.CompletedProcess([], 0, ''),
@@ -178,12 +191,16 @@ class ParsingTest(unittest.TestCase):
                 snaps = [dict(pid='2742', app=10, main=5), dict(pid='2742', app=25, main=9)]
                 with patch.object(frozen, 'adb', side_effect=responses), \
                         patch.object(frozen, 'snapshot', side_effect=snaps), \
+                        patch.object(frozen, 'auth_text', side_effect=lambda path: Path(path).read_text()), \
                         patch.object(frozen.time, 'time', side_effect=[100.0, 105.0]), \
                         patch.object(frozen.measure, 'relay_text', return_value='{"event":"call","bytes":10,"t":102.0}\n'):
                     record = frozen.sample('typing_long_chat', 1, lambda: dict(characters=45, verified=True), args, out)
                 self.assertEqual(record['metrics']['errors'], expected_errors)
                 self.assertEqual(record['metrics']['platform_warnings'], expected_warnings)
                 self.assertEqual(record['error_counts']['platform_warnings'], expected_warnings)
+                self.assertEqual(record['metrics']['ssh_logins_per_minute'], 12.0)
+                self.assertEqual(record['logins']['retained'],
+                                 [dict(user='verifyssh', time=stamp(102.0), fingerprint='SHA256:inside')])
 
     def test_crashed_cold_process_is_owned_even_when_only_event_log_has_its_pid(self):
         log = f'''100.1 500 500 I am_proc_start: [0,123,10148,{PACKAGE},next-top-activity,MainActivity]
@@ -217,36 +234,48 @@ class ParsingTest(unittest.TestCase):
 
 
 class RunTest(unittest.TestCase):
+    def benchmark(self, directory, open_logins, logins_count):
+        root = Path(directory)
+        chat = dict(session='largest', marker='latest', bytes=100, transcript='unused')
+        (root / 'targets.json').write_text(json.dumps(dict(chats=[chat, chat])))
+        (root / 'host-fingerprint.txt').write_text('fingerprint')
+        args = argparse.Namespace(out=str(root / 'out'), targets=str(root / 'targets.json'),
+                                  package=PACKAGE, evidence=str(root), fixture=str(root),
+                                  expected_version='version', app_sha='sha', seed='small')
+
+        def sample(scenario, repetition, work, *_):
+            if scenario == 'cold_start':
+                self.assertEqual(work(), dict(inbox='shown'))
+            return dict(scenario=scenario, valid=True, relay_opens=open_logins,
+                        logins=dict(logins=logins_count, per_minute=0.0, retained=[]),
+                        metrics={metric: 0 for metric in frozen.METRICS})
+
+        with patch.dict(frozen.os.environ, GITHUB_ACTIONS='true'), \
+                patch.object(frozen, 'sample', side_effect=sample), \
+                patch.object(frozen, 'adb'), patch.object(frozen, 'mpa') as mpa, \
+                patch.object(frozen.subprocess, 'run'), \
+                patch.object(frozen, 'watch_auth_log', return_value='unused/auth.log'), \
+                patch.object(frozen.measure, 'sign_in'), patch.object(frozen.measure, 'copy_relay'), \
+                patch.object(frozen.measure, 'clk_tck', return_value=100), \
+                patch.object(frozen.measure.probe, 'install_sampler'), \
+                patch.object(frozen.measure, 'open_chat'), \
+                patch.object(frozen.measure, 'poll', return_value=dict(texts=['Use without account (debug)'])), \
+                patch.object(frozen.measure, 'wait_inbox') as inbox:
+            frozen.run(args)
+        return root, mpa, inbox
+
     def test_each_cold_start_reenters_the_debug_gate_and_requires_inbox(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            chat = dict(session='largest', marker='latest', bytes=100, transcript='unused')
-            (root / 'targets.json').write_text(json.dumps(dict(chats=[chat, chat])))
-            (root / 'host-fingerprint.txt').write_text('fingerprint')
-            args = argparse.Namespace(out=str(root / 'out'), targets=str(root / 'targets.json'),
-                                      package=PACKAGE, evidence=str(root), fixture=str(root),
-                                      expected_version='version', app_sha='sha', seed='small')
-
-            def sample(scenario, repetition, work, *_):
-                if scenario == 'cold_start':
-                    self.assertEqual(work(), dict(inbox='shown'))
-                return dict(scenario=scenario, valid=True, metrics={metric: 0 for metric in frozen.METRICS})
-
-            with patch.dict(frozen.os.environ, GITHUB_ACTIONS='true'), \
-                    patch.object(frozen, 'sample', side_effect=sample), \
-                    patch.object(frozen, 'adb'), patch.object(frozen, 'mpa') as mpa, \
-                    patch.object(frozen.subprocess, 'run'), \
-                    patch.object(frozen.measure, 'sign_in'), patch.object(frozen.measure, 'copy_relay'), \
-                    patch.object(frozen.measure, 'clk_tck', return_value=100), \
-                    patch.object(frozen.measure.probe, 'install_sampler'), \
-                    patch.object(frozen.measure, 'open_chat'), \
-                    patch.object(frozen.measure, 'poll', return_value=dict(texts=['Use without account (debug)'])), \
-                    patch.object(frozen.measure, 'wait_inbox') as inbox:
-                frozen.run(args)
+            root, mpa, inbox = self.benchmark(directory, 1, 1)
             self.assertEqual(sum(call.args == ('tap', 'text', 'Use without account (debug)')
                                  for call in mpa.call_args_list), 5)
             self.assertEqual(inbox.call_count, 10)
             self.assertEqual(json.loads((root / 'out/results.json').read_text())['repeats'], 5)
+
+    def test_relay_opens_with_no_captured_login_fail_the_run_instead_of_reading_zero(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(MeasurementError, 'SSH_LOGINS_UNMEASURED'):
+                self.benchmark(directory, 3, 0)
 
 
 class StreamTest(unittest.TestCase):

@@ -75,6 +75,8 @@ source_checks() {
   python3 -B tools/real-chat/phone-cache.test.py
   python3 -B tools/scale-chat/fixture.test.py
   python3 -B tools/scale-timing/parsers.test.py
+  python3 -B tools/scale-timing/logins.test.py
+  python3 -B tools/scale-timing/authwatch.test.py
   python3 -B tools/scale-timing/relay.test.py
   python3 -B tools/scale-timing/report.test.py
   python3 -B tools/scale-timing/frozen.test.py

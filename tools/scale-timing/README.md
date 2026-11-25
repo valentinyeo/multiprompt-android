@@ -10,7 +10,7 @@ Later rounds dispatch this same frozen harness revision, changing only `app_ref`
 The measured revision is built in its own worktree; the driver and fixtures stay at the dispatch revision.
 Never change the workload, repeat count, durations, seeds, metric definitions or emulator configuration during
 an optimization round. A changed harness fingerprint requires a new baseline, not a comparison with the old one.
-`mubo-555-v2` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
+`mubo-555-v3` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
 driver, emulator/build actions and workflow.
 
 ## Runner entry point
@@ -59,6 +59,19 @@ Every metric has `median`, `min`, `max`; there are no timestamps, PIDs or run ID
 - **Platform warnings** separately counts the narrow allowlist of Android platform E lines logged under the app PID:
   `FrameTracker` `force finish cuj, time out: J<IME_INSETS_(SHOW|HIDE)_ANIMATION::...@<package>>`. Every other app-PID E
   line still counts in **Errors**.
+- **SSH logins/min** counts the fixture sshd's own `Accepted publickey` lines for `verifyssh` that appeared in the
+  measured window, divided by the window, so a login is measured instead of inferred from the relay or from app code.
+  The fixture sshd logs at `LogLevel VERBOSE` but writes those lines without a timestamp, so
+  `tools/scale-timing/authwatch.py` follows `$FIXTURE/sshd.log` and stamps every new line with the UTC time it
+  appeared (within one 0.1 s poll). The workflow makes that log readable, and `frozen.py` keeps the stamped copy in a
+  temporary directory that is not published. `tools/scale-timing/logins.py` counts the stamped lines inside the
+  window and keeps only the user, the time and the key fingerprint of each counted line in the trial records of
+  `samples.json`; `logins.test.py` and `authwatch.test.py` prove lines outside the window, lines for other users,
+  several logins in one trial, a raw untimestamped sshd line and a line written in two pieces. sshd writes the accept
+  before the relay records the channel open, so a login that straddles a window edge is counted in the earlier window.
+  A run whose relay opened channels but captured no login at all fails with `BENCHMARK_SSH_LOGINS_UNMEASURED`
+  rather than publishing a fast zero, and an unreadable auth log fails the trial with `BENCHMARK_AUTH_LOG_UNREADABLE`,
+  while the workflow preflight fails in seconds when the log is missing or unreadable.
 - **Driver time stays separate** in each trial's `driver` and `wall_ms`. CPU never includes the `mpa`, adb,
   UI-automation or fixture processes. Do not subtract driver wall time from app CPU: they overlap, with different units.
   Wall time includes UI dumps and is not published as app latency. Idle/stream windows avoid UI dumps entirely.
@@ -69,6 +82,10 @@ The same median/range table appears in the job summary. Compare matching-seed re
 ```sh
 python3 tools/scale-timing/frozen.py compare baseline/results.json candidate/results.json --out comparison.json
 ```
+
+The committed baselines under [`baseline/`](baseline) are the `results.json` of a green run, named
+`<app sha>-<seed>.json`. Compare against the newest file for each seed that carries the current harness and
+schema, and keep older files: they are the history of what shipped.
 
 Every metric is lower-is-better. Candidate max below baseline min is `better`; candidate min above baseline
 max is `worse`; overlapping or touching ranges are `within noise`. Different harness hashes, schemas, seeds

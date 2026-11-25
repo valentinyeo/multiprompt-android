@@ -90,6 +90,15 @@ jobs:
         run: |
           sudo python3 tools/scale-timing/targets.py --seed "$TIMING_SEED" --out "$EVIDENCE/timing-targets.json"
           sudo install -m 755 tools/scale-timing/stream.py /home/verifyssh/frozen-stream.py
+          sudo stat -c '%s' "$FIXTURE/sshd.log" > "$EVIDENCE/auth-log-start-size.txt" || {
+            echo 'SSH_AUTH_LOG_MISSING: the fixture sshd did not write $FIXTURE/sshd.log, so SSH logins cannot be counted' >&2
+            exit 1
+          }
+          sudo chmod 644 "$FIXTURE/sshd.log"
+          test -r "$FIXTURE/sshd.log" || {
+            echo 'SSH_AUTH_LOG_UNREADABLE: the harness cannot read $FIXTURE/sshd.log, so SSH logins cannot be counted' >&2
+            exit 1
+          }
           { uptime; nproc; uname -a; git rev-parse HEAD; } > "$EVIDENCE/benchmark-host.txt"
       - name: Install, sign in and time the phone
         id: timing
