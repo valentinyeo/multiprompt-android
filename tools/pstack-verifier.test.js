@@ -1179,7 +1179,7 @@ test('a registered drive budget never exceeds the time verify.yml gives that jou
   assert.ok(registered.length >= 2, 'the slow journeys declare their own drive budget');
   for (const [name, journey] of registered) assert.ok(journey.runner.driveMinutes >= 30, `${name} keeps a margin over its measured run`);
   const budgets = registered.map(([name, journey]) => `(inputs.feature == '${name}' || inputs.driver_feature == '${name}') && ${journey.runner.driveMinutes}`);
-  assert.ok(drive.includes(`timeout-minutes: ${{ ${budgets.join(' || ')} || inputs.side == 'parent' && 35 || inputs.break_it && 55 || 35 }}`), 'every registered drive budget reaches the drive step');
+  assert.ok(drive.includes('timeout-minutes: ${{ ' + budgets.join(' || ') + " || inputs.side == 'parent' && 35 || inputs.break_it && 55 || 35 }}"), 'every registered drive budget reaches the drive step');
   const job = jobBlock(verify, 'verify');
   const parentDrive = Number(/inputs\.side == 'parent' && (\d+)/.exec(drive)?.[1]);
   const parentJob = Number(/inputs\.side == 'parent' && (\d+)/.exec(job)?.[1]);
