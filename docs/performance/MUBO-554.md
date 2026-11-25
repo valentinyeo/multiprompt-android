@@ -261,3 +261,60 @@ the composer reads `Please / this`, the picker opens, the pill inserts, the sent
 one pill and the host receipt matches. Cursor placement and composing text are unchanged by this
 change; the caret sat where the driver left it because the keyboard was composing the word it had
 just typed, which happens on `main` too.
+
+### Round 5: live picker state and IME composition
+
+The picker on both revisions calls `NativeSkills.query` with the current `TextFieldValue.text`
+and collapsed `selection.start`. Head reads that value inside the bottom-bar composition;
+main reads it in the reader composition. Neither reads the persisted draft. The 600 ms save
+observer does not supply picker state. The span fast path only returns early when the draft
+has no slash; it does not participate in query detection.
+
+Fresh controls on main `81db9f32` pass in
+[45649263400](https://github.com/valentinyeo/multiprompt-android/actions/runs/45649263400),
+but fail the same initial picker step in
+[45651351366](https://github.com/valentinyeo/multiprompt-android/actions/runs/45651351366) and
+[45652601987](https://github.com/valentinyeo/multiprompt-android/actions/runs/45652601987).
+Both failures retain the exact `Please / this` text but no picker, followed by the old
+placeholder-based retry failure. The latest nightly
+[45540371074](https://github.com/valentinyeo/multiprompt-android/actions/runs/45540371074)
+also fails this step. Head `eac2c517` passes
+[45649467911](https://github.com/valentinyeo/multiprompt-android/actions/runs/45649467911)
+after one retry. These observations do not establish a head-only regression.
+
+The failed head recording in
+[45642363255](https://github.com/valentinyeo/multiprompt-android/actions/runs/45642363255)
+shows `Please / |this`: Gboard is composing the following word and its first Left event
+leaves the caret after the space, not after the slash. A slash query is correctly absent
+there. The driver now dismisses the IME to finish that composition before sending Left.
+The exact draft, picker row, required scroll, inserted pill, removal, file-path exclusion,
+built-in command and independent send-receipt assertions are unchanged.
+
+`ComposerLongDraftTest.movingBackToAMidMessageSlashOpensSkillsBeforeTheDraftIsSaved`
+drives the actual composer: type `Please this`, insert `/ ` at offset 7, press Left,
+require the visible skill, select it and require exact `Please /review-native this`.
+The persisted draft must still be empty. Both debug and M3 unit jobs pass at `b3fda4d0`
+([45649849078](https://github.com/valentinyeo/multiprompt-android/actions/runs/45649849078));
+the debug artifact's `ComposerLongDraftTest` XML has five tests, zero failures or errors.
+This guards immediate live-text/caret lookup independently of Gboard and of the save timer.
+No additional product change is justified by these controls.
+
+The final controlled series uses the same repaired driver at `3777d558` for both APKs,
+with four fresh emulators per side on the same day. Each dispatch pins `app_ref` to either
+head `3777d5586ad16cd65036017550088d32928b1ab4` or main
+`81db9f326af3e0ff4ab20eb68d60792180552a11`. Independent `trial` IDs separate only the
+manual dispatch concurrency groups; the normal PR groups, cancellation policy and all
+journey/verdict assertions remain in place. No cached parent journey is used.
+
+| Trial | Head run | Main control run |
+| --- | --- | --- |
+| 1 | [45655160973](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655160973) | [45655183498](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655183498) |
+| 2 | [45655166614](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655166614) | [45655188572](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655188572) |
+| 3 | [45655171326](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655171326) | [45655192857](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655192857) |
+| 4 | [45655176807](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655176807) | [45655196519](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655196519) |
+
+The PR Verification records the observed pass counts and artifact inspection. Four trials
+measure this sample's failure rate, not a guarantee that the journey can never flake.
+The earlier cancelled runs and a short-SHA checkout failure are excluded. App product source
+is unchanged from the accepted performance head; emulator frame numbers remain
+**emulator, not representative**. No further performance runs were made in this round.
