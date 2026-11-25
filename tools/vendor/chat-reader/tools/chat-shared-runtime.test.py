@@ -164,6 +164,54 @@ class RuntimeTest(unittest.TestCase):
         self.assertEqual(published.read_text(), body)
         self.assertTrue(os.access(published, os.X_OK))
 
+    def helper_bundle(self, version, send, sessions, reader=SOURCE):
+        return ("MULTIBOT_APP_VERSION = '%s'\n" % version +
+                "MP_SEND_SOURCE = '%s'\n" % base64.b64encode(send).decode() +
+                "MP_SESSIONS_SOURCE = '%s'\n" % base64.b64encode(sessions).decode() + reader)
+
+    def helper_pair(self, runtime):
+        return {name: os.readlink(runtime / name) for name in ('mp-send', 'mp-sessions')}
+
+    def test_MUBO_558_older_bundle_keeps_the_newer_helper_pair(self):
+        runtime = Path(self.home.name) / '.multiprompt-runtime'
+        newer = (b"#!/usr/bin/env python3\nprint('send 2')\n", b"#!/usr/bin/env python3\nprint('sessions 2')\n")
+        older = (b"#!/usr/bin/env python3\nprint('send 1')\n", b"#!/usr/bin/env python3\nprint('sessions 1')\n")
+        self.info(self.helper_bundle('0.28.902', *newer))
+        links = self.helper_pair(runtime)
+        self.info(self.helper_bundle('0.28.901', *older))
+        for name, body in zip(('mp-send', 'mp-sessions'), newer):
+            self.assertEqual(os.readlink(runtime / name), links[name], name)
+            self.assertEqual((runtime / name).read_bytes(), body, name)
+
+    def test_MUBO_558_older_bundle_moves_neither_helper(self):
+        runtime = Path(self.home.name) / '.multiprompt-runtime'
+        send = b"#!/usr/bin/env python3\nprint('send 2')\n"
+        sessions = b"#!/usr/bin/env python3\nprint('sessions 2')\n"
+        self.info(self.helper_bundle('0.28.902', send, sessions))
+        links = self.helper_pair(runtime)
+        self.info(self.helper_bundle('0.28.901', send, b"#!/usr/bin/env python3\nprint('sessions 1')\n"))
+        self.assertEqual(self.helper_pair(runtime), links)
+        self.assertEqual((runtime / 'mp-sessions').read_bytes(), sessions)
+
+    def test_MUBO_558_unversioned_bundle_cannot_replace_versioned_helpers(self):
+        runtime = Path(self.home.name) / '.multiprompt-runtime'
+        newer = (b"#!/usr/bin/env python3\nprint('send 2')\n", b"#!/usr/bin/env python3\nprint('sessions 2')\n")
+        older = (b"#!/usr/bin/env python3\nprint('send 1')\n", b"#!/usr/bin/env python3\nprint('sessions 1')\n")
+        self.info(self.helper_bundle('0.28.902', *newer))
+        links = self.helper_pair(runtime)
+        self.info(self.helper_bundle('', *older))
+        self.assertEqual(self.helper_pair(runtime), links)
+        self.assertEqual((runtime / 'mp-send').read_bytes(), newer[0])
+
+    def test_MUBO_558_newer_bundle_still_replaces_both_helpers(self):
+        runtime = Path(self.home.name) / '.multiprompt-runtime'
+        older = (b"#!/usr/bin/env python3\nprint('send 1')\n", b"#!/usr/bin/env python3\nprint('sessions 1')\n")
+        newer = (b"#!/usr/bin/env python3\nprint('send 2')\n", b"#!/usr/bin/env python3\nprint('sessions 2')\n")
+        self.info(self.helper_bundle('0.28.901', *older))
+        self.info(self.helper_bundle('0.28.902', *newer))
+        for name, body in zip(('mp-send', 'mp-sessions'), newer):
+            self.assertEqual((runtime / name).read_bytes(), body, name)
+
     def test_zsb_ships_inside_the_runtime_under_every_documented_name(self):
         body = "#!/bin/sh\necho zsb\n"
         source = "ZSB_SOURCE = '%s'\n%s" % (base64.b64encode(body.encode()).decode(), SOURCE)

@@ -33,7 +33,7 @@ The head tests cover empty polls, submit, retry, all five request operations and
 
 ## Desktop alignment
 
-Android is pinned to desktop `f6d470f180f746e83f3e4171de2913f9d7dfc015` with no local patch, so the phone carries the desktop worker gate and its lock handover (passing the locked descriptor to the child through `MULTIPROMPT_MESSAGE_WORKER_LOCK_FD`). The phone check stays read-only and creates no store or folder.
+Android is pinned to desktop `ee643caf5b5c32567790124c6209942b2a95d86b` with no local patch, so the phone carries the desktop worker gate and its lock handover (passing the locked descriptor to the child through `MULTIPROMPT_MESSAGE_WORKER_LOCK_FD`). The phone check stays read-only and creates no store or folder.
 
 Fix Root Causes shaped the change to check real pending rows and hold the real lock rather than rate-limit spawns. Test Behavior, Not Implementation shaped the tests to count process launches and read the wake pipe through the request interface.
 

@@ -9416,6 +9416,56 @@ if __name__ == '__main__':
                     publish(stem, payload, 0o700)
                     relink(name, stem)
 
+                def version_key(text):
+                    parts = text.split('.') if isinstance(text, str) else []
+                    if not 1 <= len(parts) <= 4:
+                        return None
+                    numbers = []
+                    for part in parts:
+                        if not 1 <= len(part) <= 9 or any(c not in '0123456789' for c in part):
+                            return None
+                        numbers.append(int(part))
+                    return tuple(numbers)
+
+                def read_tool_versions():
+                    try:
+                        record = _json.loads(read('tools.json', 65536))
+                    except (OSError, ValueError):
+                        return {}
+                    if (not isinstance(record, dict) or type(record.get('protocol')) is not int or record['protocol'] != 1 or
+                            not isinstance(record.get('tools'), dict)):
+                        return {}
+                    tools = {}
+                    for name, entry in record['tools'].items():
+                        if not isinstance(name, str) or not isinstance(entry, dict):
+                            continue
+                        digest = entry.get('sha256')
+                        if not isinstance(digest, str) or len(digest) != 64 or any(c not in '0123456789abcdef' for c in digest):
+                            continue
+                        version = entry.get('version')
+                        tools[name] = dict(sha256=digest, version=version if isinstance(version, str) else '')
+                    return tools
+
+                def write_tool_versions(tools):
+                    if not tools:
+                        return
+                    payload = _json.dumps(dict(protocol=1, tools=tools), sort_keys=True, separators=(',', ':')).encode()
+                    try:
+                        if read('tools.json', 65536) == payload:
+                            return
+                    except (OSError, ValueError):
+                        pass
+                    try:
+                        publish('tools.json', payload)
+                    except OSError:
+                        pass
+
+                def links_to(name, stem):
+                    try:
+                        return _os.readlink(_os.path.join(runtime_root, name)) == stem
+                    except OSError:
+                        return False
+
                 def publish_tools(data):
                     try:
                         remove_stale_temporaries()
@@ -9427,14 +9477,38 @@ if __name__ == '__main__':
                         relink('reader.py', reader_digest + '.py')
                     except OSError:
                         pass
+                    offered = []
                     for name, suffix, variable in TOOLS:
                         tool = globals().get(variable)
                         if not isinstance(tool, str) or not tool:
                             continue
                         try:
-                            publish_named_tool(name, suffix, _base64.b64decode(tool))
+                            payload = _base64.b64decode(tool)
                         except (ValueError, OSError):
-                            pass
+                            continue
+                        offered.append((name, suffix, _hashlib.sha256(payload).hexdigest(), payload))
+                    if not offered:
+                        return
+                    version = globals().get('MULTIBOT_APP_VERSION')
+                    version = version if isinstance(version, str) else ''
+                    key = version_key(version)
+                    recorded = read_tool_versions()
+                    fresh = [tool for tool in offered
+                             if (recorded.get(tool[0]) or {}).get('sha256') != tool[2] or not links_to(tool[0], tool[2] + '-' + tool[1])]
+                    if not fresh:
+                        return
+                    for name, _suffix, _digest, _payload in fresh:
+                        published_key = version_key((recorded.get(name) or {}).get('version'))
+                        if published_key is not None and (key is None or published_key > key):
+                            return
+                    updated = dict(recorded)
+                    for name, suffix, digest, payload in fresh:
+                        try:
+                            publish_named_tool(name, suffix, payload)
+                        except (ValueError, OSError):
+                            continue
+                        updated[name] = dict(sha256=digest, version=version)
+                    write_tool_versions(updated)
                 missing = object()
                 try:
                     active = _json.loads(read('active.json', 4096))
