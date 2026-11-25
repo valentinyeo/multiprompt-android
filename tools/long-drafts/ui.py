@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 import xml.etree.ElementTree as ET
 from PIL import Image
@@ -17,6 +18,13 @@ GRID = (16, 8)
 CELL_TOLERANCE = 10
 DIFFERENT_CELLS = 8
 MIDDLE_BAND = (0.1, 0.9)
+SEGMENT_CHARS = 500
+SEGMENT_FLOOR = 125
+TAIL_CHARS = 4
+SETTLE_READS = 3
+FILL_ROUNDS = 24
+TYPED_CAP = 6
+DELETE_BATCH = 20
 
 SKILL_PILLS = Path(__file__).resolve().parents[1] / 'skill-pills' / 'ui.py'
 _spec = importlib.util.spec_from_file_location('skill_pills_ui', SKILL_PILLS)
@@ -103,23 +111,99 @@ def dump_ui(destination):
     return Path(destination)
 
 
+def typed(text):
+    return text.replace(' ', '%s')
+
+
+def advance(observed, expected, limit=None):
+    keep = 0
+    while keep < len(observed) and keep < len(expected) and observed[keep] == expected[keep]:
+        keep += 1
+    want = len(expected) if limit is None else min(len(expected), keep + limit)
+    ok = observed == expected
+    return {'ok': ok, 'field_chars': len(observed), 'expected_chars': len(expected), 'keep': keep,
+            'delete': len(observed) - keep, 'retype': '' if ok else typed(expected[keep:want]), 'want': want}
+
+
 def step(args):
     path = Path(args.xml) if args.xml else dump_ui(args.dump)
     root = ET.parse(path).getroot()
     observed = composer(app_nodes(root)).get('text') or ''
-    expected = Path(args.expected).read_text()[:args.want]
-    keep = 0
-    while keep < len(observed) and keep < len(expected) and observed[keep] == expected[keep]:
-        keep += 1
-    ok = observed == expected
-    payload = {'ok': ok, 'field_chars': len(observed), 'expected_chars': len(expected), 'keep': keep,
-               'delete': len(observed) - keep, 'retype': '' if ok else typed(expected[keep:])}
+    payload = advance(observed, Path(args.expected).read_text()[:args.want])
     print(json.dumps(payload))
     return payload
 
 
-def typed(text):
-    return text.replace(' ', '%s')
+def field_text(dump):
+    root = ET.parse(dump_ui(dump)).getroot()
+    return composer(app_nodes(root)).get('text') or ''
+
+
+def key_deletes(count, adb=ADB):
+    while count > 0:
+        take = min(count, DELETE_BATCH)
+        subprocess.run([adb, 'shell', 'input', 'keyevent', *(['KEYCODE_DEL'] * take)], check=True)
+        count -= take
+        time.sleep(0.3)
+
+
+def type_keys(text, adb=ADB):
+    if not text:
+        return
+    subprocess.run([adb, 'shell', 'input', 'text', text], check=True)
+
+
+def settle(read, observed, reads=SETTLE_READS, pause=0.6):
+    for _ in range(reads):
+        time.sleep(pause)
+        fresh = read()
+        if fresh == observed:
+            return fresh
+        observed = fresh
+    return observed
+
+
+def filling(expected, read, type_keys_fn, erase, segment=SEGMENT_CHARS, tail=TAIL_CHARS,
+            rounds=FILL_ROUNDS, typed_cap=TYPED_CAP, pause=0.6, report=None):
+    report = report or (lambda item: None)
+    body = expected[:max(0, len(expected) - tail)]
+    observed = read()
+    typed_chars = 0
+    attempts = 0
+    limit = segment
+    best = -1
+    stalls = 0
+    while observed != body and attempts < rounds and typed_chars <= len(expected) * typed_cap:
+        attempts += 1
+        plan = advance(observed, body, limit)
+        if plan['delete'] > 0:
+            erase(plan['delete'])
+        if plan['retype']:
+            type_keys_fn(plan['retype'])
+            typed_chars += len(plan['retype'])
+        observed = settle(read, observed, pause=pause)
+        if plan['retype'] and plan['keep'] <= best:
+            burst = advance(observed, body, limit)['retype']
+            if burst:
+                type_keys_fn(burst)
+                typed_chars += len(burst)
+            observed = settle(read, observed, pause=pause)
+        current = advance(observed, body, limit)
+        if current['keep'] <= best:
+            stalls += 1
+        else:
+            stalls = 0
+        best = max(best, current['keep'])
+        if stalls >= 2 and limit > SEGMENT_FLOOR:
+            limit = max(SEGMENT_FLOOR, limit // 2)
+            stalls = 0
+        report({'fill_round': attempts, 'fill_field_chars': len(observed), 'fill_keep': current['keep'],
+                'fill_typed_chars': typed_chars, 'fill_segment': limit, 'fill_ok': observed == body})
+    for character in expected[len(body):]:
+        type_keys_fn(typed(character))
+    observed = settle(read, observed, pause=pause)
+    return {'ok': observed == expected, 'fill_rounds': attempts, 'fill_typed_chars': typed_chars,
+            'field_chars': len(observed), 'expected_chars': len(expected)}
 
 
 def capture(args):
@@ -227,6 +311,18 @@ def verify(args):
         raise SystemExit('LONG_DRAFTS_JOURNEY_FAILED: ' + '; '.join(errors))
 
 
+def fill_command(args):
+    expected = Path(args.expected).read_text()
+    payload = filling(expected, lambda: field_text(args.dump), type_keys, key_deletes,
+                      segment=args.segment, tail=args.tail, rounds=args.rounds,
+                      report=lambda item: print(json.dumps(item)))
+    print(json.dumps(payload))
+    if not payload['ok']:
+        raise SystemExit(f'LONG_DRAFTS_FILL_FAILED: the composer holds {payload["field_chars"]} characters of '
+                         f'{payload["expected_chars"]} after {payload["fill_rounds"]} rounds and '
+                         f'{payload["fill_typed_chars"]} typed characters')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Assert the long-draft composer geometry, text and scrolling.')
     commands = parser.add_subparsers(dest='command', required=True)
@@ -243,12 +339,19 @@ def main():
     check = commands.add_parser('verify')
     check.add_argument('--state', required=True)
     check.set_defaults(run=verify)
-    fill = commands.add_parser('step')
-    fill.add_argument('--expected', required=True)
-    fill.add_argument('--want', type=int, required=True)
-    fill.add_argument('--xml')
-    fill.add_argument('--dump', default='current.xml')
-    fill.set_defaults(run=step)
+    check_fill = commands.add_parser('step')
+    check_fill.add_argument('--expected', required=True)
+    check_fill.add_argument('--want', type=int, required=True)
+    check_fill.add_argument('--xml')
+    check_fill.add_argument('--dump', default='current.xml')
+    check_fill.set_defaults(run=step)
+    write = commands.add_parser('fill')
+    write.add_argument('--expected', required=True)
+    write.add_argument('--dump', default='current.xml')
+    write.add_argument('--segment', type=int, default=SEGMENT_CHARS)
+    write.add_argument('--tail', type=int, default=TAIL_CHARS)
+    write.add_argument('--rounds', type=int, default=FILL_ROUNDS)
+    write.set_defaults(run=fill_command)
     args = parser.parse_args()
     args.run(args)
 

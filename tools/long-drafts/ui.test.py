@@ -96,6 +96,34 @@ def rejects(action, message):
     raise SystemExit(f'the check accepted {message}')
 
 
+class Phone:
+    def __init__(self, drop=None):
+        self.buffer = ''
+        self.drop = drop
+        self.drop_every_type = False
+        self.drops = 0
+
+    def read(self):
+        return self.buffer
+
+    def erase(self, count):
+        assert 0 < count <= len(self.buffer), f'a fill asked to delete {count} of {len(self.buffer)} characters'
+        self.buffer = self.buffer[:len(self.buffer) - count]
+
+    def type_keys(self, text):
+        raw = text.replace('%s', ' ')
+        self.buffer += raw
+        if self.drop_every_type:
+            self.buffer = self.buffer[:-1]
+            self.drops += 1
+        elif self.drop and not self.drops:
+            marker, index = self.drop
+            if marker in raw:
+                start = len(self.buffer) - len(raw) + index
+                self.buffer = self.buffer[:start] + self.buffer[start + 1:]
+                self.drops = 1
+
+
 def main():
     text = drafts.draft(100)
     assert len(text) == 100 and '/review-native' in text
@@ -150,7 +178,30 @@ def main():
     assert replaced['ok'] is False and replaced['keep'] == 0, replaced
     assert replaced['delete'] == len('something else entirely') and replaced['retype'] == drafts.typed(expected), replaced
 
-    print('LONG_DRAFTS_UI_OK: 6 rejected states, 1 accepted sequence, 4 fill states')
+    bounded = ui.advance(expected[:40], expected, limit=10)
+    assert bounded['keep'] == 40 and bounded['delete'] == 0, bounded
+    assert bounded['retype'] == drafts.typed(expected[40:50]) and bounded['want'] == 50, bounded
+
+    whole = drafts.draft(5000)
+    plain = Phone()
+    filled = ui.filling(whole, plain.read, plain.type_keys, plain.erase, pause=0)
+    assert filled['ok'] is True and filled['fill_rounds'] == 10, filled
+    assert plain.buffer == whole, 'a clean fill must reach the exact draft'
+    assert filled['fill_typed_chars'] == len(whole) - 4, filled
+
+    lossy = Phone(drop=('release lands', 40))
+    repaired = ui.filling(whole, lossy.read, lossy.type_keys, lossy.erase, pause=0)
+    assert repaired['ok'] is True and repaired['fill_rounds'] > 1, repaired
+    assert lossy.buffer == whole, 'a burst that loses characters must still reach the exact draft'
+    assert repaired['fill_typed_chars'] > len(whole), repaired
+
+    stuck = Phone(drop=('long', 0))
+    stuck.drop_every_type = True
+    failed = ui.filling(drafts.draft(1000), stuck.read, stuck.type_keys, stuck.erase, rounds=4, pause=0)
+    assert failed['ok'] is False and failed['fill_rounds'] == 4, failed
+    assert stuck.buffer != drafts.draft(1000), 'a device that never keeps the text must fail the fill'
+
+    print('LONG_DRAFTS_UI_OK: 6 rejected states, 1 accepted sequence, 4 fill states, 3 typed fills')
 
 
 if __name__ == '__main__':

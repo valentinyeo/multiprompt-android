@@ -18,51 +18,17 @@ capture() {
     python3 -B "$tool/ui.py" capture --xml "$xml" --png "$png" --length "$length" --phase "$phase" \
         --expected "$expected" --state "$state" "$@"
 }
-fill_step() {
-    python3 -B "$tool/ui.py" step --expected "$1" --want "$2" --dump "$work/pending.xml"
-}
-json_value() {
-    python3 -B -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
-}
-type_until() {
-    local draft=$1 want=$2 text=$3 attempt payload keep delete
-    for attempt in 1 2 3 4 5 6; do
-        if [[ -n "$text" ]]; then
-            adb shell input text "$text"
-            sleep 0.7
-        fi
-        payload=$(fill_step "$draft" "$want")
-        if [[ "$(printf '%s' "$payload" | json_value ok)" == True ]]; then return 0; fi
-        keep=$(printf '%s' "$payload" | json_value keep)
-        delete=$(printf '%s' "$payload" | json_value delete)
-        text=$(printf '%s' "$payload" | json_value retype)
-        printf 'LONG_DRAFTS_FILL_REPAIR want=%s attempt=%s keep=%s delete=%s\n' "$want" "$attempt" "$keep" "$delete"
-        press KEYCODE_DEL "$delete"
-    done
-    return 1
-}
 fill_draft() {
-    local length=$1 draft=$2 attempt chunk want prefix
-    prefix=$(wc -c < "$work/draft-$length-prefix.txt")
-    for attempt in 1 2 3; do
+    local length=$1 draft=$2 attempt
+    for attempt in 1 2; do
         tap_node editor ''
         adb shell input keycombination 113 29
         adb shell input keyevent KEYCODE_DEL
         "$mpa" read --select editor-value --value composer --extra ''
-        "$mpa" fill 'Message verify-session' "$(cat "$work/draft-$length-prefix.txt")"
-        if ! type_until "$draft" "$prefix" ''; then
-            printf 'LONG_DRAFTS_PREFIX_FAILED length=%s attempt=%s\n' "$length" "$attempt"
-            continue
+        if python3 -B "$tool/ui.py" fill --expected "$draft" --dump "$work/pending.xml" --tail 4; then
+            return 0
         fi
-        want=$prefix
-        for chunk in "$work"/draft-"$length"-bulk-*.txt "$work/draft-$length-tail.txt"; do
-            want=$((want + $(wc -c < "$chunk")))
-            if ! type_until "$draft" "$want" "$(cat "$chunk")"; then
-                printf 'LONG_DRAFTS_CHUNK_FAILED length=%s want=%s\n' "$length" "$want"
-                continue 2
-            fi
-        done
-        return 0
+        printf 'LONG_DRAFTS_FILL_ATTEMPT_FAILED length=%s attempt=%s\n' "$length" "$attempt"
     done
     printf 'LONG_DRAFTS_FILL_FAILED length=%s\n' "$length" >&2
     return 1

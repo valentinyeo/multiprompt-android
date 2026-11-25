@@ -21,15 +21,17 @@ message from this journey.
 
 For every length the driver:
 
-1. Focuses the composer and clears it with Ctrl+A and Delete, then reads the field back as empty.
-2. Fills the first 20 characters through `mpa fill`, which types one real key event per character
-   and reads the field back, then types the rest in 50-character chunks with `input text` so every
-   character arrives as a key event. A burst of key events drops characters anywhere in the draft on
-   this emulator, so after every chunk the driver reads the composer back, finds the first character
-   that is no longer the expected one, Deletes back to it and retypes the rest, up to six times,
-   before it moves to the next chunk. `--length 100` also requires the painted skill pill outline
-   inside the composer at the end of the fill, and the two longer drafts require no pill outline
-   because a scrolled draft draws none.
+1. Focuses the composer, clears it with Ctrl+A and Delete, then reads the field back as empty.
+2. Fills the draft with `tools/long-drafts/ui.py fill`. The fill types up to 500 characters per
+   `input text` burst, so every character still arrives as a real key event, waits until the field
+   stops changing, reads it back, and compares. When a burst loses characters anywhere in the draft,
+   the fill deletes back to the first character that no longer matches and retypes from there, capped
+   at one burst, so a repair never retypes the whole draft. A round that makes no progress halves the
+   burst, and the fill stops with `LONG_DRAFTS_FILL_FAILED` after 24 rounds or six times the draft in
+   typed characters instead of eating the job's time limit. The last four characters are typed one key
+   event at a time. `--length 100` also requires the painted skill pill outline inside the composer at
+   the end of the fill, and the two longer drafts require no pill outline because a scrolled draft
+   draws none.
 3. Requires the exact draft back in the field, the same field width as the shorter drafts, and the
    field inside the window between the attach and send controls. That is the no-horizontal-overflow
    check: the field never widens, only the height grows, then stops at the six-line cap.
@@ -57,8 +59,12 @@ The field stops growing at six lines, so a 1,000 character and a 5,000 character
 height. That is the wrap proof, not a missing screenshot: the whole draft is in the field, the field
 width never changes, and only the visible window moves.
 
-A burst of key events drops characters anywhere in the draft, not only at its end, so the driver
-reads every chunk back and rewinds the field to the last correct character before retyping.
+A burst of key events drops characters anywhere in the draft, not only at its end, so the fill reads
+the field back after every burst and rewinds it to the last correct character before retyping. The
+burst is 500 characters rather than a handful, because the emulator drops about as many characters
+per burst either way: the read-back and retry cost, not the typing, is what made an earlier 50
+character chunk version of this journey need about 14 seconds per 50 characters and run past the
+35 minute job limit on the 5,000 character draft.
 
 The arrow-walk travel distance is deliberately generous: a line holds about 20 characters, so
 overshooting only parks the caret at the start or the end of the draft, which is exactly what the
