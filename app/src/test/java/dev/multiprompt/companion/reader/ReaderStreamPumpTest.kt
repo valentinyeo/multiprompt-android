@@ -2,8 +2,8 @@ package dev.multiprompt.companion.reader
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.TestScope
@@ -29,7 +29,7 @@ class ReaderStreamPumpTest {
         val streamedBy = mutableListOf<Int>()
     }
 
-    private fun TestScope.pump(selected: Flow<Boolean>, host: FakeHost, failures: MutableList<Throwable> = mutableListOf()) {
+    private fun TestScope.pump(selected: StateFlow<Boolean>, host: FakeHost, failures: MutableList<Throwable> = mutableListOf()) {
         val pump = ReaderStreamPump<Int>(
             wanted = selected,
             connect = {
