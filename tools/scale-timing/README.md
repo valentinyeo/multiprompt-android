@@ -44,7 +44,7 @@ the same harness and are not a signed-release or physical-phone latency claim. F
 secondary because this emulator uses software rendering. No drawn frame or fewer than 350 measured
 keys makes the measurement incomplete, not fast.
 
-A separate sampled Main-thread method trace follows the timed trials, so profiling overhead cannot
+A separate sampled Main-thread method trace precedes the timed trials, so profiling overhead cannot
 inflate the reported keys. `typing-profile.py` renders its exclusive and inclusive CPU attribution.
 Compare at least five trials per side and report their spread; an effect inside that spread is inconclusive.
 The first run chooses between screen invalidation, draft persistence and skill lookup using CPU and

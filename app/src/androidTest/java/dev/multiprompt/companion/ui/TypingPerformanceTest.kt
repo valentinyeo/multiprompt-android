@@ -51,6 +51,10 @@ class TypingPerformanceTest {
                 click(waitNode(240_000) { it.contentDescription?.toString() == "Robot $session" })
                 waitNode(600_000) { it.text?.contains(marker) == true }
                 click(waitNode { it.isEditable })
+                Debug.startMethodTracingSampling(File(output, "typing-profile").absolutePath, 8 * 1024 * 1024, 1000)
+                try {
+                    repeat(10) { key(5, "profile", it) { instrumentation.sendStringSync("p") } }
+                } finally { Debug.stopMethodTracing() }
                 val text = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh"
                 repeat(5) { trial ->
                     setText("")
@@ -63,6 +67,8 @@ class TypingPerformanceTest {
                         putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_END_INT, 30)
                     }
                     assertTrue(waitNode { it.isEditable }.performAction(AccessibilityNodeInfo.ACTION_SET_SELECTION, selection))
+                    waitNode { it.isEditable && it.textSelectionStart == 30 && it.textSelectionEnd == 30 }
+                    instrumentation.waitForIdleSync()
                     val edit = "MIDediting"
                     edit.forEachIndexed { index, char ->
                         records.put(key(trial, "edit", index) { instrumentation.sendStringSync(char.toString()) })
@@ -77,13 +83,11 @@ class TypingPerformanceTest {
                 click(waitNode { it.contentDescription?.toString() == "Robot $session" })
                 assertDraft(expected)
                 File(output, "draft-reopened.txt").writeText(expected)
-                click(waitNode { it.isEditable })
-                Debug.startMethodTracingSampling(File(output, "typing-profile").absolutePath, 8 * 1024 * 1024, 1000)
-                try {
-                    repeat(10) { key(5, "profile", it) { instrumentation.sendStringSync("p") } }
-                } finally { Debug.stopMethodTracing() }
             } finally {
                 File(output, "keys.json").writeText(records.toString(2))
+                instrumentation.uiAutomation.rootInActiveWindow?.let { root ->
+                    File(output, "last-draft.txt").writeText(nodes(root).firstOrNull { it.isEditable }?.text?.toString().orEmpty())
+                }
                 scenario.onActivity { activity ->
                     frame = null
                     TypingProbe.compositions = null
