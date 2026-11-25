@@ -43,6 +43,7 @@ import org.connectbot.sshlib.SessionExit
 import org.connectbot.sshlib.SshClient
 import org.connectbot.sshlib.SshClientConfig
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class PresentedHostKey(
     val type: String,
@@ -70,6 +71,23 @@ sealed class SshProblem(message: String) : Exception(message) {
         fun keyRejected(label: String) = "$label$KEY_REJECTED"
         fun isKeyRejected(error: String) = error.endsWith(KEY_REJECTED)
     }
+}
+
+internal suspend fun <T : Any> openSshChannel(open: suspend () -> T?): T {
+    val channel = try {
+        open()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        val refused = generateSequence<Throwable>(error) { it.cause }.any {
+            val message = it.message.orEmpty()
+            message.contains("open failed", ignoreCase = true) ||
+                message.contains("administratively prohibited", ignoreCase = true)
+        }
+        if (!refused) throw error
+        throw SshProblem.LinkUnavailable("The SSH server refused a channel").also { it.initCause(error) }
+    }
+    return channel ?: throw SshProblem.LinkUnavailable("The SSH server refused a channel")
 }
 
 class SshRepository(private val secrets: SecretStorage) {
@@ -102,12 +120,43 @@ class SshRepository(private val secrets: SecretStorage) {
         block: suspend (SshClient) -> T,
     ): T = withContext(Dispatchers.IO) {
         try {
-            links.use(host.id, LinkPolicy.identity(host), stallMs, { openClient(host, pooled = true) }, block)
+            links.use(host.id, LinkPolicy.identity(host), stallMs, { openClient(host) }, block)
         } finally {
-            linkScope.launch {
-                delay(LinkPolicy.IDLE_MS)
-                links.sweep()
-            }
+            sweepLater()
+        }
+    }
+
+    class ServerLink internal constructor(
+        private val scope: CoroutineScope,
+        private val rented: LinkPool.Rented<SshClient>,
+        private val onRelease: suspend () -> Unit,
+    ) : AutoCloseable {
+        private val released = AtomicBoolean(false)
+        val client: SshClient get() = rented.link
+
+        suspend fun <T> use(block: suspend (SshClient) -> T): T = rented.use(block)
+
+        suspend fun releaseNow() {
+            if (released.compareAndSet(false, true)) onRelease()
+        }
+
+        override fun close() {
+            scope.launch { releaseNow() }
+        }
+    }
+
+    suspend fun rentServerLink(host: HostProfile): ServerLink = withContext(Dispatchers.IO) {
+        val rented = links.rent(host.id, LinkPolicy.identity(host)) { openClient(host) }
+        ServerLink(linkScope, rented) {
+            rented.release()
+            sweepLater()
+        }
+    }
+
+    private fun sweepLater() {
+        linkScope.launch {
+            delay(LinkPolicy.IDLE_MS)
+            links.sweep()
         }
     }
 
@@ -148,9 +197,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
-    suspend fun connect(host: HostProfile, keepAlive: Boolean = false): SshClient = openClient(host, pooled = keepAlive)
-
-    private suspend fun openClient(host: HostProfile, pooled: Boolean): SshClient = withContext(Dispatchers.IO) {
+    private suspend fun openClient(host: HostProfile): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
         val client = SshClient(
             SshClientConfig {
@@ -158,10 +205,8 @@ class SshRepository(private val secrets: SecretStorage) {
                 this.port = host.port
                 hostKeyVerifier = probe
                 clientVersion = "SSH-2.0-multiprompt_android_1"
-                if (pooled) {
-                    autoDisconnectOnLastChannelClose = false
-                    keepAliveIntervalMs = LinkPolicy.KEEPALIVE_MS
-                }
+                autoDisconnectOnLastChannelClose = false
+                keepAliveIntervalMs = LinkPolicy.KEEPALIVE_MS
             },
         )
         val result = client.connect()
@@ -213,8 +258,7 @@ class SshRepository(private val secrets: SecretStorage) {
         hosted: Boolean = false,
         onSnapshot: (StreamSnapshot) -> Unit,
     ) = coroutineScope {
-        val session = client.openSession()
-            ?: throw SshProblem.Connection("The SSH server refused a reader channel")
+        val session = openSshChannel { client.openSession() }
         try {
             if (!session.requestExec(TmuxCommands.stream(sessionName, hosted))) {
                 throw SshProblem.Connection("The SSH server refused the tmux reader")
@@ -324,8 +368,7 @@ class SshRepository(private val secrets: SecretStorage) {
         exchange: suspend (suspend (String) -> String) -> Unit,
     ) = withContext(Dispatchers.IO) {
         coroutineScope {
-            val session = client.openSession()
-                ?: throw SshProblem.LinkUnavailable("The SSH server refused a history channel")
+            val session = openSshChannel { client.openSession() }
             try {
                 check(session.requestExec(ChatHistoryProtocol.command(script)))
                 launch { for (chunk in session.stderr) { } }
@@ -364,8 +407,7 @@ class SshRepository(private val secrets: SecretStorage) {
         onResponse: (TranscriptProtocol.Response) -> Unit,
     ) = coroutineScope {
         require(TranscriptProtocol.supports(initialIdentity.agent))
-        val session = client.openSession()
-            ?: throw SshProblem.Connection("The SSH server refused a transcript channel")
+        val session = openSshChannel { client.openSession() }
         try {
             if (!session.requestExec("exec python3 ~/.local/share/zigshell/mp_complete.py --serve")) {
                 throw SshProblem.Connection("The SSH server refused the transcript helper")
@@ -416,8 +458,7 @@ class SshRepository(private val secrets: SecretStorage) {
         withTimeout(PI_MODELS_TIMEOUT_MS) {
             withServerLink(host) { client ->
                 coroutineScope {
-                    val session = client.openSession()
-                        ?: throw SshProblem.Connection("The SSH server refused a model list channel")
+                    val session = openSshChannel { client.openSession() }
                     try {
                         if (!session.requestExec("exec python3 ~/.local/share/zigshell/mp_complete.py --serve")) {
                             throw SshProblem.Connection("The SSH server refused the model list helper")
@@ -780,14 +821,7 @@ class SshRepository(private val secrets: SecretStorage) {
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,
-    ): T {
-        val client = connect(host)
-        return try {
-            block(client)
-        } finally {
-            runCatching { client.disconnect() }
-        }
-    }
+    ): T = withServerLink(host, block = block)
 
     suspend fun answerQuestion(client: SshClient, sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion, screen: String, choices: Set<Int>, other: String) {
         execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, choices, other),
@@ -821,8 +855,7 @@ class SshRepository(private val secrets: SecretStorage) {
         stdin: ByteArray? = null,
         stdinStream: java.io.InputStream? = null,
     ): CommandResult = coroutineScope {
-        val session = client.openSession()
-            ?: throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
+        val session = openSshChannel { client.openSession() }
         try {
             if (!session.requestExec(command)) {
                 throw SshProblem.LinkUnavailable("The SSH server refused the tmux query")

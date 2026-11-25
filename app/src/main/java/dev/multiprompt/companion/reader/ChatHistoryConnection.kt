@@ -2,8 +2,6 @@ package dev.multiprompt.companion.reader
 
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.SshRepository
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.concurrent.thread
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -20,7 +18,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -57,7 +54,6 @@ class ChatHistoryConnection(
     private val journal: MessageJournal? = null,
     private val gate: MessageGate? = null,
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
-    private val sharedClient: (() -> SshClient?)? = null,
     private val onReply: (SshClient?) -> Unit = {},
     private val beforeAdmission: (suspend () -> Unit)? = null,
     private val stallMillis: Long = ConversationLoad.TIMEOUT_MS,
@@ -306,12 +302,10 @@ class ChatHistoryConnection(
     private suspend fun connected(block: suspend (suspend (String) -> String) -> Unit) = coroutineScope {
         lastReply = System.nanoTime()
         loadStarted = lastReply
-        val own = AtomicReference<SshClient?>()
         val watchdog = launch {
             while (true) {
                 val retry = withTimeoutOrNull((stallMillis / 4).coerceAtLeast(1L)) { retryNudge.receive() } != null
                 if (retry || (selected && ConversationLoad.expired(System.nanoTime(), loadStarted, lastReply, _state.value.ready, stallMillis))) {
-                    own.get()?.let(::disconnectAside)
                     if (retry) throw RetryRequested() else throw StalledChat()
                 }
             }
@@ -325,25 +319,22 @@ class ChatHistoryConnection(
         }
         try {
             val transport = connectedExchange
-            if (transport != null) {
-                transport(tracked)
+            val rented = if (transport == null) {
+                withTimeout(20_000L) { repository.rentServerLink(host) }
             } else {
-                val shared = sharedClient?.invoke()
-                val client = shared ?: withTimeout(20_000L) { repository.connect(host) }.also { own.set(it) }
-                readerClient = client
-                try {
-                    repository.streamChatHistory(client, script, tracked)
-                } finally {
-                    if (shared == null) disconnectAside(client)
+                null
+            }
+            readerClient = rented?.client
+            try {
+                if (transport != null) transport(tracked) else {
+                    requireNotNull(rented).use { client -> repository.streamChatHistory(client, script, tracked) }
                 }
+            } finally {
+                rented?.releaseNow()
             }
         } finally {
             watchdog.cancel()
         }
-    }
-
-    private fun disconnectAside(client: SshClient) {
-        thread(isDaemon = true, name = "chat-disconnect") { runCatching { runBlocking { client.disconnect() } } }
     }
 
     fun start() {

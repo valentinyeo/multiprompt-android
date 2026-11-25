@@ -1,0 +1,109 @@
+name: Shared SSH link regression proof
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  pool:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: ./.github/actions/gradle-ci
+        with:
+          read-only: true
+      - name: Start public-key-only sshd with the production channel and idle limits
+        run: |
+          set -euo pipefail
+          fixture="$RUNNER_TEMP/pool-fixture"
+          mkdir -p "$fixture" pool-proof
+          sudo apt-get update -qq
+          sudo apt-get install -y openssh-server
+          sudo useradd -m -s /bin/bash poolssh
+          sudo usermod -p x poolssh
+          ssh-keygen -q -t ed25519 -N '' -C pool-proof -f "$fixture/user-key"
+          ssh-keygen -q -t ed25519 -N '' -C pool-proof -f "$fixture/host-key"
+          sudo install -d -m 700 -o poolssh -g poolssh /home/poolssh/.ssh
+          sudo install -m 600 -o poolssh -g poolssh "$fixture/user-key.pub" /home/poolssh/.ssh/authorized_keys
+          sudo install -d -m 755 /run/sshd
+          cat > "$fixture/sshd_config" <<CONFIG
+          Port 2222
+          ListenAddress 127.0.0.1
+          HostKey $fixture/host-key
+          PidFile $fixture/sshd.pid
+          AuthorizedKeysFile .ssh/authorized_keys
+          PasswordAuthentication no
+          KbdInteractiveAuthentication no
+          PubkeyAuthentication yes
+          AuthenticationMethods publickey
+          PermitRootLogin no
+          AllowUsers poolssh
+          UsePAM no
+          MaxSessions 10
+          ClientAliveInterval 30
+          ClientAliveCountMax 4
+          LogLevel VERBOSE
+          CONFIG
+          sudo /usr/sbin/sshd -T -f "$fixture/sshd_config" > pool-proof/sshd-effective.txt
+          grep -qx 'maxsessions 10' pool-proof/sshd-effective.txt
+          grep -qx 'clientaliveinterval 30' pool-proof/sshd-effective.txt
+          grep -qx 'clientalivecountmax 4' pool-proof/sshd-effective.txt
+          sudo /usr/sbin/sshd -f "$fixture/sshd_config" -E "$fixture/sshd.log"
+          printf 'POOL_SSH_KEY=%s\n' "$fixture/user-key" >> "$GITHUB_ENV"
+          printf 'POOL_SSH_FINGERPRINT=%s\n' "$(ssh-keygen -lf "$fixture/host-key.pub" -E sha256 | awk '{print $2}')" >> "$GITHUB_ENV"
+          git rev-parse HEAD > pool-proof/app-source-sha.txt
+      - name: Real JVM channels, idle keepalive, five-way reconnect and unread-channel isolation
+        timeout-minutes: 25
+        run: |
+          set -euo pipefail
+          timeout 24m tools/ci/gradle-retry.sh --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*LinkPoolSshTest' --tests '*LinkPoolTest' --tests '*ServerLinkReuseTest' --tests '*OpenSshChannelTest' 2>&1 | tee pool-proof/head.txt
+      - name: Retain head results
+        if: always()
+        run: |
+          mkdir -p pool-proof/head-results
+          cp app/build/test-results/testDebugUnitTest/TEST-*LinkPool*.xml pool-proof/head-results/ 2>/dev/null || true
+          cp app/build/test-results/testDebugUnitTest/TEST-*ServerLinkReuse*.xml pool-proof/head-results/ 2>/dev/null || true
+          cp app/build/test-results/testDebugUnitTest/TEST-*OpenSshChannel*.xml pool-proof/head-results/ 2>/dev/null || true
+      - name: The same eleventh-channel test must fail on the original pool
+        timeout-minutes: 12
+        run: |
+          set -euo pipefail
+          control="$RUNNER_TEMP/pool-control"
+          git worktree add --detach "$control" 72b4e2aa
+          cp app/src/test/java/dev/multiprompt/companion/ssh/LinkPoolSshTest.kt "$control/app/src/test/java/dev/multiprompt/companion/ssh/"
+          if timeout 11m tools/ci/gradle-retry.sh -p "$control" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g testDebugUnitTest --tests '*LinkPoolSshTest.eleventhChannelUsesSecondLogin' > pool-proof/control.txt 2>&1; then
+            echo 'The original pool unexpectedly accepted channel eleven'
+            exit 1
+          fi
+          result="$control/app/build/test-results/testDebugUnitTest/TEST-dev.multiprompt.companion.ssh.LinkPoolSshTest.xml"
+          test -f "$result"
+          cp "$result" pool-proof/control.xml
+          grep -q 'failures="1"' "$result"
+          grep -q 'The SSH server refused a command channel' "$result"
+      - name: Keep sshd and delivery evidence, then stop only this fixture
+        if: always()
+        run: |
+          sudo cp "$RUNNER_TEMP/pool-fixture/sshd.log" pool-proof/sshd.log || true
+          sudo cp /home/poolssh/pending-*.txt pool-proof/ || true
+          sudo chown -R "$(id -u):$(id -g)" pool-proof
+          if [ -f "$RUNNER_TEMP/pool-fixture/sshd.pid" ]; then
+            sudo kill "$(cat "$RUNNER_TEMP/pool-fixture/sshd.pid")" || true
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shared-ssh-link-proof
+          path: pool-proof/
+          if-no-files-found: error

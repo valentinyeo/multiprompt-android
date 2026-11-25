@@ -2073,7 +2073,8 @@
         "ReaderStreamPump"
       ],
       "paths": [
-        "^app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryConnection\\.kt$"
+        "^app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryConnection\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/ssh/LinkPool\\.kt$"
       ]
     },
     "bot.look": {
@@ -2319,6 +2320,9 @@
       "description": "Two room sends stay in post order on the phone, and the second agent's reply starts with the first agent's earlier answer before the new message.",
       "journey": "room-order.md",
       "sideEffect": true,
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/room/(RoomService|SshRoomWire)\\.kt$"
+      ],
       "match": [
         "Room messages since your last turn|COALESCE\\(q\\.checked,0\\)"
       ],

@@ -63,10 +63,37 @@ class LinkPool<L : Any>(
     private val close: suspend (L) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
-    private class Held<L>(val identity: LinkPolicy.Identity, val link: L, var inUse: Int, var lastUsedAtMillis: Long)
+    internal class Held<L>(val identity: LinkPolicy.Identity, val link: L, var inUse: Int, var lastUsedAtMillis: Long)
+
+    class Rented<L : Any> internal constructor(
+        private val pool: LinkPool<L>,
+        internal val hostId: String,
+        internal val identity: LinkPolicy.Identity,
+        internal val open: suspend () -> L,
+        internal var entry: Held<L>,
+        internal var reused: Boolean,
+    ) {
+        private val lifecycle = Mutex()
+        private var released = false
+        val link: L get() = entry.link
+
+        suspend fun <T> use(block: suspend (L) -> T): T = lifecycle.withLock {
+            check(!released)
+            pool.run(this, stallMs = null, retryLost = false, block)
+        }
+
+        suspend fun release() = withContext(NonCancellable) {
+            lifecycle.withLock {
+                if (!released) {
+                    released = true
+                    pool.release(hostId, entry)
+                }
+            }
+        }
+    }
 
     private val locks = ConcurrentHashMap<String, Mutex>()
-    private val held = ConcurrentHashMap<String, Held<L>>()
+    private val held = ConcurrentHashMap<String, MutableList<Held<L>>>()
 
     suspend fun <T> use(
         hostId: String,
@@ -75,44 +102,89 @@ class LinkPool<L : Any>(
         open: suspend () -> L,
         block: suspend (L) -> T,
     ): T {
+        val rented = rent(hostId, identity, open)
+        try {
+            return run(rented, stallMs, retryLost = stallMs != null, block)
+        } finally {
+            rented.release()
+        }
+    }
+
+    suspend fun rent(
+        hostId: String,
+        identity: LinkPolicy.Identity,
+        open: suspend () -> L,
+    ): Rented<L> {
+        val (entry, reused) = acquire(hostId, identity, open)
+        return Rented(this, hostId, identity, open, entry, reused)
+    }
+
+    private suspend fun <T> run(
+        rented: Rented<L>,
+        stallMs: Long?,
+        retryLost: Boolean,
+        block: suspend (L) -> T,
+    ): T {
         var attempt = 0
+        var openedOverflow = false
+        val refused = mutableSetOf<L>()
+        if (!isAlive(rented.link)) {
+            val previous = rented.entry
+            val (next, reused) = acquire(rented.hostId, rented.identity, rented.open)
+            rented.entry = next
+            rented.reused = reused
+            release(rented.hostId, previous)
+        }
         while (true) {
-            val (entry, reused) = acquire(hostId, identity, open)
+            val entry = rented.entry
             try {
-                return if (reused && stallMs != null) onReused(entry.link, stallMs, block) else block(entry.link)
+                return if (rented.reused && stallMs != null) onReused(entry.link, stallMs, block) else block(entry.link)
             } catch (cancelled: CancellationException) {
-                withContext(NonCancellable) { evict(hostId, entry) }
+                withContext(NonCancellable) { if (!isAlive(entry.link)) evict(rented.hostId, entry) }
                 throw cancelled
             } catch (error: Throwable) {
-                val outcome = LinkPolicy.afterFailure(error, isAlive(entry.link), attempt, reused)
-                if (outcome.evict) evict(hostId, entry)
-                if (!outcome.retry) throw error
-                attempt++
-            } finally {
-                withContext(NonCancellable) {
-                    lock(hostId).withLock {
-                        entry.inUse--
-                        entry.lastUsedAtMillis = now()
-                    }
+                val alive = isAlive(entry.link)
+                val channelRefused = error is SshProblem.LinkUnavailable && alive
+                if (channelRefused) {
+                    if (openedOverflow) throw error
+                    refused.add(entry.link)
+                } else {
+                    val outcome = LinkPolicy.afterFailure(error, alive, attempt, rented.reused)
+                    if (outcome.evict) evict(rented.hostId, entry)
+                    if (!outcome.retry || (!retryLost && error !is SshProblem.LinkUnavailable)) throw error
+                    attempt++
                 }
+                val (next, reused) = acquire(rented.hostId, rented.identity, rented.open, refused)
+                rented.entry = next
+                rented.reused = reused
+                if (channelRefused && !reused) openedOverflow = true
+                release(rented.hostId, entry)
             }
+        }
+    }
+
+    private suspend fun release(hostId: String, entry: Held<L>) = withContext(NonCancellable) {
+        lock(hostId).withLock {
+            entry.inUse--
+            entry.lastUsedAtMillis = now()
         }
     }
 
     suspend fun sweep(idleMs: Long = LinkPolicy.IDLE_MS) {
         held.keys.toList().forEach { hostId ->
             val expired = lock(hostId).withLock {
-                held[hostId]?.takeIf { LinkPolicy.expired(it.inUse, it.lastUsedAtMillis, now(), idleMs) }
-                    ?.also { held.remove(hostId, it) }
+                val entries = held[hostId] ?: return@withLock emptyList()
+                entries.filter { LinkPolicy.expired(it.inUse, it.lastUsedAtMillis, now(), idleMs) }
+                    .also { entries.removeAll(it.toSet()) }
             }
-            expired?.let { runCatching { close(it.link) } }
+            expired.forEach { runCatching { close(it.link) } }
         }
     }
 
     suspend fun dropAll() {
         held.keys.toList().forEach { hostId ->
-            val dropped = lock(hostId).withLock { held.remove(hostId) }
-            dropped?.let { runCatching { close(it.link) } }
+            val dropped = lock(hostId).withLock { held.remove(hostId)?.toList().orEmpty() }
+            dropped.forEach { runCatching { close(it.link) } }
         }
     }
 
@@ -122,17 +194,17 @@ class LinkPool<L : Any>(
         hostId: String,
         identity: LinkPolicy.Identity,
         open: suspend () -> L,
+        refused: Set<L> = emptySet(),
     ): Pair<Held<L>, Boolean> = lock(hostId).withLock {
-        val current = held[hostId]
-        val decision = LinkPolicy.acquire(current?.identity, identity, current?.let { isAlive(it.link) } ?: false)
-        val chosen = if (decision == LinkPolicy.Acquire.REUSE && current != null) {
+        val entries = held.getOrPut(hostId) { mutableListOf() }
+        val invalid = entries.filter { LinkPolicy.acquire(it.identity, identity, isAlive(it.link)) == LinkPolicy.Acquire.OPEN }
+        entries.removeAll(invalid.toSet())
+        invalid.forEach { runCatching { close(it.link) } }
+        val current = entries.firstOrNull { it.link !in refused }
+        val chosen = if (current != null) {
             current to true
         } else {
-            current?.let {
-                held.remove(hostId, it)
-                runCatching { close(it.link) }
-            }
-            Held(identity, open(), inUse = 0, lastUsedAtMillis = now()).also { held[hostId] = it } to false
+            Held(identity, open(), inUse = 0, lastUsedAtMillis = now()).also(entries::add) to false
         }
         chosen.first.inUse++
         chosen.first.lastUsedAtMillis = now()
@@ -147,7 +219,7 @@ class LinkPool<L : Any>(
     }
 
     private suspend fun evict(hostId: String, entry: Held<L>) {
-        held.remove(hostId, entry)
+        lock(hostId).withLock { held[hostId]?.remove(entry) }
         runCatching { close(entry.link) }
     }
 }

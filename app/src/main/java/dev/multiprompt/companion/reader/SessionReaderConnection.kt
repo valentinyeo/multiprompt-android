@@ -35,6 +35,7 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.connectbot.sshlib.SshClient
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 sealed interface ReaderStatus {
     data object Connecting : ReaderStatus
@@ -167,6 +168,8 @@ class SessionReaderConnection(
     val state: StateFlow<ReaderState> = _state.asStateFlow()
 
     private var streamClient: SshClient? = null
+    private val streamLink = AtomicReference<SshRepository.ServerLink?>(null)
+    private val closed = AtomicBoolean(false)
     @Volatile private var streamProgress: ((SshClient) -> Unit)? = null
     private var streamJob: Job? = null
     private var actionJob: Job? = null
@@ -226,7 +229,7 @@ class SessionReaderConnection(
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
         return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate,
-            sharedClient = { streamClient }, onReply = { client -> client?.let { streamProgress?.invoke(it) } }, pollGate = pollGate)
+            onReply = { client -> client?.let { streamProgress?.invoke(it) } }, pollGate = pollGate)
             .also {
                 historyIdentity = identity
                 historyConnection = it
@@ -430,7 +433,7 @@ class SessionReaderConnection(
         }
         return try {
             withTimeout(SWITCH_TIMEOUT_MS) {
-                withFreshClient { client ->
+                withServerLink { client ->
                     repository.switchAi(client, historyScript, requireNotNull(provider), hostSessionId, to)
                 }
             }
@@ -450,7 +453,7 @@ class SessionReaderConnection(
         }
         return try {
             withTimeout(RESTART_NEWEST_TIMEOUT_MS) {
-                withFreshClient { client ->
+                withServerLink { client ->
                     repository.restartNewest(client, historyScript, requireNotNull(provider), hostSessionId, tmuxSessionName)
                 }
             }
@@ -598,13 +601,13 @@ class SessionReaderConnection(
         true
     }
 
-    private suspend fun pageBackOnce() = withFreshClient { client ->
+    private suspend fun pageBackOnce() = withServerLink { client ->
         repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_UP)
     }
 
     private suspend fun scrollLiveDirect() {
         runCatching {
-            withFreshClient { client ->
+            withServerLink { client ->
                 repository.performAction(client, tmuxSessionName, TmuxAction.SCROLL_BOTTOM)
             }
         }
@@ -642,24 +645,27 @@ class SessionReaderConnection(
     private fun startStream() {
         if (streamJob?.isActive == true) return
         streamJob = scope.launch {
-            ReaderStreamPump<SshClient>(
+            ReaderStreamPump<SshRepository.ServerLink>(
                 wanted = pollGate.active,
-                connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host, keepAlive = true) } },
-                stream = { client, heard ->
-                    streamProgress = { source -> if (source === client) heard() }
-                    try {
-                        paneFrames(paneGate.active) {
-                            streamFrames(client, heard)
-                            error("The tmux reader ended")
+                connect = { withTimeout(CONNECT_TIMEOUT_MS) { adopt(repository.rentServerLink(host)) } },
+                stream = { link, heard ->
+                    link.use { client ->
+                        streamClient = client
+                        streamProgress = { source -> if (source === client) heard() }
+                        try {
+                            paneFrames(paneGate.active) {
+                                streamFrames(client, heard)
+                                error("The tmux reader ended")
+                            }
+                        } finally {
+                            streamProgress = null
                         }
-                    } finally {
-                        streamProgress = null
                     }
                 },
-                release = { client -> runCatching { client.disconnect() } },
-                onClient = { client ->
-                    streamClient = client
-                    if (client != null) _state.update { it.copy(status = ReaderStatus.Live, lastFailure = null) }
+                release = { link -> dropLink(link) },
+                onClient = { link ->
+                    streamClient = link?.client
+                    if (link != null) _state.update { it.copy(status = ReaderStatus.Live, lastFailure = null) }
                 },
                 onConnecting = { _state.update { it.copy(status = ReaderStatus.Connecting) } },
                 onFailure = { throwable ->
@@ -706,7 +712,7 @@ class SessionReaderConnection(
                 val questionScreen = if (request is Request.QuestionAnswer) {
                     withServerLink { repository.captureSession(it, tmuxSessionName) }
                 } else null
-                withFreshClient { client ->
+                withServerLink { client ->
                     when (request) {
                         is Request.RuntimeCommand -> {
                             repository.sendPrompt(client, tmuxSessionName, request.text)
@@ -786,32 +792,35 @@ class SessionReaderConnection(
     private suspend fun <T> withServerLink(block: suspend (SshClient) -> T): T =
         repository.withServerLink(host, block = block)
 
-    suspend fun sendFile(file: DeviceFile): String = withFreshClient { client ->
+    suspend fun sendFile(file: DeviceFile): String = withServerLink { client ->
         repository.uploadFile(client, tmuxSessionName, file)
     }
 
-    private suspend fun <T> withFreshClient(block: suspend (SshClient) -> T): T {
-        val client = withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) }
-        return try {
-            block(client)
-        } finally {
-            runCatching { client.disconnect() }
+    private fun adopt(link: SshRepository.ServerLink): SshRepository.ServerLink {
+        streamLink.getAndSet(link)?.close()
+        if (closed.get()) {
+            link.close()
+            throw CancellationException("The chat closed")
         }
+        return link
+    }
+
+    private fun dropLink(link: SshRepository.ServerLink) {
+        streamLink.compareAndSet(link, null)
+        link.close()
     }
 
     override fun close() {
         _state.update { it.copy(status = ReaderStatus.Closed) }
+        closed.set(true)
         pollGate.close()
         paneGate.close()
         requests.close()
         streamJob?.cancel()
         actionJob?.cancel()
         historyConnection?.close()
-        val oldClient = streamClient
         streamClient = null
-        CoroutineScope(Dispatchers.IO).launch {
-            runCatching { oldClient?.disconnect() }
-        }
+        streamLink.getAndSet(null)?.close()
         scope.cancel()
     }
 

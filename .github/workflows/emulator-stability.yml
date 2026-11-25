@@ -5,6 +5,10 @@ on:
     - cron: '23 3 * * *'
   workflow_dispatch:
     inputs:
+      ssh_pool:
+        description: Run the real JVM SSH pool regression proof instead of the stability series
+        type: boolean
+        default: false
       feature_map:
         description: Run weekly feature-map maintenance instead of the stability series
         type: boolean
@@ -23,6 +27,12 @@ concurrency:
   cancel-in-progress: ${{ inputs.feature_map == true }}
 
 jobs:
+  ssh-pool:
+    if: inputs.ssh_pool == true
+    uses: ./.github/workflows/link-pool-proof.yml
+    permissions:
+      contents: read
+
   maintenance:
     if: inputs.feature_map == true
     uses: ./.github/workflows/maintain-verification.yml
@@ -35,7 +45,7 @@ jobs:
     secrets: inherit
 
   series:
-    if: inputs.feature_map != true
+    if: inputs.feature_map != true && inputs.ssh_pool != true
     runs-on: ubuntu-latest
     timeout-minutes: 160
     steps:

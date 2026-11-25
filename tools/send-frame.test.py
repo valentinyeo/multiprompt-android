@@ -76,35 +76,52 @@ class SendFrameCaptureTest(unittest.TestCase):
             calls = (evidence / 'calls.txt').read_text().splitlines() if (evidence / 'calls.txt').exists() else []
             return result, calls
 
-    def test_remote_send_waits_for_driver_release(self):
+    def hold(self, directory, args=('paste-buffer', '-dpr')):
+        root = Path(directory)
+        fake = root / 'fake-tmux'
+        fake.write_text('#!/usr/bin/env bash\nprintf "TRANSPORT_EXECUTED %s\\n" "$*"\n')
+        fake.chmod(0o700)
+        (root / 'real-tmux').write_text(str(fake) + '\n')
         driver = (SCRIPTS / 'drive.sh').read_text()
-        wrapper = driver.split("<<'DELAY'\n", 1)[1].split('\nDELAY', 1)[0]
+        wrapper = root / 'wrapper.sh'
+        wrapper.write_text(driver.split("<<'DELAY'\n", 1)[1].split('\nDELAY', 1)[0].replace('/home/verifyssh', directory))
+        return root, wrapper, ['bash', str(wrapper), *args]
+
+    def test_remote_send_waits_for_driver_release(self):
         with tempfile.TemporaryDirectory() as directory:
-            release = Path(directory) / 'send-release'
-            env = dict(os.environ, SSH_ORIGINAL_COMMAND='mp_buffer=proof; printf TRANSPORT_EXECUTED')
-            process = subprocess.Popen(['bash', '-c', wrapper.replace('/home/verifyssh', directory)],
-                                       env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+            root, _, command = self.hold(directory)
+            (root / 'send-hold').touch()
+            process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
             try:
                 with self.assertRaises(subprocess.TimeoutExpired):
-                    process.communicate(timeout=0.2)
-                release.touch()
+                    process.communicate(timeout=0.3)
+                self.assertIn(' held ', (root / 'send-delay.log').read_text())
+                (root / 'send-release').touch()
                 stdout, stderr = process.communicate(timeout=3)
                 self.assertEqual(process.returncode, 0, stdout + stderr)
-                self.assertEqual(stdout, 'TRANSPORT_EXECUTED')
+                self.assertEqual(stdout, 'TRANSPORT_EXECUTED paste-buffer -dpr\n')
             finally:
                 if process.poll() is None:
                     os.killpg(process.pid, 9)
                 process.communicate()
 
     def test_remote_send_fails_closed_without_release(self):
-        driver = (SCRIPTS / 'drive.sh').read_text()
-        wrapper = driver.split("<<'DELAY'\n", 1)[1].split('\nDELAY', 1)[0]
         with tempfile.TemporaryDirectory() as directory:
-            env = dict(os.environ, SSH_ORIGINAL_COMMAND='mp_buffer=proof; printf TRANSPORT_EXECUTED')
-            result = subprocess.run(['bash', '-c', wrapper.replace('/home/verifyssh', directory).replace('timeout 60s', 'timeout 0.2s')],
-                                    env=env, capture_output=True, text=True, timeout=3)
+            root, _, command = self.hold(directory)
+            (root / 'send-hold').touch()
+            wrapper = root / 'wrapper.sh'
+            wrapper.write_text(wrapper.read_text().replace('timeout 60s', 'timeout 0.2s'))
+            result = subprocess.run(command, capture_output=True, text=True, timeout=3)
             self.assertNotEqual(result.returncode, 0)
             self.assertNotIn('TRANSPORT_EXECUTED', result.stdout)
+
+    def test_send_runs_at_once_when_the_journey_holds_no_send(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, _, command = self.hold(directory)
+            result = subprocess.run(command, capture_output=True, text=True, timeout=3)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, 'TRANSPORT_EXECUTED paste-buffer -dpr\n')
+            self.assertFalse((root / 'send-delay.log').exists())
 
     def test_screenshot_waits_for_actual_draw_without_starting_a_competing_jvm(self):
         result, calls = self.capture(62)

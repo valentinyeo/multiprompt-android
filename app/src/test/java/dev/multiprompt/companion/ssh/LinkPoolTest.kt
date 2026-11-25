@@ -192,7 +192,7 @@ class LinkPoolTest {
     }
 
     @Test
-    fun timedOutCommandDropsTheLinkSoTheNextRefreshReconnects() = runBlocking {
+    fun timedOutCommandKeepsTheLinkForItsOtherChannels() = runBlocking {
         val server = Server()
         val pool = pool()
         pool.refresh(server) { }
@@ -200,8 +200,9 @@ class LinkPoolTest {
             pool.refresh(server, stallMs = null) { delay(5_000L) }
         }
         assertNull(timedOut)
-        assertTrue(server.opened.single().closed)
-        assertEquals(2, pool.refresh(server) { link -> link.number })
+        assertFalse(server.opened.single().closed)
+        assertEquals(1, pool.refresh(server) { link -> link.number })
+        assertEquals(1, server.opened.size)
     }
 
     @Test
@@ -249,10 +250,30 @@ class LinkPoolTest {
             if (tries == 1) throw SshProblem.LinkUnavailable("The SSH server refused a command channel")
             link.number
         }
-        assertEquals(1, answeredOn)
+        assertEquals(2, answeredOn)
         assertEquals(2, tries)
+        assertEquals(2, server.opened.size)
+        assertTrue(server.opened.none { it.closed })
+    }
+
+    @Test
+    fun aSendWithUnknownDeliveryIsNotReplayedAfterTheLinkDies() = runBlocking {
+        val server = Server()
+        val pool = pool()
+        pool.refresh(server) { }
+        var deliveries = 0
+        try {
+            pool.refresh(server, stallMs = null) { link ->
+                deliveries++
+                link.alive = false
+                throw SshProblem.Connection("The acknowledgement was lost after delivery")
+            }
+            fail("Expected uncertain delivery to surface without a replay")
+        } catch (_: SshProblem.Connection) {
+        }
+        assertEquals(1, deliveries)
         assertEquals(1, server.opened.size)
-        assertFalse(server.opened.single().closed)
+        assertEquals(2, pool.refresh(server) { it.number })
     }
 
     @Test

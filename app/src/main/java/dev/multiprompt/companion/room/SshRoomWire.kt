@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.room
 
+import dev.multiprompt.companion.ssh.openSshChannel
 import java.security.MessageDigest
 import java.util.Base64
 import kotlinx.coroutines.withTimeout
@@ -32,7 +33,7 @@ class SshRoomWire(
 
     private suspend fun ensureSession(): SshSession {
         session?.let { return it }
-        val opened = client.openSession() ?: throw RoomFailure("no_channel")
+        val opened = openSshChannel { client.openSession() }
         if (!opened.requestExec("python3 -u -c \"$BOOTSTRAP\"")) {
             opened.close()
             throw RoomFailure("no_service")
