@@ -18,12 +18,19 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextInputSelection
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextLayoutResult
+import dev.multiprompt.companion.data.SessionReadStore
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import dev.multiprompt.companion.reader.ChatHistoryConnection
@@ -274,6 +281,25 @@ class ComposerLongDraftTest {
         println("COMPOSER_TEXTS bar=$barTexts editable=$editable")
         assertTrue("the composer row shows no hint beside the draft: $barTexts", barTexts.isEmpty())
         assertTrue("the composer field holds the whole draft: $editable", editable.any { it == longDraft })
+    }
+
+    @Test fun movingBackToAMidMessageSlashOpensSkillsBeforeTheDraftIsSaved() {
+        render()
+        val field = compose.onNode(hasSetTextAction())
+        field.performTextInput("Please this")
+        field.performTextInputSelection(TextRange(7))
+        field.performTextInput("/ ")
+        field.assertTextEquals("Please / this")
+        compose.onNodeWithText("/review-native").assertDoesNotExist()
+
+        field.performKeyInput { pressKey(Key.DirectionLeft) }
+
+        compose.onNodeWithText("/review-native").assertIsDisplayed().performClick()
+        field.assertTextEquals("Please /review-native this")
+        assertEquals(
+            "the picker must use the live draft, not the debounced save", "",
+            SessionReadStore(f.app).composerDraft(f.session),
+        )
     }
 
     @Test fun leavingAfterAMiddleEditRestoresTheWholeDraft() {
