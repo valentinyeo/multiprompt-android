@@ -490,22 +490,19 @@ class SessionReaderConnection(
         if (confirmation.shouldPress(visible)) requests.trySend(Request.Action(TmuxAction.ENTER))
     }
 
-    private suspend fun confirmModelSwitchWhilePaneHidden(client: SshClient, command: String) {
-        android.util.Log.d("ModelSwitch545", "pane=${paneGate.active.value} pending=${confirmation.pending.value}")
+    private suspend fun confirmModelSwitchWhilePaneHidden(command: String) {
         if (paneGate.active.value || !confirmation.pending.value) return
         val family = modelFamilyFromCommand(command)
         val effort = command.trim().takeIf { it.startsWith("/effort ") }?.substringAfter(" ")?.trim()?.lowercase()
         val deadline = System.currentTimeMillis() + MODEL_CONFIRM_STEP_MS * MODEL_CONFIRM_READS
         while (System.currentTimeMillis() < deadline) {
             delay(MODEL_CONFIRM_STEP_MS)
-            val screen = runCatching { repository.captureSession(client, tmuxSessionName) }
-                .onFailure { android.util.Log.w("ModelSwitch545", "Capture failed", it) }.getOrNull() ?: return
+            val screen = runCatching { withServerLink { repository.captureSession(it, tmuxSessionName) } }.getOrNull() ?: return
             if (confirmation.shouldPress(TmuxText.isModelSwitchConfirmation(screen))) {
-                repository.performAction(client, tmuxSessionName, TmuxAction.ENTER)
+                withServerLink { repository.performAction(it, tmuxSessionName, TmuxAction.ENTER) }
                 continue
             }
             val details = TmuxText.runtimeDetails(screen)
-            android.util.Log.d("ModelSwitch545", "observed=${details.model}/${details.effort} expected=$family/$effort")
             val applied = if (family != null) HostSettings.family(details.model) == family
                 else effort != null && details.effort == effort
             if (applied) {
@@ -706,7 +703,7 @@ class SessionReaderConnection(
                     when (request) {
                         is Request.RuntimeCommand -> {
                             repository.sendPrompt(client, tmuxSessionName, request.text)
-                            confirmModelSwitchWhilePaneHidden(client, request.text)
+                            confirmModelSwitchWhilePaneHidden(request.text)
                         }
                         is Request.Prompt -> repository.sendPrompt(
                             client,
