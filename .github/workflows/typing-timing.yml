@@ -1,6 +1,8 @@
 name: Android typing per-key timing
 
 on:
+  push:
+    branches: [mpa/typing-timing-run]
   workflow_dispatch:
     inputs:
       app_ref:
