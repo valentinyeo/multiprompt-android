@@ -33,6 +33,7 @@ class TypingPerformanceTest {
     private val counts = mutableMapOf<String, Int>()
     private val timings = mutableMapOf<String, Long>()
     private val frames = mutableListOf<Double>()
+    @Volatile private var frameGeneration = 0L
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val arguments = InstrumentationRegistry.getArguments()
 
@@ -63,6 +64,7 @@ class TypingPerformanceTest {
         field.performClick()
         val listener = Window.OnFrameMetricsAvailableListener { _, metrics, _ ->
             frames += metrics.getMetric(FrameMetrics.TOTAL_DURATION) / 1_000_000.0
+            frameGeneration++
         }
         compose.runOnIdle {
             compose.activity.window.addOnFrameMetricsAvailableListener(listener, Handler(Looper.getMainLooper()))
@@ -113,16 +115,19 @@ class TypingPerformanceTest {
     private fun key(trial: Int, phase: String, index: Int, action: () -> Unit): JSONObject {
         var cpu = 0L
         var allocated = 0L
+        var generation = 0L
         compose.runOnIdle {
             counts.clear()
             timings.clear()
             frames.clear()
+            generation = frameGeneration
             allocated = Debug.getRuntimeStat("art.gc.bytes-allocated").toLong()
             cpu = Debug.threadCpuTimeNanos()
         }
         val start = SystemClock.elapsedRealtimeNanos()
         action()
         compose.waitForIdle()
+        if (phase != "idle") compose.waitUntil(10_000) { frameGeneration > generation }
         return compose.runOnIdle {
             JSONObject().put("trial", trial).put("phase", phase).put("index", index)
                 .put("main_ms", (Debug.threadCpuTimeNanos() - cpu) / 1_000_000.0)

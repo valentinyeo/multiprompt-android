@@ -25,6 +25,28 @@ and event log, so the app resolves it exactly like a live Claude chat. Every cha
 
 Roughly 171 MB is written under `/home/verifyssh`; generation takes a few seconds.
 
+## Single-key typing and editing
+
+Dispatch `scale-timing.yml --ref <branch> -f typing=true` for the same 40-chat scale seed.
+The device test opens the 54 MB chat through Inbox search and waits for its newest marker.
+Five trials each insert 60 characters one at a time, move the cursor to offset 30, and insert
+10 more characters. Every trial checks the exact text. Leaving and reopening checks draft retention.
+`-f assert_isolated=true` additionally requires that typing does not recompose the message list.
+
+`typing/keys.json` retains every key's Main-thread CPU time, process allocation delta,
+FrameMetrics durations and named composition counts. `typing-table.md` reports each trial separately.
+The CPU window includes Compose test synchronization; idle windows expose that floor. Allocation
+counts include the in-process test driver, not just the text field. These debug measurements compare
+the same harness and are not a signed-release or physical-phone latency claim. FrameMetrics remains
+secondary because this emulator uses software rendering. No drawn frame or fewer than 350 measured
+keys makes the measurement incomplete, not fast.
+
+A separate sampled Main-thread method trace follows the timed trials, so profiling overhead cannot
+inflate the reported keys. `typing-profile.py` renders its exclusive and inclusive CPU attribution.
+Compare at least five trials per side and report their spread; an effect inside that spread is inconclusive.
+The first run chooses between screen invalidation, draft persistence and skill lookup using CPU and
+composition counts, rather than assuming that the largest-looking function is the bottleneck.
+
 ## Reading every reader call
 
 `tools/scale-timing/relay.py` installs as the fixture user's SSH forced command. It runs the app's real

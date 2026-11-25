@@ -97,7 +97,8 @@ jobs:
             adb install -r -g "$VERIFY_APK"
             adb install -r "$VERIFY_TEST_APK"
             if [ "${{ inputs.typing }}" = true ]; then
-              python3 tools/scale-timing/typing.py 2>&1 | tee "$EVIDENCE/typing-table.md"
+              trap '.claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"' EXIT
+              python3 tools/scale-timing/measure-typing.py 2>&1 | tee "$EVIDENCE/typing-table.md"
             else
               python3 tools/scale-timing/measure.py --seed "$TIMING_SEED" --ref "$TIMING_REF" \
                 --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \

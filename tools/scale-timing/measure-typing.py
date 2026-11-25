@@ -42,6 +42,9 @@ def main():
     if 'OK (1 test)' not in result.stdout:
         raise MeasurementError('TYPING_MEASUREMENT_FAILED: ' + result.stdout[-1200:])
     subprocess.run([sys.executable, 'tools/scale-timing/typing-report.py', str(evidence / 'typing/keys.json')], check=True)
+    with (evidence / 'typing-profile.txt').open('w') as profile:
+        subprocess.run([sys.executable, 'tools/scale-timing/typing-profile.py', str(evidence / 'typing/typing-profile.trace')],
+                       stdout=profile, check=True)
 
 
 if __name__ == '__main__':
