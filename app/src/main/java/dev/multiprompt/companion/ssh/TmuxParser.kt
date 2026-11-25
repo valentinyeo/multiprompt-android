@@ -56,9 +56,13 @@ object TmuxParser {
             "printf '${END_MARKER}\\n'"
     }
 
-    fun parseSignature(output: String): String? = output.lineSequence()
-        .map(String::trimEnd)
-        .firstOrNull { CHECKSUM_LINE.matches(it) }
+    fun parseSignature(output: String): String? {
+        val lines = output.lineSequence().map(String::trimEnd).toList()
+        val start = lines.indexOf(START_MARKER)
+        val end = lines.indexOf(END_MARKER)
+        if (start < 0 || end <= start) return null
+        return lines.subList(start + 1, end).firstOrNull { CHECKSUM_LINE.matches(it) }
+    }
 
     fun hasEnvelope(output: String): Boolean =
         output.lineSequence().any { it.trimEnd() == START_MARKER } &&

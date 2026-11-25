@@ -330,5 +330,11 @@ class TmuxParserTest {
         assertEquals("1234567890 4096", TmuxParser.parseSignature(output))
         assertEquals(null, TmuxParser.parseSignature("${TmuxParser.START_MARKER}\n${TmuxParser.END_MARKER}\n"))
         assertEquals(null, TmuxParser.parseSignature("1234567890 4096"))
+        assertEquals(
+            null,
+            TmuxParser.parseSignature(
+                "1234567890 4096\n${TmuxParser.START_MARKER}\n${TmuxParser.END_MARKER}\n1234567891 4096",
+            ),
+        )
     }
 }
