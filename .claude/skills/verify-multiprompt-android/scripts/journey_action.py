@@ -185,6 +185,10 @@ def plan(root, mode, value, direction="forward", search_axis=None):
     if matches and not any(enabled(n) for n in matches):
         raise Unreachable("label or its ancestor is disabled or hidden")
     matches = [n for n in matches if enabled(n)]
+    if len(matches) > 1 and mode in LABELLED:
+        actionable = [n for n in matches if any(ancestor.get("clickable") == "true" for ancestor in chain(n))]
+        if actionable:
+            matches = actionable
     if len(matches) > 1:
         raise Unreachable("ambiguous enabled label in active window")
     if not matches:

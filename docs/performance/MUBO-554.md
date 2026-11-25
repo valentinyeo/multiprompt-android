@@ -286,7 +286,8 @@ The failed head recording in
 [45642363255](https://github.com/valentinyeo/multiprompt-android/actions/runs/45642363255)
 shows `Please / |this`: Gboard is composing the following word and its first Left event
 leaves the caret after the space, not after the slash. A slash query is correctly absent
-there. The driver now dismisses the IME to finish that composition before sending Left.
+there. The driver now dismisses the IME before cursor navigation, waits for the UI dump,
+and moves from Home to the known offset before inserting `/ ` and sending Left.
 The exact draft, picker row, required scroll, inserted pill, removal, file-path exclusion,
 built-in command and independent send-receipt assertions are unchanged.
 
@@ -299,7 +300,7 @@ the debug artifact's `ComposerLongDraftTest` XML has five tests, zero failures o
 This guards immediate live-text/caret lookup independently of Gboard and of the save timer.
 No additional product change is justified by these controls.
 
-The final controlled series uses the same repaired driver at `3777d558` for both APKs,
+The first matched-driver series uses the same driver at `3777d558` for both APKs,
 with four fresh emulators per side on the same day. Each dispatch pins `app_ref` to either
 head `3777d5586ad16cd65036017550088d32928b1ab4` or main
 `81db9f326af3e0ff4ab20eb68d60792180552a11`. Independent `trial` IDs separate only the
@@ -313,8 +314,22 @@ journey/verdict assertions remain in place. No cached parent journey is used.
 | 3 | [45655171326](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655171326) | [45655192857](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655192857) |
 | 4 | [45655176807](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655176807) | [45655196519](https://github.com/valentinyeo/multiprompt-android/actions/runs/45655196519) |
 
-The PR Verification records the observed pass counts and artifact inspection. Four trials
-measure this sample's failure rate, not a guarantee that the journey can never flake.
-The earlier cancelled runs and a short-SHA checkout failure are excluded. App product source
-is unchanged from the accepted performance head; emulator frame numbers remain
-**emulator, not representative**. No further performance runs were made in this round.
+This series passes **head 1/4, main 0/4**. Head trial 4 still misses the initial picker;
+head trial 3 and main trial 3 find only the non-clickable sent pill at the second selection;
+the remaining failures see both that sent pill and the clickable picker row and reject the
+ambiguous label. Dismissing the keyboard after the first navigation was therefore too late.
+The revised driver finishes composition before positioning from Home instead.
+
+The shared action selector now considers clickable ancestry when duplicate labels exist.
+It ignores the non-clickable sent pill when the real picker row is present, but still fails
+if two actionable controls match, or if no actionable label exists. The retained main trial 1
+XML is `tools/journey-actions/fixtures/mubo-554-picker-and-sent-pill.xml`. Its regression test
+requires the real picker's tap point; making the sent pill clickable must fail as ambiguous.
+No product assertion or coverage/verdict gate was removed.
+
+The PR Verification records the follow-up four-per-side series with this revised driver,
+its pass counts and artifact inspection. Four trials measure this sample's failure rate,
+not a guarantee that the journey can never flake. The earlier cancelled runs and a short-SHA
+checkout failure are excluded. App product source is unchanged from the accepted performance
+head; emulator frame numbers remain **emulator, not representative**. No further performance
+runs were made in this round.

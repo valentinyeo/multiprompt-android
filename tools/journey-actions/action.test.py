@@ -170,6 +170,17 @@ adb() {
         xml = window(button()).replace('</hierarchy>', f'<node bounds="[0,200][1080,1920]">{button()}</node></hierarchy>')
         self.assertEqual(self.plan(xml), "tap 260 540")
 
+    def test_skill_picker_remains_actionable_beside_the_same_sent_pill_label(self):
+        xml = (Path(__file__).parent / 'fixtures/mubo-554-picker-and-sent-pill.xml').read_text()
+        root = ET.fromstring(xml)
+        labels = [node for node in root.iter('node') if node.get('text') == '/review-native']
+        self.assertEqual(len(labels), 2)
+        self.assertEqual(self.plan(xml, value='/review-native'), 'tap 540 1115')
+        self.assertEqual(action.confirm(root, 'text', '/review-native'), 'tap 540 1115')
+        labels[0].set('clickable', 'true')
+        with self.assertRaisesRegex(action.Unreachable, 'ambiguous'):
+            action.plan(root, 'text', '/review-native')
+
     def test_ambiguous_active_labels_fail(self):
         with self.assertRaisesRegex(action.Unreachable, "ambiguous"):
             self.plan(window(button() + button()))

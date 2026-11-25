@@ -24,13 +24,20 @@ restore_please_this() {
     dump_ui || return
     python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value composer 'Please this'
 }
+composer_cursor() {
+    adb shell input keyevent KEYCODE_BACK || return
+    dump_ui || return
+    adb shell input keyevent KEYCODE_MOVE_HOME || return
+    local position
+    for ((position=0; position<$1; position++)); do
+        adb shell input keyevent KEYCODE_DPAD_RIGHT || return
+    done
+}
 for attempt in {1..3}; do
     tap_node editor ''
     select_node focused-field '' >/dev/null || return
-    adb shell input keyevent KEYCODE_MOVE_END
-    adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
+    composer_cursor 7 || return
     adb shell input text /%s
-    adb shell input keyevent KEYCODE_BACK
     adb shell input keyevent KEYCODE_DPAD_LEFT
     dump_ui || return
     if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value composer 'Please / this' &&
@@ -61,9 +68,7 @@ pills_state sent 'Please /review-native this'
 fill 'Message verify-session' 'Keep%s/rev%sthis'
 tap_node editor ''
 select_node focused-field '' >/dev/null
-adb shell input keyevent KEYCODE_MOVE_END
-adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
-adb shell input keyevent KEYCODE_BACK
+composer_cursor 10 || return
 adb shell input keyevent KEYCODE_DPAD_LEFT
 wait_for_text '/review-native'
 tap_text '/review-native'
@@ -85,9 +90,7 @@ pills_state sent-path 'Please /home/verifyssh/notes this'
 fill 'Message verify-session' 'Keep%s/cl%sthis'
 tap_node editor ''
 select_node focused-field '' >/dev/null
-adb shell input keyevent KEYCODE_MOVE_END
-adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
-adb shell input keyevent KEYCODE_BACK
+composer_cursor 9 || return
 adb shell input keyevent KEYCODE_DPAD_LEFT
 wait_for_text '/clear'
 tap_text '/clear'
