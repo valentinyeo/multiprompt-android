@@ -26,6 +26,9 @@ for entry in \
         exit 1
     fi
     printf '%s  %s\n' "$hash" "$tmp/$path" | sha256sum --check --status
+    if [[ "$path" == chat_history_reader.py ]]; then
+        patch --silent "$tmp/$path" tools/chat-reader-worker.patch
+    fi
     asset="app/src/main/assets/$path"
     if [[ "$mode" == check ]]; then
         cmp "$tmp/$path" "$asset"
@@ -34,5 +37,5 @@ for entry in \
         cp "$tmp/$path" "$asset"
     fi
 done
-python3 -B tools/chat-reader-bundle.py --revision "$revision" "$mode"
-printf 'Reader and connectors match canonical revision and SHA256\n'
+python3 -B tools/chat-reader-bundle.py --revision "$revision+mubo-529" "$mode"
+printf 'Reader and connectors match canonical revision, MUBO-529 patch and SHA256\n'
