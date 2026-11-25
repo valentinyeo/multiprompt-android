@@ -218,7 +218,7 @@ internal fun ChatHistoryView(
                 }
             } else null,
             collapsePendingReactions = reader.actionError == null,
-            working = reader.isWorking(agent) || state.replica?.host?.running == true,
+            working = reader.isWorking() || state.replica?.host?.running == true,
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,

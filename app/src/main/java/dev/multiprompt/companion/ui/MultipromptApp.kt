@@ -3131,7 +3131,7 @@ internal fun ReaderScreen(
     val reader by connection.state.collectAsState()
     val piModels by connection.piModels.collectAsState()
     val displayName = stringResource(R.string.app_name)
-    val working = reader.isWorking(session.agent)
+    val working = reader.isWorking()
     LaunchedEffect(connection, working) {
         android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
     }
@@ -5289,13 +5289,6 @@ private fun ReaderCollapsibleBlock(
             }
         }
     }
-}
-
-internal fun isTransientProgress(value: String): Boolean = value.lineSequence().all { line ->
-    val trimmed = line.trim()
-    trimmed.isBlank() || listOf(
-        "working", "running", "thinking", "reading", "searching", "esc to cancel",
-    ).any { trimmed.startsWith(it, ignoreCase = true) }
 }
 
 private data class FallbackPiece(val text: String, val expandKey: String?)
