@@ -26,23 +26,15 @@ tap_text 'Open live terminal'
 wait_for_text 'SSH · tmux attached'
 sudo -u verifyssh tmux list-clients -F '#{client_name} #{client_session}' > "$EVIDENCE/pane-stream-clients.txt"
 grep -F claude-control "$EVIDENCE/pane-stream-clients.txt"
-pane_stream_pixels() {
-    local marker=$1 name=$2 attempt
-    for attempt in {1..15}; do
-        adb exec-out screencap -p > "$EVIDENCE/$name.png"
-        tesseract "$EVIDENCE/$name.png" "$EVIDENCE/$name" --psm 11
-        if grep -F "$marker" "$EVIDENCE/$name.txt"; then return 0; fi
-        sleep 1
-    done
-    printf 'PANE_STREAM_TERMINAL_FROZEN: missing %s in the phone pixels\n' "$marker" >&2
-    return 1
-}
 sudo -u verifyssh touch /home/verifyssh/pane-stream-release-1
-pane_stream_pixels TERMINALALPHA pane-stream-terminal-first
+wait_for_text TERMINALALPHA
+shot pane-stream-terminal-first
+python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-pane-stream-terminal-first.xml" TERMINALALPHA > "$EVIDENCE/pane-stream-terminal-first.txt"
 if grep -F TERMINALOMEGA "$EVIDENCE/pane-stream-terminal-first.txt"; then exit 1; fi
 sudo -u verifyssh touch /home/verifyssh/pane-stream-release-2
-pane_stream_pixels TERMINALOMEGA pane-stream-terminal-updated
-shot pane-stream-terminal
+wait_for_text TERMINALOMEGA
+shot pane-stream-terminal-updated
+python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-pane-stream-terminal-updated.xml" TERMINALOMEGA > "$EVIDENCE/pane-stream-terminal-updated.txt"
 sudo -u verifyssh tmux capture-pane -p -t '=claude-control:' > "$EVIDENCE/pane-stream-host.txt"
 sudo cat /home/verifyssh/pane-stream-stage.txt > "$EVIDENCE/pane-stream-stage.txt"
 sudo grep -Fx VERIFY_RECEIVED:STREAM_531 /home/verifyssh/claude-receipts.txt > "$EVIDENCE/pane-stream-receipt.txt"

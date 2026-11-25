@@ -2334,7 +2334,7 @@
       }
     },
     "reader.pane-budget": {
-      "description": "Native chat captures only the visible pane while still updating a streamed reply. Terminal detail keeps scrollback, and the independent terminal fallback renders two new streaming markers in phone pixels before completion. Retains pane-stream-result.json, XML, OCR screenshots, actual SSH capture scopes and the independent prompt receipt.",
+      "description": "Native chat captures only the visible pane while still updating a streamed reply. Terminal detail keeps scrollback, and the independent terminal fallback renders two new streaming markers in the production terminal accessibility view and screenshots before completion. Retains pane-stream-result.json, XML, screenshots, actual SSH capture scopes and the independent prompt receipt.",
       "journey": "chat-codex.md",
       "sideEffect": true,
       "paths": [
