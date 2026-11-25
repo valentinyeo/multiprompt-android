@@ -53,7 +53,16 @@ table into the run summary. `timing-<seed>-<ref>` holds the measurement, the scr
   this emulator). It is comparable between runs of the same job and never a product latency claim.
 - App CPU time is the honest signal. It is measured on the app process only, in clock ticks, and does not
   care how slowly the emulator draws.
-- History bytes are what the fixture host wrote to the phone for one history request. A chat with a 54 MB
-  transcript should send a tail page, not the whole file; a jump there is a regression.
+- History bytes are reported three ways: the step total, the mean per call, and the median per call. The
+  reader writes a reply in many small protocol lines, so the median line is tiny and the total is what the
+  phone actually paid. A chat with a 54 MB transcript should send a tail page, not the whole file; a jump
+  there is a regression.
+- The switch table splits one switch into its four driver actions: `back` to the Inbox, waiting for the Inbox
+  rows, the tap that resolves the row (scrolling the list when the row sits below the fold), and the wait for
+  the newest message. A slow switch that is mostly `tap` is the driver scrolling a long Inbox, not the app
+  rendering the chat.
+- The `small` seed only has two chats above 1 MB (`cl-long-chat` and `live-real-2781`), so its five switch
+  targets are mostly the tiny fixture chats. Compare the two `open-largest` rows and the CPU columns for a
+  size claim, and read the transcript bytes next to each switch row before calling one seed slower.
 - A step is a median of one run per seed. Treat a difference smaller than the run-to-run spread as noise, and
   rerun before believing it.
