@@ -4758,6 +4758,7 @@ internal fun ReaderScreen(
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             visualTransformation = skillText,
                             onTextLayout = {
+                                TypingProbe.laidOut("ComposerText")
                                 latestLayout[0] = it
                                 if (skillSpans.isNotEmpty()) {
                                     skillLayout = it

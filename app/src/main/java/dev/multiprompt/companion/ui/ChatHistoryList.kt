@@ -38,6 +38,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
@@ -396,7 +397,9 @@ internal fun ChatHistoryList(
     DisposableEffect(Unit) { onDispose { nearTop(false) } }
     val fontSize = (14f * fontScale).sp
     LazyColumn(
-        modifier = modifier.fillMaxSize().testTag("chat-history"),
+        modifier = modifier.fillMaxSize()
+            .then(if (TypingProbe.enabled) Modifier.onSizeChanged { TypingProbe.laidOut("ChatHistoryListSize") } else Modifier)
+            .testTag("chat-history"),
         state = listState,
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),

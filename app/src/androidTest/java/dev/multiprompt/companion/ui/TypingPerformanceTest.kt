@@ -8,6 +8,7 @@ import android.os.SystemClock
 import android.view.FrameMetrics
 import android.view.KeyEvent
 import android.view.Window
+import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
@@ -25,7 +26,10 @@ class TypingPerformanceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val arguments = InstrumentationRegistry.getArguments()
     private val counts = mutableMapOf<String, Int>()
+    private val layouts = mutableMapOf<String, Int>()
     private val timings = mutableMapOf<String, Long>()
+    @Volatile private var imeInsetPx = 0
+    @Volatile private var activityRef: MainActivity? = null
     private var frame: ((FrameMetrics) -> Unit)? = null
 
     @Test fun typeAndEditOwnerScaleChat() {
@@ -35,9 +39,11 @@ class TypingPerformanceTest {
             lateinit var output: File
             val listener = Window.OnFrameMetricsAvailableListener { _, metrics, _ -> frame?.invoke(metrics) }
             scenario.onActivity { activity ->
+                activityRef = activity
                 output = File(activity.getExternalFilesDir(null), "typing").apply { mkdirs() }
                 activity.window.addOnFrameMetricsAvailableListener(listener, Handler(Looper.getMainLooper()))
                 TypingProbe.compositions = { name -> counts[name] = (counts[name] ?: 0) + 1 }
+                TypingProbe.layouts = { name -> layouts[name] = (layouts[name] ?: 0) + 1 }
                 TypingProbe.timings = { name, ns -> timings[name] = (timings[name] ?: 0) + ns }
             }
             val records = JSONArray()
@@ -88,9 +94,10 @@ class TypingPerformanceTest {
                 instrumentation.uiAutomation.rootInActiveWindow?.let { root ->
                     File(output, "last-draft.txt").writeText(nodes(root).firstOrNull { it.isEditable }?.text?.toString().orEmpty())
                 }
-                scenario.onActivity { activity ->
+                scenario.onActivity { _ ->
                     frame = null
                     TypingProbe.compositions = null
+                    TypingProbe.layouts = null
                     TypingProbe.timings = null
                     activity.window.removeOnFrameMetricsAvailableListener(listener)
                 }
@@ -149,7 +156,10 @@ class TypingPerformanceTest {
         }
         instrumentation.runOnMainSync {
             counts.clear()
+            layouts.clear()
             timings.clear()
+            imeInsetPx = (activityRef?.window?.decorView?.rootWindowInsets
+                ?.getInsets(WindowInsets.Type.ime())?.bottom ?: 0)
             allocated = Debug.getRuntimeStat("art.gc.bytes-allocated").toLong()
             cpu = Debug.threadCpuTimeNanos()
             start = System.nanoTime()
