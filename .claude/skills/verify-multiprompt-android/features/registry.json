@@ -1342,6 +1342,38 @@
         "group-renamed.json": 1200,
         "group-renamed-host.json": 1200
       }
+    },
+    "update-card.md": {
+      "name": "Phone update card notes",
+      "description": "signed APK against the published update manifest: the offered release's own change lines, at most three, then See all and the complete matching notes, with the install action left untouched. MUBO-578.",
+      "runner": {
+        "kind": "signed",
+        "workflow": "verify.yml",
+        "inputs": {
+          "release_choices": true,
+          "candidate": true
+        },
+        "prerequisites": [
+          "Use the recipe-specific signed workflow and inputs; debug drive.sh is not interchangeable.",
+          "The published update manifest must still offer a newer version than the built candidate."
+        ],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/update-card-drive.sh",
+          "tools/update-card/notes.py"
+        ]
+      },
+      "outcomes": [
+        "update.card"
+      ],
+      "evidence": {
+        "offered-notes.json": 800,
+        "update-card-preview.json": 2500,
+        "update-card-notes.json": 3000,
+        "update-card-preview-lines.txt": 600,
+        "update-card-notes-lines.txt": 1200,
+        "update-card-result.json": 800
+      }
     }
   },
   "outcomes": {
@@ -1350,6 +1382,16 @@
       "journey": "app-name.md",
       "sideEffect": false,
       "match": []
+    },
+    "update.card": {
+      "description": "the update card shows only the offered release's own change lines, up to three plain lines, and See all opens that same version's complete release notes.",
+      "journey": "update-card.md",
+      "sideEffect": false,
+      "match": [
+        "ReleaseNoteLines",
+        "UpdateAvailableCard",
+        "See all"
+      ]
     },
     "bot-photo-refresh.journey": {
       "description": "hosted ViewModel and Compose regressions; seeded picture, not live account sync.",
