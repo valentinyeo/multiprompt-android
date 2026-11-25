@@ -1,0 +1,194 @@
+{
+  "schema": "mubo-555-v2",
+  "harness": "fc056158cbddd4e4d5bdcd246fbedea3d1ca1c28db3b270f2e9007c5bf712576",
+  "app_sha": "5ed79144693c2a93813a9b774fc0dd0f6f4a9f08",
+  "seed": "small",
+  "repeats": 5,
+  "scenarios": {
+    "cold_start": {
+      "app_cpu_ms": {
+        "median": 6680.0,
+        "min": 6290.0,
+        "max": 6840.0
+      },
+      "main_thread_ms": {
+        "median": 2470.0,
+        "min": 2370.0,
+        "max": 2560.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 3,
+        "min": 3,
+        "max": 3
+      },
+      "list_sessions_per_minute": {
+        "median": 9.444,
+        "min": 9.142,
+        "max": 9.491
+      },
+      "bytes_per_minute": {
+        "median": 4747139.449,
+        "min": 4551868.962,
+        "max": 4768586.86
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "chat_switch": {
+      "app_cpu_ms": {
+        "median": 1480.0,
+        "min": 1460.0,
+        "max": 20590.0
+      },
+      "main_thread_ms": {
+        "median": 280.0,
+        "min": 270.0,
+        "max": 1360.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 5,
+        "min": 4,
+        "max": 221
+      },
+      "list_sessions_per_minute": {
+        "median": 12.357,
+        "min": 12.251,
+        "max": 19.821
+      },
+      "bytes_per_minute": {
+        "median": 221435.832,
+        "min": 219540.896,
+        "max": 341190.799
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "idle_inbox": {
+      "app_cpu_ms": {
+        "median": 1150.0,
+        "min": 970.0,
+        "max": 1170.0
+      },
+      "main_thread_ms": {
+        "median": 50.0,
+        "min": 50.0,
+        "max": 60.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "list_sessions_per_minute": {
+        "median": 9.0,
+        "min": 9.0,
+        "max": 9.0
+      },
+      "bytes_per_minute": {
+        "median": 154286.246,
+        "min": 151850.356,
+        "max": 154286.376
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "typing_long_chat": {
+      "app_cpu_ms": {
+        "median": 6660.0,
+        "min": 5950.0,
+        "max": 6970.0
+      },
+      "main_thread_ms": {
+        "median": 850.0,
+        "min": 760.0,
+        "max": 850.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 122,
+        "min": 120,
+        "max": 128
+      },
+      "list_sessions_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "bytes_per_minute": {
+        "median": 10286.615,
+        "min": 10037.938,
+        "max": 11007.82
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 1,
+        "min": 1,
+        "max": 1
+      }
+    },
+    "streaming_reply": {
+      "app_cpu_ms": {
+        "median": 1980.0,
+        "min": 1900.0,
+        "max": 2130.0
+      },
+      "main_thread_ms": {
+        "median": 350.0,
+        "min": 350.0,
+        "max": 370.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 71,
+        "min": 71,
+        "max": 73
+      },
+      "list_sessions_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "bytes_per_minute": {
+        "median": 83768.067,
+        "min": 81743.153,
+        "max": 85687.228
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 1,
+        "min": 1,
+        "max": 2
+      }
+    }
+  }
+}

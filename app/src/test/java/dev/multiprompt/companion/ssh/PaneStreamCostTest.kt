@@ -13,7 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 
-class PaneStreamBudgetTest {
+class PaneStreamCostTest {
     private data class Reading(val bytes: Long, val captures: Int, val frames: List<String>, val expected: List<String>)
 
     private fun fixture(root: File) {
@@ -119,7 +119,7 @@ class PaneStreamBudgetTest {
     @Test
     fun theChatViewSpendsNoWireBytesOrDecodeTimeOnThePane() {
         assumeTrue(System.getenv("GITHUB_ACTIONS") == "true")
-        val root = Files.createTempDirectory("pane-stream-budget").toFile()
+        val root = Files.createTempDirectory("pane-stream-cost").toFile()
         try {
             fixture(root)
             val before = minute(root)
@@ -135,8 +135,8 @@ class PaneStreamBudgetTest {
             assertEquals("the chat view still received pane frames", 0, after.frames.size)
             assertEquals(0L, after.bytes)
             val report = """{"fixture":"5000 scrollback lines, 60 changing frames at modeled 1 Hz", "runtime":"GitHub JVM, production Android snapshot decoder, not physical phone wall time", "runs":5, "before_bytes_per_minute":${before.bytes}, "after_bytes_per_minute":${after.bytes}, "before_captures_per_minute":${before.captures}, "after_captures_per_minute":${after.captures}, "before_decode_ns_per_minute":${beforeTimes.sorted()[2]}, "after_decode_ns_per_minute":0, "before_decode_runs_ns":$beforeTimes, "after_decode_runs_ns":[0,0,0,0,0], "decode_errors":0, "frames_per_minute":60}"""
-            File("build/reports/pane-stream-budget.json").apply { parentFile.mkdirs(); writeText(report + "\n") }
-            println("PANE_STREAM_BUDGET $report")
+            File("build/reports/pane-stream-cost.json").apply { parentFile.mkdirs(); writeText(report + "\n") }
+            println("PANE_STREAM_COST $report")
         } finally {
             root.deleteRecursively()
         }

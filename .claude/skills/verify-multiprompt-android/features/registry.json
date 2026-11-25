@@ -1551,7 +1551,8 @@
       "sideEffect": false,
       "match": [
         "SessionPreview",
-        "setInboxVisible|sessionRefreshIntervalMs|onUserInteraction|onInboxVisibilityChanged"
+        "setInboxVisible|sessionRefreshIntervalMs|onUserInteraction|onInboxVisibilityChanged",
+        "warmRecentHistories|prefetchRecentHistories|PREFETCH_SESSIONS"
       ]
     },
     "inbox.search": {

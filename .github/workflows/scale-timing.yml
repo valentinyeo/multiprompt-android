@@ -8,9 +8,18 @@ on:
         type: string
         required: false
         default: ''
+      mode:
+        description: Frozen five-scenario benchmark, or the older diagnostic breakdown
+        type: choice
+        options: [frozen, diagnostic]
+        default: frozen
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: scale-timing-${{ github.ref }}-${{ inputs.app_ref || 'head' }}
@@ -20,7 +29,7 @@ jobs:
   measure:
     name: timing ${{ matrix.seed }} ${{ inputs.app_ref || 'head' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -32,6 +41,7 @@ jobs:
       FIXTURE: ${{ github.workspace }}/verify-ssh
       TIMING_SEED: ${{ matrix.seed }}
       APP_REF: ${{ inputs.app_ref }}
+      TIMING_MODE: ${{ inputs.mode || 'frozen' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       VERIFY_FEATURE: ${{ matrix.seed == 'scale' && 'long-chat.md' || '' }}
     steps:
@@ -77,7 +87,10 @@ jobs:
         if: matrix.seed != 'scale'
         run: sudo python3 tools/scale-timing/hostseed.py relay --relay tools/scale-timing/relay.py
       - name: Pick the timing targets from the seeded host
-        run: sudo python3 tools/scale-timing/targets.py --seed "$TIMING_SEED" --out "$EVIDENCE/timing-targets.json"
+        run: |
+          sudo python3 tools/scale-timing/targets.py --seed "$TIMING_SEED" --out "$EVIDENCE/timing-targets.json"
+          sudo install -m 755 tools/scale-timing/stream.py /home/verifyssh/frozen-stream.py
+          { uptime; nproc; uname -a; git rev-parse HEAD; } > "$EVIDENCE/benchmark-host.txt"
       - name: Install, sign in and time the phone
         id: timing
         uses: ./.github/actions/android-proof
@@ -86,13 +99,22 @@ jobs:
           script: |
             adb install -r -g "$VERIFY_APK"
             adb install -r "$VERIFY_TEST_APK"
-            python3 tools/scale-timing/measure.py --seed "$TIMING_SEED" --ref "$TIMING_REF" \
-              --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
-              --fixture "$FIXTURE" --expected-version "$EXPECTED_VERSION"
+            if [ "$TIMING_MODE" = frozen ]; then
+              timeout 3000 python3 tools/scale-timing/frozen.py run --seed "$TIMING_SEED" \
+                --app-sha "$(cat "$EVIDENCE/app-source-sha.txt")" \
+                --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
+                --fixture "$FIXTURE" --expected-version "$EXPECTED_VERSION"
+            else
+              python3 tools/scale-timing/measure.py --seed "$TIMING_SEED" --ref "$TIMING_REF" \
+                --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
+                --fixture "$FIXTURE" --expected-version "$EXPECTED_VERSION"
+            fi
       - name: Publish this seed's timing table
         if: always()
         run: |
-          if [ -s "$EVIDENCE/timing/timing.json" ]; then
+          if [ -s "$EVIDENCE/timing/results.json" ]; then
+            python3 tools/scale-timing/frozen.py report --root "$EVIDENCE" --out "$EVIDENCE/timing-table.md" | tee -a "$GITHUB_STEP_SUMMARY"
+          elif [ -s "$EVIDENCE/timing/timing.json" ]; then
             python3 tools/scale-timing/report.py --root "$EVIDENCE" --out "$EVIDENCE/timing-table.md" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo 'No timing measurement was produced. The emulator artifact holds the diagnostics.' >> "$GITHUB_STEP_SUMMARY"
@@ -123,7 +145,14 @@ jobs:
           pattern: timing-*-*
           path: measurements
       - name: Render the timing table
-        run: python3 tools/scale-timing/report.py --root measurements --out measurements/report.md | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          TIMING_MODE: ${{ inputs.mode || 'frozen' }}
+        run: |
+          if [ "$TIMING_MODE" = frozen ]; then
+            python3 tools/scale-timing/frozen.py report --root measurements --out measurements/report.md | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            python3 tools/scale-timing/report.py --root measurements --out measurements/report.md | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Retain the table
         uses: actions/upload-artifact@v4
         with:

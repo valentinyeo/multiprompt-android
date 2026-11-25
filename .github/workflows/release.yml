@@ -185,24 +185,14 @@ jobs:
           sha256=$(sha256sum "$release_dir/multiprompt-companion.apk" | cut -d' ' -f1)
           size=$(stat -c%s "$release_dir/multiprompt-companion.apk")
 
-          previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion-update.json" || echo '{}')
-          previous_commit=$(jq -r '.commit // ""' <<<"$previous")
+          previous="$RUNNER_TEMP/manifest-previous.json"
+          curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-latest/multiprompt-companion-update.json" -o "$previous" || echo '{}' > "$previous"
+          previous_commit=$(jq -r '.commit // ""' "$previous")
           if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
             notes=$(node tools/release-notes/notes.mjs --range "$previous_commit" HEAD)
           else
             notes=$(node tools/release-notes/notes.mjs --range "" HEAD)
           fi
-          history=$(jq -c \
-            --arg versionName "$VERSION_NAME" \
-            --argjson versionCode "$VERSION_CODE" \
-            --arg date "$(date -u +%Y-%m-%d)" \
-            --arg notes "$notes" \
-            --arg cutoff "$(date -u -d '365 days ago' +%Y-%m-%d)" \
-            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // [])
-             | .[0:1000]
-             | (map(select(.date >= $cutoff))) as $recent
-             | if ($recent | length) < 50 then .[0:50] else $recent end' \
-            <<<"$previous")
 
           jq -n \
             --arg versionName "$VERSION_NAME" \
@@ -212,9 +202,25 @@ jobs:
             --argjson sizeBytes "$size" \
             --arg notes "$notes" \
             --arg commit "$GITHUB_SHA" \
-            --argjson history "$history" \
-            '{schemaVersion:1, versionCode:$versionCode, versionName:$versionName, apkUrl:$apkUrl, sha256:$sha256, sizeBytes:$sizeBytes, notes:$notes, commit:$commit, history:$history}' \
-            > "$release_dir/multiprompt-companion-update.json"
+            '{schemaVersion:1, versionCode:$versionCode, versionName:$versionName, apkUrl:$apkUrl, sha256:$sha256, sizeBytes:$sizeBytes, notes:$notes, commit:$commit}' \
+            > "$RUNNER_TEMP/manifest-base.json"
+          jq -n \
+            --arg versionName "$VERSION_NAME" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg date "$(date -u +%Y-%m-%d)" \
+            --arg notes "$notes" \
+            '{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}' \
+            > "$RUNNER_TEMP/manifest-entry.json"
+          node tools/release-notes/manifest-history.mjs \
+            --manifest "$RUNNER_TEMP/manifest-base.json" \
+            --entry "$RUNNER_TEMP/manifest-entry.json" \
+            --previous "$previous" \
+            --out "$release_dir/multiprompt-companion-update.json"
+
+      - name: Reject an update manifest over 48 KB
+        timeout-minutes: 5
+        shell: bash
+        run: node tools/release-notes/manifest-history.mjs --check build/android-release/multiprompt-companion-update.json
 
       - name: Publish fixed android-latest channel
         timeout-minutes: 5
@@ -254,24 +260,14 @@ jobs:
           sha256=$(sha256sum "$release_dir/multiprompt-m3.apk" | cut -d' ' -f1)
           size=$(stat -c%s "$release_dir/multiprompt-m3.apk")
 
-          previous=$(curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-m3-latest/multiprompt-m3-update.json" || echo '{}')
-          previous_commit=$(jq -r '.commit // ""' <<<"$previous")
+          previous="$RUNNER_TEMP/m3-manifest-previous.json"
+          curl -fsSL "https://github.com/${GITHUB_REPOSITORY}/releases/download/android-m3-latest/multiprompt-m3-update.json" -o "$previous" || echo '{}' > "$previous"
+          previous_commit=$(jq -r '.commit // ""' "$previous")
           if [[ -n "$previous_commit" ]] && git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
             notes=$(node tools/release-notes/notes.mjs --range "$previous_commit" HEAD)
           else
             notes=$(node tools/release-notes/notes.mjs --range "" HEAD)
           fi
-          history=$(jq -c \
-            --arg versionName "$VERSION_NAME-m3" \
-            --argjson versionCode "$VERSION_CODE" \
-            --arg date "$(date -u +%Y-%m-%d)" \
-            --arg notes "$notes" \
-            --arg cutoff "$(date -u -d '365 days ago' +%Y-%m-%d)" \
-            '[{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}] + (.history // [])
-             | .[0:1000]
-             | (map(select(.date >= $cutoff))) as $recent
-             | if ($recent | length) < 50 then .[0:50] else $recent end' \
-            <<<"$previous")
 
           jq -n \
             --arg versionName "$VERSION_NAME-m3" \
@@ -281,9 +277,25 @@ jobs:
             --argjson sizeBytes "$size" \
             --arg notes "$notes" \
             --arg commit "$GITHUB_SHA" \
-            --argjson history "$history" \
-            '{schemaVersion:1, versionCode:$versionCode, versionName:$versionName, apkUrl:$apkUrl, sha256:$sha256, sizeBytes:$sizeBytes, notes:$notes, commit:$commit, history:$history}' \
-            > "$release_dir/multiprompt-m3-update.json"
+            '{schemaVersion:1, versionCode:$versionCode, versionName:$versionName, apkUrl:$apkUrl, sha256:$sha256, sizeBytes:$sizeBytes, notes:$notes, commit:$commit}' \
+            > "$RUNNER_TEMP/m3-manifest-base.json"
+          jq -n \
+            --arg versionName "$VERSION_NAME-m3" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg date "$(date -u +%Y-%m-%d)" \
+            --arg notes "$notes" \
+            '{versionName:$versionName, versionCode:$versionCode, date:$date, notes:$notes}' \
+            > "$RUNNER_TEMP/m3-manifest-entry.json"
+          node tools/release-notes/manifest-history.mjs \
+            --manifest "$RUNNER_TEMP/m3-manifest-base.json" \
+            --entry "$RUNNER_TEMP/m3-manifest-entry.json" \
+            --previous "$previous" \
+            --out "$release_dir/multiprompt-m3-update.json"
+
+      - name: Reject an M3 update manifest over 48 KB
+        timeout-minutes: 5
+        shell: bash
+        run: node tools/release-notes/manifest-history.mjs --check build/android-m3/multiprompt-m3-update.json
 
       - name: Publish fixed android-m3-latest channel
         timeout-minutes: 5

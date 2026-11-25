@@ -11,7 +11,7 @@ source_checks() {
   python3 -B tools/kit-controls/journeys.test.py
   python3 -B tools/kit-controls/check.test.py
   python3 -B tools/kit-controls/check.py
-  node --test tools/verdict-reuse.test.js tools/ci/pr-workflows.test.mjs tools/ci/emulator-packages.test.mjs tools/ci/maven-mirror.test.mjs tools/parent-cache.test.js tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/ci/release-timeouts.test.mjs tools/ci/gradle-retry.test.mjs tools/ci/release-cache.test.mjs tools/ci/gradle-cache.test.mjs tools/pr-checks.test.js tools/merge-lock.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/baseline-profile.test.js tools/pstack-verifier.test.js tools/feature-coverage.test.js tools/android-break-it.test.js
+  node --test tools/verdict-reuse.test.js tools/ci/pr-workflows.test.mjs tools/ci/emulator-packages.test.mjs tools/ci/maven-mirror.test.mjs tools/parent-cache.test.js tools/root-files.test.js tools/strip-comments.test.js tools/release-status.test.js tools/verify-published.test.mjs tools/workflow-inputs.test.js tools/release-proof.test.js tools/ci/release-timeouts.test.mjs tools/ci/gradle-retry.test.mjs tools/ci/release-cache.test.mjs tools/ci/gradle-cache.test.mjs tools/pr-checks.test.js tools/merge-lock.test.js tools/branch-protection.test.js tools/release-notes/notes.test.mjs tools/release-notes/manifest-history.test.mjs tools/baseline-profile.test.js tools/pstack-verifier.test.js tools/feature-coverage.test.js tools/android-break-it.test.js
   python3 -B tools/release-recorder.test.py
   python3 -B tools/recorder-exit.test.py
   python3 -B tools/maintain-verification.test.py
@@ -77,6 +77,7 @@ source_checks() {
   python3 -B tools/scale-timing/parsers.test.py
   python3 -B tools/scale-timing/relay.test.py
   python3 -B tools/scale-timing/report.test.py
+  python3 -B tools/scale-timing/frozen.test.py
   python3 -B tools/app-name/drive.test.py
   python3 -B tools/app-name/select_run.test.py
   node .github/scripts/pstack-verifier/coverage.cjs check

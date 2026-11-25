@@ -1,3 +1,90 @@
+# Frozen phone speed benchmark
+
+One dispatch runs **five repetitions of five scenarios on each seed**. No app source is changed by the harness.
+
+```sh
+gh workflow run scale-timing.yml -R valentinyeo/multiprompt-android --ref mpa/mubo-555 -f mode=frozen -f app_ref=5ed79144693c2a93813a9b774fc0dd0f6f4a9f08
+```
+
+Later rounds dispatch this same frozen harness revision, changing only `app_ref` to the complete app commit.
+The measured revision is built in its own worktree; the driver and fixtures stay at the dispatch revision.
+Never change the workload, repeat count, durations, seeds, metric definitions or emulator configuration during
+an optimization round. A changed harness fingerprint requires a new baseline, not a comparison with the old one.
+`mubo-555-v2` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
+driver, emulator/build actions and workflow.
+
+## Runner entry point
+
+The workflow installs both debug APKs, starts the existing SSH fixture, seeds the host, installs `stream.py` as
+`/home/verifyssh/frozen-stream.py`, and selects targets with `targets.py`. Its one measurement entry point is:
+
+```sh
+python3 tools/scale-timing/frozen.py run --seed "$TIMING_SEED" --app-sha "$(cat "$EVIDENCE/app-source-sha.txt")" \
+  --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
+  --fixture "$FIXTURE" --expected-version "$EXPECTED_VERSION"
+```
+
+Run this only on GitHub's hosted runner. Local execution of `run` is refused. This is the existing **debug**
+fixture configuration, not a release-build phone latency claim. Both sides must use exactly this configuration.
+The two seeds run on separate hosted runners; their five trials run in the same fixed scenario order, not
+alternating seeds. Repeat the dispatch at the same app SHA to check runner-to-runner drift before trusting a close result.
+
+| Scenario | Fixed work and resulting-state proof |
+| --- | --- |
+| `cold_start` | Force-stop, remove only the debug app's transcript disk cache, start MainActivity, require Inbox robot rows. Host profile and trust remain intact. |
+| `chat_switch` | Start in the largest chat, go back to Inbox, open the second-largest chat, require its newest marker. |
+| `idle_inbox` | Confirm Inbox outside the window, then leave it untouched for 20 seconds. |
+| `typing_long_chat` | Open the largest chat outside the window; clear, type the same fixed draft through `mpa fill`, require exact readback. Never send. |
+| `streaming_reply` | Clear the draft outside the window; append 40 assistant rows to the open largest chat at 2 Hz for 20 seconds. Require the host receipt, nonzero in-window traffic and the final marker on the phone. Truncate only those appended fixture rows after each repetition. |
+
+Each repetition starts a fresh process and removes the transcript cache. Preparation, screenshots, stream
+readback and cleanup are outside the measured window. Raw trial JSON, logcat and gfxinfo remain in the artifact.
+`results.json` contains only stable ordered keys: schema, harness, app SHA, seed, repeats, then scenarios.
+Every metric has `median`, `min`, `max`; there are no timestamps, PIDs or run IDs in that comparison file.
+
+## Metrics and comparison
+
+- **App CPU ms** reads `utime + stime` from `/proc/<pid>/stat`; **Main ms** reads the same fields from
+  `/proc/<pid>/task/<pid>/stat`. Cold launch starts at zero. A disappeared/restarted process, unreadable
+  counter, incomplete step or missing gfx histogram fails the run instead of becoming a fast zero.
+- **Frames over 16 ms (secondary)** sums the `dumpsys gfxinfo` histogram bins strictly above 16 ms. It is
+  not the refresh-rate-dependent janky counter. The emulator draws about 4 fps, so this cannot rank builds alone.
+- **listSessions/min** counts relay command opens containing the actual `__MP_TMUX_BEGIN__` envelope,
+  not every tmux channel or every response line. **bytes/min** counts all application-protocol reply bytes
+  forwarded by the relay, not SSH encryption overhead. Both use the exact measured wall window.
+- **Errors** totals crashes, ANRs, failed steps, non-allowlisted app-PID logcat E lines and nonzero relay exits. The
+  relay records an app-closed output pipe separately; its subsequent cleanup exit is not a command failure.
+  Unexpected signal exits still count. The components remain in each trial. A crash can also emit E lines,
+  so this is an error-signal count, not unique incidents.
+- **Platform warnings** separately counts the narrow allowlist of Android platform E lines logged under the app PID:
+  `FrameTracker` `force finish cuj, time out: J<IME_INSETS_(SHOW|HIDE)_ANIMATION::...@<package>>`. Every other app-PID E
+  line still counts in **Errors**.
+- **Driver time stays separate** in each trial's `driver` and `wall_ms`. CPU never includes the `mpa`, adb,
+  UI-automation or fixture processes. Do not subtract driver wall time from app CPU: they overlap, with different units.
+  Wall time includes UI dumps and is not published as app latency. Idle/stream windows avoid UI dumps entirely.
+
+Download `timing-table`, which holds both seeds' raw evidence, per-seed `results.json` and `report.md`.
+The same median/range table appears in the job summary. Compare matching-seed results with:
+
+```sh
+python3 tools/scale-timing/frozen.py compare baseline/results.json candidate/results.json --out comparison.json
+```
+
+Every metric is lower-is-better. Candidate max below baseline min is `better`; candidate min above baseline
+max is `worse`; overlapping or touching ranges are `within noise`. Different harness hashes, schemas, seeds
+or repeat counts are rejected. Keep error and work receipts beside any claimed improvement; reduced work or
+increased errors is not a speedup. The range test is conservative, not a statistical significance claim.
+
+Sensitivity is established by contrasting small and scale at the **same app SHA**. A metric separates only
+when the scale minimum exceeds the small maximum; record the median gap and each full range. Stability
+requires a second dispatch at that SHA and unchanged harness. Report inconclusive metrics honestly.
+The larger fixture increases transcript/Inbox parsing and network work; it does not imply every metric must grow.
+The fixed debug build, slow emulator drawing and UI driver limit what can be inferred about a real phone.
+
+## Older diagnostic mode
+
+Dispatch `-f mode=diagnostic` for the original single-sample stage/thread breakdown below. It is not the frozen benchmark.
+
 # Phone timing at the owner's chat scale
 
 The owner's phone is slow with about 40 live chats whose transcripts reach 54 MB and 30k JSONL rows. The
