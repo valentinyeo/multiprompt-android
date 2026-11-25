@@ -29,11 +29,11 @@ The first half of the fix gates every spawn on a read-only check for queued, sen
 
 `tools/message-worker.test.py`, registered in `tools/check.sh source`, drives the request handler with real isolated SQLite stores and counts `subprocess.Popen` calls. Its historical control runs the idle-poll and submit tests against the asset at 3412dfdbe8567e46f1651826b91819461f0f77f4. It requires exactly the idle assertion to fail with 12 launches for 12 polls, while submit passes.
 
-The head tests cover empty polls, submit, retry, all five request operations and all five work states, cancelled rows with another chat's work, missing stores/folders, missing tables, read-only connection mode, the handed lock descriptor and its use by the child, and a real flock/FIFO wake without another spawn. Tests and phone verification run on GitHub only.
+The head tests cover empty polls, submit, retry, all five request operations and every work state, and pin the phone to the desktop gate where a sent row without a deadline is finished work that starts no helper, cancelled rows with another chat's work, missing stores/folders, missing tables, read-only connection mode, the handed lock descriptor and its use by the child, and a real flock/FIFO wake without another spawn. Tests and phone verification run on GitHub only.
 
 ## Desktop alignment
 
-Android stays pinned to desktop `6572511ca37a48b58bc6cc88d0fa4898d2bf4d71` plus `tools/chat-reader-worker.patch`, applied by the sync script. Desktop MUBO-528 has no pull request yet, so the phone carries the port of `20d55092e` until the desktop change lands and the pin moves. The phone check stays read-only and creates no store or folder, which the desktop helper does not yet do.
+Android is pinned to desktop `f6d470f180f746e83f3e4171de2913f9d7dfc015` with no local patch, so the phone carries the desktop worker gate and its lock handover (passing the locked descriptor to the child through `MULTIPROMPT_MESSAGE_WORKER_LOCK_FD`). The phone check stays read-only and creates no store or folder.
 
 Fix Root Causes shaped the change to check real pending rows and hold the real lock rather than rate-limit spawns. Test Behavior, Not Implementation shaped the tests to count process launches and read the wake pipe through the request interface.
 

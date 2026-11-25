@@ -1,3 +1,4 @@
+import base64
 import fcntl
 import hashlib
 import importlib.util
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import closing
 from unittest.mock import MagicMock, call, patch
@@ -23,6 +25,8 @@ SPEC.loader.exec_module(reader)
 
 
 class MessageWorkerRequestTest(unittest.TestCase):
+    connector = base64.b64encode(b'submit=None\ncapabilities=None\npoll=None\n').decode()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -34,8 +38,9 @@ class MessageWorkerRequestTest(unittest.TestCase):
                             ('resolve_tmux_agent', lambda *args, **kwargs: None),
                             ('host_dispatch_switch', lambda *args: False),
                             ('host_enabled', lambda *args: False),
+                            ('message_connector_source', lambda provider: self.connector),
                             ('serve_print', self.replies.append)]:
-            patcher = patch.object(reader, name, value)
+            patcher = patch.object(reader, name, value, create=True)
             patcher.start()
             self.addCleanup(patcher.stop)
         self.spawn = patch.object(reader.subprocess, 'Popen').start()
@@ -72,8 +77,9 @@ class MessageWorkerRequestTest(unittest.TestCase):
 
     def test_starter_hands_its_lock_to_the_child(self):
         self.submit()
-        command = self.spawn.call_args.args[0]
-        self.assertEqual(self.spawn.call_args.kwargs['pass_fds'], (int(command[-1]),))
+        handed = self.spawn.call_args.kwargs
+        self.assertEqual(len(handed['pass_fds']), 1)
+        self.assertEqual(handed['env'][reader.MESSAGE_WORKER_LOCK_ENV], str(handed['pass_fds'][0]))
 
     def test_child_takes_the_handed_lock_instead_of_a_second_one(self):
         handed = {}
@@ -95,10 +101,11 @@ class MessageWorkerRequestTest(unittest.TestCase):
         self.spawn.side_effect = capture
         reader.message_store_path().parent.mkdir(parents=True)
         self.submit()
-        with patch.object(reader, 'message_store_db', lambda tmux: Store()), \
+        with patch.dict(os.environ, {reader.MESSAGE_WORKER_LOCK_ENV: str(handed['fd'])}), \
+                patch.object(reader, 'message_store_db', lambda tmux: Store()), \
                 patch.object(reader, 'host_log', lambda *args, **kwargs: None), \
                 patch.object(reader.os, 'fdopen', wraps=os.fdopen) as fdopen:
-            reader.message_worker(self.base['tmux'], 'claude', 'idle-chat', str(handed['fd']))
+            reader.message_worker(self.base['tmux'], 'claude', 'idle-chat')
         self.assertIn(call(handed['fd'], 'a'), fdopen.call_args_list)
 
     def test_retry_spawns_exactly_one_worker_immediately(self):
@@ -113,7 +120,7 @@ class MessageWorkerRequestTest(unittest.TestCase):
 
     def test_all_five_requests_spawn_for_each_work_state(self):
         message = self.submit()
-        for state in ('queued', 'sent', 'failed', 'accepted', 'started'):
+        for state in ('queued', 'failed', 'accepted', 'started'):
             for op in ('snapshot', 'submit', 'retry', 'events', 'status'):
                 with self.subTest(state=state, op=op):
                     with closing(reader.message_store_db(self.base['tmux'])) as db, db:
@@ -130,6 +137,23 @@ class MessageWorkerRequestTest(unittest.TestCase):
                     self.spawn.reset_mock()
                     self.request(op, **values)
                     self.assertEqual(self.spawn.call_count, 1)
+
+    def test_a_sent_message_spawns_only_while_its_deadline_is_live(self):
+        message = self.submit()
+
+        def sent(deadline):
+            with closing(reader.message_store_db(self.base['tmux'])) as db, db:
+                db.execute('UPDATE shared_messages SET state=?,deadline=? WHERE id=?', ('sent', deadline, message['id']))
+
+        sent(None)
+        self.spawn.reset_mock()
+        self.request('snapshot')
+        self.assertEqual(self.spawn.call_count, 0, 'SENT_WITHOUT_DEADLINE_SPAWN')
+
+        sent(time.time() + 15)
+        self.spawn.reset_mock()
+        self.request('snapshot')
+        self.assertEqual(self.spawn.call_count, 1, 'SENT_WITH_DEADLINE_SPAWN')
 
     def test_cancelled_chat_does_not_spawn_for_another_chats_work(self):
         message = self.submit()
@@ -164,7 +188,7 @@ class MessageWorkerRequestTest(unittest.TestCase):
         self.spawn.reset_mock()
         with patch.object(reader.sqlite3, 'connect', wraps=sqlite3.connect) as connect:
             reader.start_message_worker(self.base, 'worker source')
-        connect.assert_called_once_with(reader.message_store_path().as_uri() + '?mode=ro', uri=True)
+        connect.assert_called_once_with(reader.message_store_path().as_uri() + '?mode=ro', uri=True, timeout=2)
         self.assertEqual(self.spawn.call_count, 1)
 
     def test_live_worker_is_woken_without_another_spawn(self):

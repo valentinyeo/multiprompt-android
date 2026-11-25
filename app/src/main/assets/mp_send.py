@@ -281,9 +281,64 @@ def tmux_names():
     return set(done.stdout.split())
 
 
-def published_names():
+def layout_path():
+    configured = os.environ.get("MULTIPROMPT_LAYOUT_PATH")
+    if configured:
+        return Path(configured)
+    return Path.home() / ".local/share/multiprompt/layout.json"
+
+
+def published_entries():
     known = read_json(state_root() / "chat-names.json") or {}
-    return {tmux: entry["name"] for tmux, entry in known.items() if isinstance(entry, dict) and isinstance(entry.get("name"), str) and entry["name"].strip()}
+    entries = {}
+    for tmux, entry in known.items():
+        if not isinstance(tmux, str) or not isinstance(entry, dict):
+            continue
+        name = entry.get("name")
+        workspace = entry.get("workspace")
+        group = entry.get("group")
+        sid = entry.get("sid")
+        entries[tmux] = dict(
+            name=name.strip() if isinstance(name, str) and name.strip() else None,
+            workspace=workspace.strip() if isinstance(workspace, str) and workspace.strip() else None,
+            group=group.strip() if isinstance(group, str) and group.strip() else None,
+            sid=sid.strip() if isinstance(sid, str) and sid.strip() else None,
+        )
+    return entries
+
+
+def published_names():
+    return {tmux: entry["name"] for tmux, entry in published_entries().items() if entry.get("name")}
+
+
+def synced_layout_tabs(host=None):
+    data = read_json(layout_path())
+    if not data:
+        return []
+    tabs = data.get("tabs")
+    if not isinstance(tabs, list):
+        return []
+    result = []
+    for tab in tabs:
+        if not isinstance(tab, dict):
+            continue
+        tmux = tab.get("tmux_session")
+        workspace = tab.get("workspace")
+        if not isinstance(tmux, str) or not tmux or not isinstance(workspace, str) or not workspace.strip():
+            continue
+        tab_host = tab.get("tmux_host")
+        if host is not None and tab_host is not None and tab_host != host:
+            continue
+        name = tab.get("name")
+        group = tab.get("group")
+        result.append(dict(
+            tmux=tmux,
+            name=name.strip() if isinstance(name, str) and name.strip() else None,
+            workspace=workspace.strip(),
+            group=group.strip() if isinstance(group, str) and group.strip() else None,
+            tmux_host=tab_host if isinstance(tab_host, int) else None,
+        ))
+    return result
 
 
 def host_owner_pid(config_path):
@@ -348,6 +403,23 @@ def recent_agent_messages(reader, provider=None, sid=None, sender=None, window=6
             return db.execute(sql, args).fetchone()[0]
     except sqlite3.Error:
         return 0
+
+
+def recent_same_agent_message(reader, provider, sid, text, window=60.0):
+    locate = getattr(reader, "message_store_path", None)
+    if locate is None:
+        return None
+    path = locate()
+    if not path.is_file():
+        return None
+    since = time.time() - window
+    sql = "SELECT id, state FROM shared_messages WHERE origin='agent' AND provider=? AND sid=? AND text=? AND state NOT IN ('failed','cancelled') AND created>? ORDER BY position DESC LIMIT 1"
+    try:
+        with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as db:
+            row = db.execute(sql, (provider, sid, text, since)).fetchone()
+    except sqlite3.Error:
+        return None
+    return dict(id=row[0], state=row[1]) if row else None
 
 
 def check_rate(reader, provider, sid, sender=None):
@@ -457,21 +529,60 @@ def resolve_chat(target, chats):
     raise ValueError("no live chat named " + repr(target) + "; run mp-sessions to see the names")
 
 
+def host_tmux_for_env(environ):
+    provider = (environ.get("MULTIBOT_PROVIDER") or "").strip()
+    sid = (environ.get("MULTIBOT_SID") or "").strip()
+    if not sid or SESSION_ID.match(sid) is None:
+        return None
+    root = host_root()
+    if provider in PROVIDERS:
+        key = host_config_key(provider, sid)
+        for suffix in (".config.json", ".state.json"):
+            data = read_json(root / (key + suffix))
+            tmux = data.get("tmux") if data else None
+            if isinstance(tmux, str) and TMUX_NAME.match(tmux):
+                return tmux
+    else:
+        found = set()
+        for path in sorted(root.glob("*.config.json")):
+            config = read_json(path)
+            if not config:
+                continue
+            key = path.name[: -len(".config.json")]
+            state = read_json(path.with_name(key + ".state.json")) or {}
+            row_sid = state.get("sid") or config.get("sid")
+            if row_sid != sid:
+                continue
+            tmux = config.get("tmux") or state.get("tmux")
+            if isinstance(tmux, str) and TMUX_NAME.match(tmux):
+                found.add(tmux)
+        if len(found) == 1:
+            return found.pop()
+    published = [tmux for tmux, entry in published_entries().items() if entry.get("sid") == sid and TMUX_NAME.match(tmux)]
+    if len(published) == 1:
+        return published[0]
+    return None
+
+
 def own_tmux(environ=None):
     environ = os.environ if environ is None else environ
-    tab = environ.get("MULTIPROMPT_TAB")
-    if tab and TMUX_NAME.match(tab):
-        return tab
+    for var in ("MULTIPROMPT_TAB", "MULTIBOT_SESSION", "ZSB_SESSION"):
+        tab = environ.get(var)
+        if var == "ZSB_SESSION" and tab == "workspace":
+            continue
+        if tab and TMUX_NAME.match(tab):
+            return tab
     pane = environ.get("TMUX_PANE")
     if pane:
         try:
             done = subprocess.run(["tmux", "display-message", "-p", "-t", pane, "#{session_name}"], capture_output=True, text=True, timeout=5)
         except (OSError, subprocess.SubprocessError):
-            return None
-        name = done.stdout.strip()
-        if done.returncode == 0 and TMUX_NAME.match(name):
-            return name
-    return None
+            done = None
+        if done is not None:
+            name = done.stdout.strip()
+            if done.returncode == 0 and TMUX_NAME.match(name):
+                return name
+    return host_tmux_for_env(environ)
 
 
 def sender_label(chats, explicit=None):
@@ -481,7 +592,12 @@ def sender_label(chats, explicit=None):
     if not tmux:
         raise ValueError("cannot tell which chat is sending; run from inside a chat or pass --from NAME")
     names = published_names()
-    return names.get(tmux) or tmux
+    if names.get(tmux):
+        return names[tmux]
+    layout_names = [tab["name"] for tab in synced_layout_tabs() if tab["tmux"] == tmux and tab.get("name")]
+    if len(set(layout_names)) == 1:
+        return layout_names[0]
+    return tmux
 
 
 def parse_named(argv):

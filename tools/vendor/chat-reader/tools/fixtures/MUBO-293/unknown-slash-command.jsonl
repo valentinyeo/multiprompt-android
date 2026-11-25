@@ -1,0 +1,2 @@
+{"type":"user","uuid":"mubo-293-u3","timestamp":"2026-11-24T18:20:00.000Z","message":{"role":"user","content":"<command-message>teach</command-message>\n<command-name>/teach</command-name>\n<command-args>what is the launch playbook</command-args>"}}
+{"type":"user","uuid":"mubo-293-u4","timestamp":"2026-11-24T18:20:01.000Z","message":{"role":"user","content":"<local-command-stdout>Unknown command: /teach</local-command-stdout>"}}
