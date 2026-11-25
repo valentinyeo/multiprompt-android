@@ -2,8 +2,8 @@ package dev.multiprompt.companion.reader
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.TestScope
@@ -29,7 +29,7 @@ class ReaderStreamPumpTest {
         val streamedBy = mutableListOf<Int>()
     }
 
-    private fun TestScope.pump(selected: Flow<Boolean>, host: FakeHost, failures: MutableList<Throwable> = mutableListOf()) {
+    private fun TestScope.pump(selected: StateFlow<Boolean>, host: FakeHost, failures: MutableList<Throwable> = mutableListOf()) {
         val pump = ReaderStreamPump<Int>(
             wanted = selected,
             connect = {
@@ -265,7 +265,7 @@ class ReaderStreamPumpTest {
     }
 
     @Test
-    fun reusedStreamThatDropsAfterItsFirstFrameShowsFailureAndWaitsBeforeReconnecting() = runTest {
+    fun reusedStreamThatDropsAfterItsFirstFrameRestartsOnTheSameConnectionAtOnce() = runTest {
         val host = FakeHost()
         val failures = mutableListOf<Throwable>()
         val selected = MutableStateFlow(true)
@@ -277,14 +277,16 @@ class ReaderStreamPumpTest {
         selected.value = true
         runCurrent()
         assertEquals(1, failures.size)
-        assertEquals(1, host.releases)
-        assertEquals(1, host.connects)
+        assertEquals(0, host.releases)
         advanceTimeBy(2_999L)
         runCurrent()
+        assertEquals("a warm connection that already answered is not replaced", 1, host.connects)
         assertEquals(1, host.connects)
         advanceTimeBy(1L)
         runCurrent()
-        assertEquals(2, host.connects)
+        assertEquals(1, host.connects)
+        assertEquals(listOf(1, 1, 1), host.streamedBy)
+        assertTrue(host.snapshots > 0)
     }
 
     @Test
@@ -403,5 +405,132 @@ class ReaderStreamPumpTest {
         runCurrent()
         assertEquals(settled + 1, host.snapshots)
         assertEquals(1, host.connects)
+    }
+
+    @Test
+    fun oneOpenChatKeepsOneReaderAndOneLoginWhenTheGateDropsAndRetakesInOneTurn() = runTest {
+        val host = FakeHost()
+        val gate = ChatPollGate()
+        val pump = ReaderStreamPump<Int>(
+            wanted = gate.active,
+            connect = {
+                host.connects++
+                host.connects
+            },
+            stream = { client, heard ->
+                host.streamedBy += client
+                while (true) {
+                    heard()
+                    host.snapshots++
+                    delay(1_000L)
+                }
+            },
+            release = { host.releases++ },
+            onClient = { client -> if (client != null) host.clients += client },
+            onConnecting = {},
+            onFailure = {},
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        var lease = gate.acquire()
+        runCurrent()
+        repeat(120) {
+            lease.close()
+            lease = gate.acquire()
+            advanceTimeBy(500L)
+        }
+        runCurrent()
+        assertEquals("reader starts per minute", 1, host.streamedBy.size)
+        assertEquals("logins per minute", 1, host.connects)
+        assertEquals(1, pump.streamStarts)
+        assertEquals(1, pump.connects)
+        assertEquals(0, host.releases)
+        assertTrue("reader stopped sending", host.snapshots >= 60)
+        lease.close()
+    }
+
+    @Test
+    fun oneOpenChatKeepsOneLoginAcrossARealMinuteOfHidesAndReopens() = runTest {
+        val host = FakeHost()
+        val gate = ChatPollGate()
+        val pump = ReaderStreamPump<Int>(
+            wanted = gate.active,
+            connect = {
+                host.connects++
+                host.connects
+            },
+            stream = { client, heard ->
+                host.streamedBy += client
+                while (true) {
+                    heard()
+                    host.snapshots++
+                    delay(1_000L)
+                }
+            },
+            release = { host.releases++ },
+            onClient = { client -> if (client != null) host.clients += client },
+            onConnecting = {},
+            onFailure = {},
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        var lease = gate.acquire()
+        runCurrent()
+        repeat(6) {
+            advanceTimeBy(5_000L)
+            lease.close()
+            runCurrent()
+            advanceTimeBy(5_000L)
+            lease = gate.acquire()
+            runCurrent()
+        }
+        runCurrent()
+        assertEquals("reader starts per minute of six hides", 7, host.streamedBy.size)
+        assertEquals("logins per minute of six hides", 1, host.connects)
+        assertEquals(0, host.releases)
+        lease.close()
+    }
+
+    @Test
+    fun oneOpenChatKeepsOneReaderAndOneLoginForAMinuteAfterARealDrop() = runTest {
+        val host = FakeHost()
+        val failures = mutableListOf<Throwable>()
+        host.dropAfterBytes = IllegalStateException("tmux session ended")
+        val pump = ReaderStreamPump<Int>(
+            wanted = MutableStateFlow(true),
+            connect = {
+                host.connects++
+                host.connects
+            },
+            stream = { client, heard ->
+                host.streamedBy += client
+                host.dropAfterBytes?.let {
+                    host.dropAfterBytes = null
+                    heard()
+                    host.snapshots++
+                    throw it
+                }
+                while (true) {
+                    heard()
+                    host.snapshots++
+                    delay(1_000L)
+                }
+            },
+            release = { host.releases++ },
+            onClient = { client -> if (client != null) host.clients += client },
+            onConnecting = {},
+            onFailure = { failures += it },
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        advanceTimeBy(60_000L)
+        runCurrent()
+        assertEquals("logins per minute", 1, host.connects)
+        assertEquals(1, failures.size)
+        assertTrue("reader stopped after the drop", host.snapshots >= 55)
+        assertTrue("reader restarted after the drop", pump.streamStarts >= 2)
     }
 }

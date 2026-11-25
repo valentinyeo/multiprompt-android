@@ -57,6 +57,7 @@ class ChatHistoryConnection(
     private val journal: MessageJournal? = null,
     private val gate: MessageGate? = null,
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
+    private val sharedClient: (() -> SshClient?)? = null,
     private val beforeAdmission: (suspend () -> Unit)? = null,
     private val stallMillis: Long = ConversationLoad.TIMEOUT_MS,
     internal val pollGate: ChatPollGate,
@@ -304,12 +305,12 @@ class ChatHistoryConnection(
     private suspend fun connected(block: suspend (suspend (String) -> String) -> Unit) = coroutineScope {
         lastReply = System.nanoTime()
         loadStarted = lastReply
-        val client = AtomicReference<SshClient?>()
+        val own = AtomicReference<SshClient?>()
         val watchdog = launch {
             while (true) {
                 val retry = withTimeoutOrNull((stallMillis / 4).coerceAtLeast(1L)) { retryNudge.receive() } != null
                 if (retry || (selected && ConversationLoad.expired(System.nanoTime(), loadStarted, lastReply, _state.value.ready, stallMillis))) {
-                    client.get()?.let(::disconnectAside)
+                    own.get()?.let(::disconnectAside)
                     if (retry) throw RetryRequested() else throw StalledChat()
                 }
             }
@@ -322,10 +323,13 @@ class ChatHistoryConnection(
             if (transport != null) {
                 transport(tracked)
             } else {
-                val connectedClient = withTimeout(20_000L) { repository.connect(host) }
-                client.set(connectedClient)
-                try { repository.streamChatHistory(connectedClient, script, tracked) }
-                finally { disconnectAside(connectedClient) }
+                val shared = sharedClient?.invoke()
+                val client = shared ?: withTimeout(20_000L) { repository.connect(host) }.also { own.set(it) }
+                try {
+                    repository.streamChatHistory(client, script, tracked)
+                } finally {
+                    if (shared == null) disconnectAside(client)
+                }
             }
         } finally {
             watchdog.cancel()
@@ -363,6 +367,7 @@ class ChatHistoryConnection(
                             var wasOlder = false
                             val checked = mutableSetOf<String>()
                             var engine: Pair<Long, String>? = null
+                            val snapshots = ChatHistoryProtocol.SnapshotFingerprint()
                             poll@ while (isActive) {
                                 if (!selected) {
                                     wake.receive()
@@ -377,11 +382,13 @@ class ChatHistoryConnection(
                                 val current = if (resyncing != null) _state.value.history.resetSeed() else _state.value.history
                                 val before = if (nearTop && !wasOlder && !current.more) current.start else 0
                                 requestId++
-                                val page = ChatHistoryProtocol.parse(exchange(ChatHistoryProtocol.request(requestId, identity,
-                                    if (resyncing != null) current.copy(sid = "") else current, before, if (provider == null) deliveryIds else emptyList(), held = provider == null)), requestId, identity)
-                                    ?: error("History unavailable")
+                                val reply = exchange(ChatHistoryProtocol.request(requestId, identity,
+                                    if (resyncing != null) current.copy(sid = "") else current, before, if (provider == null) deliveryIds else emptyList(), held = provider == null))
+                                val repeated = resyncing == null && snapshots.same(reply)
+                                val page = if (repeated) ChatHistoryProtocol.repeated(current)
+                                    else ChatHistoryProtocol.parse(reply, requestId, identity) ?: error("History unavailable")
                                 if (generation != historyGeneration) { replica = null; continue@poll }
-                                val next = current.apply(page)
+                                val next = if (repeated) current else current.apply(page)
                                 val clearedBy = if (next.clearedAt > current.clearedAt) next.clearedAt else 0.0
                                 if (replicaSid != page.sid) {
                                     replica = null

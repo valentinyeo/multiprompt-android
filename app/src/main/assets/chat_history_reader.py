@@ -4738,7 +4738,7 @@ def host_auto_switch_redeliver(tmux, message_id, reply):
         if not changed:
             return False
         message_event(db, provider, sid, message_row(db.execute("SELECT * FROM shared_messages WHERE id=?", (message_id,)).fetchone()))
-    start_message_worker(dict(tmux=tmux, provider=provider, sid=sid), host_reader_source(), only_if_work=True)
+    start_message_worker(dict(tmux=tmux, provider=provider, sid=sid), host_reader_source())
     message_store_request(dict(message_protocol=1, tmux=tmux, provider=provider, sid=sid, op="message_dispatch"))
     return True
 
@@ -7515,30 +7515,43 @@ def message_poll_locked(tmux, provider, sid):
                 message_apply_connector(db, provider, sid, epoch, result)
 
 
-def start_message_worker(q, source, only_if_work=False):
-    if source is None:
+def message_worker_pending(tmux, provider, sid):
+    from contextlib import closing
+    path = message_store_path()
+    if not path.exists():
+        return False
+    with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
+        if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='shared_messages'").fetchone():
+            return False
+        return db.execute("SELECT 1 FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent','failed','accepted','started') LIMIT 1", (provider, sid)).fetchone() is not None
+
+
+def start_message_worker(q, source):
+    if source is None or not message_worker_pending(q['tmux'], q['provider'], q['sid']):
         return
-    if only_if_work:
-        from contextlib import closing
-        with closing(message_store_db(q['tmux'])) as db:
-            if not db.execute("SELECT 1 FROM shared_messages WHERE provider=? AND sid=? AND state IN ('queued','sent','failed','accepted','started') LIMIT 1", (q['provider'], q['sid'])).fetchone():
-                return
     import fcntl
     path = message_store_path()
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock_path = path.with_suffix('.' + hashlib.sha256((q['provider'] + ':' + q['sid']).encode()).hexdigest() + '.message-worker')
-    with lock_path.open('a') as lock:
-        try:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            message_worker_wake(lock_path)
-            return
-    bootstrap = "import base64,sys;s=base64.b64decode(sys.stdin.buffer.readline()).decode();exec(compile(s,'<message-worker>','exec'),dict(__name__='__main__',READER_SOURCE=s))"
-    child = subprocess.Popen([sys.executable, '-u', '-c', bootstrap, '--message-worker', q['tmux'], q['provider'], q['sid']], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    lock = lock_path.open('a')
     try:
-        child.stdin.write(base64.b64encode(source.encode()) + b'\n')
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        lock.close()
+        message_worker_wake(lock_path)
+        return
+    try:
+        bootstrap = "import base64,sys;s=base64.b64decode(sys.stdin.buffer.readline()).decode();exec(compile(s,'<message-worker>','exec'),dict(__name__='__main__',READER_SOURCE=s))"
+        command = [sys.executable, '-u', '-c', bootstrap, '--message-worker', q['tmux'], q['provider'], q['sid']]
+        handover = dict(pass_fds=(lock.fileno(),)) if os.name == 'posix' else {}
+        if handover:
+            command.append(str(lock.fileno()))
+        child = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, **handover)
+        try:
+            child.stdin.write(base64.b64encode(source.encode()) + b'\n')
+        finally:
+            child.stdin.close()
     finally:
-        child.stdin.close()
+        lock.close()
 
 
 def message_worker_wake_path(lock_path):
@@ -7594,13 +7607,13 @@ def message_worker_deadline(seconds):
         signal.signal(signal.SIGALRM, previous)
 
 
-def message_worker(tmux, provider, sid):
+def message_worker(tmux, provider, sid, lock_fd=None):
     import fcntl
     import selectors
     from contextlib import closing
     path = message_store_path()
     lock_path = path.with_suffix('.' + hashlib.sha256((provider + ':' + sid).encode()).hexdigest() + '.message-worker')
-    with lock_path.open('a') as lock:
+    with (os.fdopen(int(lock_fd), 'a') if lock_fd else lock_path.open('a')) as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -8860,10 +8873,8 @@ def serve_request(line, source, subscriptions, lock):
             return
         if query.get("op") in ("message_submit", "message_retry", "message_dismiss", "message_dispatch", "message_status", "message_snapshot", "message_events", "message_reset"):
             result = message_store_request(query)
-            if query.get('op') in ('message_submit', 'message_retry', 'message_snapshot'):
+            if query.get('op') in ('message_submit', 'message_retry', 'message_snapshot', 'message_events', 'message_status'):
                 start_message_worker(query, source)
-            elif query.get('op') in ('message_events', 'message_status'):
-                start_message_worker(query, source, only_if_work=True)
             serve_print(dict(id=rid, message_protocol=1, result=result))
             return
         if query.get("op") in ("send", "question_text"):
@@ -8940,7 +8951,7 @@ if __name__ == "__main__" and "--watch" in sys.argv[1:]:
 elif __name__ == "__main__" and sys.argv[1:2] == ["--held-worker"]:
     held_queue_worker(sys.argv[2], sys.argv[3], Path(sys.argv[4]))
 elif __name__ == "__main__" and sys.argv[1:2] == ["--message-worker"]:
-    message_worker(sys.argv[2], sys.argv[3], sys.argv[4])
+    message_worker(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5] if len(sys.argv) > 5 else None)
 elif __name__ == "__main__" and sys.argv[1:2] == ["--auto-switch"]:
     print(json.dumps(host_auto_switch_run(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]), separators=(",", ":")))
 elif __name__ == "__main__" and sys.argv[1:2] == ["--agent-host"]:

@@ -41,6 +41,7 @@ source_checks() {
   python3 -B tools/working-dots/check.test.py
   bash tools/check-canonical-chat-reader.sh
   python3 -B tools/chat-reader-bundle.test.py
+  python3 -B tools/message-worker.test.py
   python3 -B tools/history-continuity.test.py
   python3 -B tools/queue-receipts.test.py
   python3 tools/terminal-console.test.py
