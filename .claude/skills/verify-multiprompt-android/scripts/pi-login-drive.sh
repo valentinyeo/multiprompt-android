@@ -4,7 +4,7 @@ sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-be
 "$mpa" read --wait-text pi-fast
 "$mpa" read --wait-text pi-deep
 "$mpa" screenshot pi-model-choices
-"$mpa" proof --name pi-model-choices --require-text pi-fast --require-text pi-deep --forbid-text AI_SWITCH_READY_2538
+"$mpa" proof --name pi-model-choices --require-text pi-fast --require-text pi-deep --forbid-text PI_PANE_ONLY_545
 "$mpa" read --select visible --value pi-fast --extra enabled
 "$mpa" read --select visible --value pi-deep --extra enabled
 sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-after.jsonl"

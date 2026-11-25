@@ -36,7 +36,7 @@ def console():
     enabled = subprocess.check_output([sys.executable, str(HOME / 'ai-switch-reader.py'), 'host', 'enable',
         'claude', SID, '--tmux', TMUX, '--cwd', str(CWD)], text=True)
     assert json.loads(enabled)['status'] == 'enabled', enabled
-    print('Claude Code\nAI_SWITCH_READY_2538\nReady', flush=True)
+    print('Claude Code\nAI_SWITCH_READY_2538\nPI_PANE_ONLY_545\nReady', flush=True)
     os.execvp('sleep', ['sleep', 'infinity'])
 
 

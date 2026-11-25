@@ -211,6 +211,7 @@ class FixtureJourneyTest(unittest.TestCase):
                 with patch.object(fixture, 'HOME', home), patch.object(fixture, 'CWD', home / 'ai-switch-work'), patch.object(fixture, 'boundary'), patch.object(fixture.os, 'execvp') as launch, patch.object(sys, 'stdin', io.StringIO('')), patch.dict(os.environ, HOME=str(home), GITHUB_ACTIONS='true'), redirect_stdout(io.StringIO()) as output:
                     fixture.console()
                 self.assertIn('AI_SWITCH_READY_2538', output.getvalue())
+                self.assertIn('PI_PANE_ONLY_545', output.getvalue())
                 launch.assert_called_once_with('sleep', ['sleep', 'infinity'])
                 configs = [json.loads(path.read_text()) for path in (home / '.local/state/multiprompt/agent-host').glob('*.config.json')]
                 self.assertEqual(1, len(configs))
@@ -222,6 +223,7 @@ class FixtureJourneyTest(unittest.TestCase):
                     history = reader.host_paths('pi', switched['sid'])['history'].read_text()
                     self.assertIn('Switched AI: Claude to Pi', history)
                     self.assertIn('CLAUDE_BEFORE_SWITCH_2538', history)
+                    self.assertNotIn('PI_PANE_ONLY_545', history)
             finally:
                 os.chdir(previous)
                 subprocess.run(['sudo', 'chown', '-R', f'{os.getuid()}:{os.getgid()}', str(home)], check=True)

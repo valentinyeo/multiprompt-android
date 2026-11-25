@@ -6,7 +6,7 @@ The registry schedules a separate `pi-login.md` head journey through the existin
 
 ## Journey
 
-1. Switch the fixture chat to Pi through **Session actions → Switch AI**. Keep the chat history on screen. Require **pi-fast** and **pi-deep**, the two models served by the host completion helper through the structured `piModels` channel. Retain `pi-model-choices.json` and `pi-model-choices` PNG/XML. The terminal-only `AI_SWITCH_READY_2538` marker must be absent.
+1. Switch the fixture chat to Pi through **Session actions → Switch AI**. Keep the chat history on screen. Require **pi-fast** and **pi-deep**, the two models served by the host completion helper through the structured `piModels` channel. Retain `pi-model-choices.json` and `pi-model-choices` PNG/XML. The terminal-only `PI_PANE_ONLY_545` marker must be absent.
 2. Require both model choices to be visible and enabled in the chat row, with no Model sheet or composer menu open. Independently read the models served by the host into `pi-model-host.json`. The SSH observer must record positive history queries and zero pane captures during these chat actions. Retain both raw request logs.
 3. Send `PI_LOGIN_PROMPT_2276`. The disposable Pi process emits `extension_ui_request` with `method=open_url`. The real host writes a `text.done` event whose item is `pi-login-1`.
 4. Return to Inbox. Open **verify-session** while that login is pending. Require **Sign in to Pi**, **Open sign-in link**, and `https://pi.example/verify-device`. Retain `pi-login-pending.json` and `ai-switch-pi-login` PNG/XML. Independently read the host message store into `pi-login-host.json`; require the host login item and exact prompt URL.
