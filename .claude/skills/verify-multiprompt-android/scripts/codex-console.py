@@ -64,11 +64,11 @@ header = dict(type="session", version=1, id=sid, cwd=str(home)) if mode == "hax"
 output.write(json.dumps(header) + "\n")
 
 
-def event(role, text):
+def event(role, text, identity=None):
     stamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
     row = dict(kind=role, text=text, timestamp=stamp) if mode == "hax" else dict(type="response_item", timestamp=stamp, payload=dict(type="message", role=role, content=[dict(type="input_text" if role == "user" else "output_text", text=text)]))
     if mode == "claude":
-        identity = str(uuid.uuid4())
+        identity = identity or str(uuid.uuid4())
         row = dict(type=role, uuid=identity, sessionId=sid, timestamp=stamp,
                    message=dict(role=role, content=text, stop_reason="end_turn", **({"id": identity} if role == "assistant" else {})))
     output.write(json.dumps(row) + "\n")
@@ -88,6 +88,22 @@ for text in prompts():
     with Path(sys.argv[1]).open("a") as receipt:
         receipt.write("VERIFY_RECEIVED:" + visible + "\n")
     event("user", text)
-    event("assistant", "CODEX_REPLY_" + mode + "_" + visible)
+    if mode == "claude" and visible == "STREAM_531":
+        identity = str(uuid.uuid4())
+        content = ""
+        for index, marker in enumerate(("STREAMCHATSTART", "STREAMCHATUPDATE", "TERMINALALPHA", "TERMINALOMEGA")):
+            content += marker + " "
+            event("assistant", content.strip(), identity)
+            print(marker, flush=True)
+            (home / "pane-stream-stage.txt").write_text(str(index))
+            deadline = time.monotonic() + 120
+            release = home / ("pane-stream-release-" + str(index))
+            while not release.exists() and time.monotonic() < deadline:
+                time.sleep(0.1)
+            if not release.exists():
+                raise RuntimeError("PANE_STREAM_531: phone never released stage " + str(index))
+        (home / "pane-stream-complete.txt").write_text(content.strip())
+    else:
+        event("assistant", "CODEX_REPLY_" + mode + "_" + visible)
     (home / (mode + "-reply-ns.txt")).write_text(str(time.time_ns()))
     print("Prompt received.\n" + ("❯ \n────────────────────" if mode == "claude" else "› "), flush=True)

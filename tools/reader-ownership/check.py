@@ -39,7 +39,7 @@ def violations(files, baseline):
     requirements = {
         reader + "SessionReaderConnection.kt": [
             r"private\s+val\s+pollGate\s*=\s*ChatPollGate\(",
-            r"fun\s+observe\(\)\s*:\s*AutoCloseable\s*=\s*pollGate\.acquire\(",
+            r"fun\s+observe\(pane:\s*Boolean\s*=\s*true\)\s*:\s*AutoCloseable\s*\{\s*val\s+paneLease\s*=\s*if\s*\(pane\)\s*paneGate\.acquire\(\)\s*else\s*null\s+val\s+lease\s*=\s*pollGate\.acquire\(",
             r"pollGate\s*=\s*pollGate",
             r"wanted\s*=\s*pollGate\.active",
             r"pollGate\.close\(\)",
@@ -54,9 +54,9 @@ def violations(files, baseline):
             r"trap 'rm -f .*' EXIT;",
         ],
         "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt": [
-            r"DisposableEffect\(connection,\s*voiceLifecycle\)",
+            r"DisposableEffect\(connection,\s*voiceLifecycle,\s*historyChat\)",
             r"Lifecycle\.Event\.ON_STOP\s*->\s*\{\s*readerLease\?\.close\(\)\s*readerLease\s*=\s*null",
-            r"Lifecycle\.Event\.ON_START\s*->\s*\{\s*readerLease\s*=\s*readerLease\s*\?:\s*connection\.observe\(\)",
+            r"Lifecycle\.Event\.ON_START\s*->\s*\{\s*readerLease\s*=\s*readerLease\s*\?:\s*connection\.observe\(pane\s*=\s*!historyChat\)",
             r"onDispose\s*\{\s*voiceLifecycle\.lifecycle\.removeObserver\(observer\)\s*readerLease\?\.close\(\)",
         ],
     }
