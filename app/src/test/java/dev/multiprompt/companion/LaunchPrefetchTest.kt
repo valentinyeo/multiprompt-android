@@ -61,6 +61,7 @@ class LaunchPrefetchTest {
         state = ReflectionHelpers.getField(model, "_state")
         foreground = ReflectionHelpers.getField(model, "foreground")
         model.sessionLister = { listCalls++; SshRepository.HostSessions(sessions.map { it.copy() }) }
+        model.sessionSignaturer = { sessions.joinToString(",") { session -> "${session.name}:${session.lastActivityEpochSeconds}" } }
         model.historyWarmer = { _, batch -> warmed.add(batch) }
         model.historyPrefetcher = { _, batch -> prefetched.add(batch) }
         state.value = AppUiState(hosts = listOf(host))

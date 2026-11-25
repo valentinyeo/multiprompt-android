@@ -146,6 +146,19 @@ class SshRepository(private val secrets: SecretStorage) {
         }
     }
 
+    suspend fun listSessionSignature(host: HostProfile): String = withContext(Dispatchers.IO) {
+        withTimeout(CONNECTION_TIMEOUT_MS) {
+            withServerLink(host, stallMs = LinkPolicy.LIST_STALL_MS) { client ->
+                val result = execute(client, TmuxParser.signatureCommand())
+                TmuxParser.error(result.stdout)?.let { error ->
+                    throw SshProblem.Connection("The VPS cannot run tmux: $error")
+                }
+                TmuxParser.parseSignature(result.stdout)
+                    ?: throw SshProblem.Connection("The VPS returned an incomplete tmux response. Refresh to retry.")
+            }
+        }
+    }
+
     internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
     suspend fun connect(host: HostProfile): SshClient = openClient(host, pooled = false)

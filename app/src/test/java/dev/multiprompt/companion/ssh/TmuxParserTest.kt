@@ -303,4 +303,32 @@ class TmuxParserTest {
         assertTrue(registry > command.indexOf("tmux list-sessions"))
         assertTrue(registry < command.indexOf(TmuxCommands.ETA_PREFIX))
     }
+
+    @Test
+    fun signatureCommandChecksumsTheSameRowsWithoutPanePreviews() {
+        val command = TmuxParser.signatureCommand()
+        val full = TmuxParser.command()
+        val format = command.substringAfter("display-message -p -t").substringAfter("-F '").substringBefore("'")
+
+        assertEquals(
+            full.substringAfter("display-message -p -t").substringAfter("-F '").substringBefore("'"),
+            format,
+        )
+        assertTrue(command.contains("| cksum"))
+        assertTrue(command.contains(TmuxParser.START_MARKER))
+        assertTrue(command.contains(TmuxParser.END_MARKER))
+        assertTrue(command.contains("reader.py host list"))
+        assertTrue(command.contains(TmuxCommands.ETA_PREFIX))
+        assertTrue("tmux capture-pane" !in command)
+        assertTrue("tmux capture-pane" in full)
+    }
+
+    @Test
+    fun parseSignatureReadsTheChecksumLineAndIgnoresAnythingElse() {
+        val output = "tmux: no server running\n${TmuxParser.START_MARKER}\n1234567890 4096\n${TmuxParser.END_MARKER}\n"
+
+        assertEquals("1234567890 4096", TmuxParser.parseSignature(output))
+        assertEquals(null, TmuxParser.parseSignature("${TmuxParser.START_MARKER}\n${TmuxParser.END_MARKER}\n"))
+        assertEquals(null, TmuxParser.parseSignature("1234567890 4096"))
+    }
 }
