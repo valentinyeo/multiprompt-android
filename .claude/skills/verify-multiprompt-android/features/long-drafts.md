@@ -57,6 +57,13 @@ The field stops growing at six lines, so a 1,000 character and a 5,000 character
 height. That is the wrap proof, not a missing screenshot: the whole draft is in the field, the field
 width never changes, and only the visible window moves.
 
+A burst of key events drops characters anywhere in the draft, not only at its end, so the driver
+reads every chunk back and rewinds the field to the last correct character before retyping.
+
+The arrow-walk travel distance is deliberately generous: a line holds about 20 characters, so
+overshooting only parks the caret at the start or the end of the draft, which is exactly what the
+two ends of the walk assert.
+
 The field's height and width are recorded from the filled draft before any edit, so the wrap and
 line-cap checks compare whole drafts and not a draft carrying the middle edit.
 

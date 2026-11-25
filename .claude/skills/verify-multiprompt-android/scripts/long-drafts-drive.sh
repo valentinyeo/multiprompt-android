@@ -24,8 +24,6 @@ fill_step() {
 json_value() {
     python3 -B -c 'import json, sys; print(json.load(sys.stdin)[sys.argv[1]])' "$1"
 }
-# A burst of key events drops characters anywhere in the draft, not only at its end, so every
-# chunk is read back and the field is rewound to the last correct character before retyping.
 type_until() {
     local draft=$1 want=$2 text=$3 attempt payload keep delete
     for attempt in 1 2 3 4 5 6; do
@@ -119,8 +117,6 @@ for length in 100 1000 5000; do
     if ((length <= 100)); then pill=yes; fi
     fill_draft "$length" "$draft"
     capture "$length" end "$draft" --pill "$pill"
-    # Generous: a line holds about 20 characters, so overshooting only stops the caret at the
-    # start or the end of the draft, which is exactly what the two ends of the walk assert.
     travel=$((length / 10 + 40))
     press KEYCODE_DPAD_UP "$travel"
     capture "$length" top "$draft" --pill "$pill"
