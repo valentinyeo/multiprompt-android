@@ -18,16 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
-import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ReaderState
-import dev.multiprompt.companion.ssh.TmuxText
 import kotlinx.coroutines.delay
 
-internal fun ReaderState.isWorking(agent: AgentKind): Boolean = sending || (hookState?.active
-    ?: TmuxText.readerBlocks(screenOutput, agent).any {
-        it.kind == TmuxText.ReaderBlockKind.PROGRESS && isTransientProgress(it.text)
-    })
+internal fun ReaderState.isWorking(): Boolean = sending || (hookState?.active ?: working)
 
 internal fun awaitingReply(messages: List<ChatHistoryMessage>, openQuestions: Int): Boolean =
     openQuestions == 0 && messages.lastOrNull()?.role == "user"

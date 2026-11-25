@@ -53,6 +53,7 @@ data class ReaderState(
     val skillsError: String? = null,
     val status: ReaderStatus = ReaderStatus.Connecting,
     val sending: Boolean = false,
+    val working: Boolean = false,
     val actionError: String? = null,
     val lastUpdatedAtMillis: Long = 0,
     val completedActions: Long = 0,
@@ -77,6 +78,51 @@ internal fun transcriptAfterUpdate(
     null, "same" -> current
     "ok" -> response.messages
     else -> null
+}
+
+internal fun nextPaneState(
+    current: ReaderState,
+    frame: SshRepository.StreamSnapshot,
+    agent: AgentKind,
+    settings: HostSettings?,
+    nowMillis: Long,
+): ReaderState? {
+    if (current.status is ReaderStatus.Live &&
+        current.lastFailure == null &&
+        current.pendingModelFamily == null &&
+        current.screenOutput == frame.screenOutput &&
+        current.alternateOn == frame.alternateOn &&
+        current.hookState == frame.hookState &&
+        frame.eta == null
+    ) {
+        return null
+    }
+    val merged = TmuxText.mergeSnapshot(current.output, frame.output)
+    val parsed = TmuxText.runtimeDetails(merged)
+    val liveDetails = when {
+        frame.details.model != null -> frame.details
+        parsed.model != null -> parsed
+        else -> current.runtimeDetails
+    }
+    val resolvedFamily = HostSettings.family(liveDetails.model)
+        ?: HostSettings.family(settings?.model?.takeIf { it.isNotEmpty() })
+    val clearedPending = current.pendingModelFamily != null && resolvedFamily == current.pendingModelFamily
+    return current.copy(
+        output = merged,
+        screenOutput = frame.screenOutput,
+        runtimeDetails = liveDetails,
+        modelPickerOptions = frame.pickerOptions,
+        status = ReaderStatus.Live,
+        lastFailure = null,
+        lastUpdatedAtMillis = nowMillis,
+        waitingForInput = frame.waitingForInput,
+        alternateOn = frame.alternateOn,
+        eta = frame.eta?.toEta(nowMillis),
+        hookState = frame.hookState,
+        working = frame.hookState?.active ?: paneWorking(frame.screenOutput, agent),
+        pendingModelFamily = if (clearedPending) null else current.pendingModelFamily,
+        modelSwitchFailure = if (clearedPending) null else current.modelSwitchFailure,
+    )
 }
 
 internal fun unconfirmedAfterResync(history: ChatHistory, sent: List<QueuedMessages.SentPrompt>): List<QueuedMessages.SentPrompt> =
@@ -600,33 +646,9 @@ class SessionReaderConnection(
                 }
                 return@streamSession
             }
+            val settings = hostSettings()
             _state.update { current ->
-                val merged = TmuxText.mergeSnapshot(current.output, frame.output)
-                val parsed = TmuxText.runtimeDetails(merged)
-                val liveDetails = when {
-                    frame.details.model != null -> frame.details
-                    parsed.model != null -> parsed
-                    else -> current.runtimeDetails
-                }
-                val settings = hostSettings()
-                val resolvedFamily = HostSettings.family(liveDetails.model)
-                    ?: HostSettings.family(settings?.model?.takeIf { it.isNotEmpty() })
-                val clearedPending = current.pendingModelFamily != null && resolvedFamily == current.pendingModelFamily
-                current.copy(
-                    output = merged,
-                    screenOutput = frame.screenOutput,
-                    runtimeDetails = liveDetails,
-                    modelPickerOptions = frame.pickerOptions,
-                    status = ReaderStatus.Live,
-                    lastFailure = null,
-                    lastUpdatedAtMillis = System.currentTimeMillis(),
-                    waitingForInput = frame.waitingForInput,
-                    alternateOn = frame.alternateOn,
-                    eta = frame.eta?.toEta(System.currentTimeMillis()),
-                    hookState = frame.hookState,
-                    pendingModelFamily = if (clearedPending) null else current.pendingModelFamily,
-                    modelSwitchFailure = if (clearedPending) null else current.modelSwitchFailure,
-                )
+                nextPaneState(current, frame, agent, settings, System.currentTimeMillis()) ?: current
             }
         }
     }

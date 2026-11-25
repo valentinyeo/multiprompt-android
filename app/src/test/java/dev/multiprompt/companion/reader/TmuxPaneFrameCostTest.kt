@@ -118,33 +118,15 @@ class TmuxPaneFrameCostTest {
             )
         }
         val snapshot = requireNotNull(frame)
-        val current = state.value
-        var merged = ""
-        var details = current.runtimeDetails
-        measure(timing, MERGE) {
-            merged = TmuxText.mergeSnapshot(current.output, snapshot.output)
-            details = snapshot.details.takeIf { it.model != null }
-                ?: TmuxText.runtimeDetails(merged).takeIf { it.model != null }
-                ?: current.runtimeDetails
-        }
         var emitted = false
-        measure(timing, STATE_EMIT) {
-            state.value = current.copy(
-                output = merged,
-                screenOutput = snapshot.screenOutput,
-                runtimeDetails = details,
-                modelPickerOptions = snapshot.pickerOptions,
-                status = ReaderStatus.Live,
-                lastFailure = null,
-                lastUpdatedAtMillis = clock,
-                waitingForInput = snapshot.waitingForInput,
-                alternateOn = snapshot.alternateOn,
-                eta = null,
-                hookState = null,
-            )
-            emitted = state.value !== current
+        measure(timing, FRAME_STATE) {
+            val next = nextPaneState(state.value, snapshot, AGENT, null, clock)
+            if (next != null) {
+                state.value = next
+                emitted = true
+            }
         }
-        measure(timing, UI_WORKING_READ) { state.value.isWorking(AGENT) }
+        measure(timing, UI_WORKING_READ) { state.value.isWorking() }
         return emitted
     }
 
@@ -170,7 +152,7 @@ class TmuxPaneFrameCostTest {
             if (runFrame(changed, line, pane, state, CLOCK + (FRAMES + index) * 1_000L)) changedEmits++
         }
 
-        assertEquals(FRAMES, identicalEmits)
+        assertEquals(1, identicalEmits)
         assertEquals(FRAMES, changedEmits)
         assertTrue(state.value.output.isNotBlank())
         publish(report(identical, changed, identicalPane, identicalFrame.length, identicalEmits, changedEmits))
@@ -184,7 +166,7 @@ class TmuxPaneFrameCostTest {
         identicalEmits: Int,
         changedEmits: Int,
     ): String = buildString {
-        appendLine("### MUBO-453: phone cost of one tmux pane frame")
+        appendLine("### MUBO-542: phone cost of one tmux pane frame")
         appendLine()
         appendLine(
             "Synthetic pane: ${pane.lineSequence().count()} lines, ${pane.toByteArray(Charsets.UTF_8).size / 1024} KiB " +
@@ -204,9 +186,9 @@ class TmuxPaneFrameCostTest {
             )
         }
         appendLine()
-        appendLine("- identical frames: $identicalEmits of $FRAMES emitted a new ReaderState and recomposed (`lastUpdatedAtMillis`, `SessionReaderConnection.kt:622`); changed frames: $changedEmits of $FRAMES.")
-        appendLine("- the phone decodes and re-parses every frame it receives; the server is what skips an unchanged pane (`TmuxCommands.kt:417`).")
-        appendLine("- `reader.isWorking` parses `screenOutput` on Main when the server sends no hook state (`hookState` null), including while the chat shows the structured history (`MultipromptApp.kt:3127`, `WorkingDots.kt:27`, `ChatHistoryList.kt:217`).")
+        appendLine("- identical frames: $identicalEmits of $FRAMES emitted a new ReaderState; changed frames: $changedEmits of $FRAMES. `nextPaneState` returns null for an unchanged pane, so the StateFlow keeps its value and Compose recomposes no extra times.")
+        appendLine("- `frame-state` is the whole `nextPaneState` (unchanged check, merge, runtime details, working read on the pane tail); it does the merge only when the pane changed.")
+        appendLine("- `ui-working-read` on Main now reads the Boolean `ReaderState.working` that `PaneWorking.kt` computes on IO from the last $WORKING_TAIL_LINES pane lines (`WorkingDots.kt`, `ChatHistoryList.kt`, `MultipromptApp.kt`).")
     }
 
     private fun ms(value: Double): String = String.format(Locale.US, "%.2f", value)
@@ -277,8 +259,7 @@ class TmuxPaneFrameCostTest {
         const val LEFT_ALIGN = "left-align"
         const val COMPOSER_TRIM = "composer-trim"
         const val FRAME_DETAILS = "frame-details"
-        const val MERGE = "merge"
-        const val STATE_EMIT = "state-emit"
+        const val FRAME_STATE = "frame-state"
         const val UI_WORKING_READ = "ui-working-read"
 
         val STAGES = listOf(
@@ -288,9 +269,8 @@ class TmuxPaneFrameCostTest {
             Triple(LEFT_ALIGN, "Dispatchers.IO", "SshRepository.kt:259"),
             Triple(COMPOSER_TRIM, "Dispatchers.IO", "TmuxText.kt:274"),
             Triple(FRAME_DETAILS, "Dispatchers.IO", "SshRepository.kt:264-277"),
-            Triple(MERGE, "Dispatchers.IO", "SessionReaderConnection.kt:604-605"),
-            Triple(STATE_EMIT, "Dispatchers.IO", "SessionReaderConnection.kt:615-629"),
-            Triple(UI_WORKING_READ, "Main", "WorkingDots.kt:27"),
+            Triple(FRAME_STATE, "Dispatchers.IO", "SessionReaderConnection.nextPaneState"),
+            Triple(UI_WORKING_READ, "Main", "WorkingDots.kt isWorking"),
         )
 
         val allocationBean: com.sun.management.ThreadMXBean? = runCatching {
