@@ -2203,6 +2203,7 @@ if [[ "$feature" == chat-codex.md ]]; then
     wait_for_text 'CODEX_REPLY_claude_CLAUDE_CONTROL'
     sudo grep -Fx 'VERIFY_RECEIVED:CLAUDE_CONTROL' /home/verifyssh/claude-receipts.txt > "$EVIDENCE/claude-receipt.txt"
     shot claude-compatible
+    source tools/pane-stream/drive.sh
     printf 'ANDROID_CODEX_READ_SEND_CLAUDE_OK\n' | tee "$EVIDENCE/codex-result.txt"
     exit 0
 fi

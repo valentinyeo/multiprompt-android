@@ -129,6 +129,7 @@ jobs:
           overwrite: true
           name: unit-tests-results
           path: |
+            app/build/reports/pane-stream-budget.json
             app/build/reports/igsh-844/*.png
             app/build/reports/igsh-1045/*.png
             app/build/reports/igsh-1015/*.png

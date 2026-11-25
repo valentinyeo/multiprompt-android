@@ -25,7 +25,8 @@ class ObserverTest(unittest.TestCase):
     def test_snapshot_probe_counts_work_not_channel_opens(self):
         command = "while tmux has-session -t '=verify-session'; do tmux capture-pane -p; sleep 1; done; printf '__MP_TMUX_SNAPSHOT__'"
         measured = observer.snapshot_command(command, "/home/verifyssh/ssh-observer.py")
-        self.assertIn("do python3 /home/verifyssh/ssh-observer.py snapshot verify-session; tmux capture-pane", measured)
+        self.assertIn("do python3 /home/verifyssh/ssh-observer.py snapshot verify-session visible; tmux capture-pane", measured)
+        self.assertIn("snapshot verify-session scrollback;", observer.snapshot_command(command.replace("capture-pane -p", "capture-pane -p -S -5000"), "/probe"))
         self.assertEqual("tmux list-sessions", observer.snapshot_command("tmux list-sessions", "/probe"))
 
     def test_history_probe_preserves_input_bytes_and_records_real_queries(self):
