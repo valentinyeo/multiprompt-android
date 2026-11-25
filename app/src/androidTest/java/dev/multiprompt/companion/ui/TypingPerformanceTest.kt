@@ -84,9 +84,10 @@ class TypingPerformanceTest {
                     File(output, "keys.json").writeText(records.toString(2))
                 }
                 val expected = text.take(30) + "MIDediting" + text.drop(30)
-                instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
-                click(waitNode { it.contentDescription?.toString() == "Back" })
-                click(waitNode { it.contentDescription?.toString() == "Robot $session" })
+                leaveChat()
+                click(waitNode(120_000) { it.contentDescription?.toString() == "Search sessions" })
+                setText(session)
+                click(waitNode(120_000) { it.contentDescription?.toString() == "Robot $session" })
                 assertDraft(expected)
                 File(output, "draft-reopened.txt").writeText(expected)
             } finally {
@@ -102,6 +103,14 @@ class TypingPerformanceTest {
                     activity.window.removeOnFrameMetricsAvailableListener(listener)
                 }
             }
+        }
+    }
+
+    private fun leaveChat() {
+        repeat(2) {
+            if (nodes(instrumentation.uiAutomation.rootInActiveWindow ?: return).none { it.isEditable }) return
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            SystemClock.sleep(500)
         }
     }
 
@@ -149,6 +158,8 @@ class TypingPerformanceTest {
             result = JSONObject().put("trial", trial).put("phase", phase).put("index", index)
                 .put("main_ms", cpuMs).put("wall_ms", (System.nanoTime() - start) / 1_000_000.0)
                 .put("allocated_bytes", bytes).put("compositions", JSONObject(counts.toMap()))
+                .put("layouts", JSONObject(layouts.toMap()))
+                .put("ime_inset_px", imeInsetPx)
                 .put("cpu_ns", JSONObject(timings.toMap()))
                 .put("frames_ms", JSONArray().apply { metrics?.let { put(it.getMetric(FrameMetrics.TOTAL_DURATION) / 1_000_000.0) } })
             frame = null
