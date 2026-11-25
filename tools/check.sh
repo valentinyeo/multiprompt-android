@@ -31,6 +31,7 @@ source_checks() {
   python3 -B tools/mpa-cli.test.py
   python3 -B tools/account-layout/layout.test.py
   python3 -B tools/message-reply/console.test.py
+  python3 -B tools/message-reply/bot-face.test.py
   python3 -B tools/cancel-fixture.test.py
   python3 -B tools/journey-actions/check.py
   python3 -B tools/journey-actions/action.test.py
@@ -53,6 +54,7 @@ source_checks() {
   python3 -B tools/reader-ownership/check.py
   python3 -B tools/reader-ownership/check.test.py
   python3 -B tools/reader-ownership/observer.test.py
+  python3 -B tools/pane-stream/proof.test.py
   python3 -B tools/reader-ownership/codex-fixture.test.py
   python3 -B tools/account-journey/ui.test.py
   python3 -B tools/chat-search/ui.test.py

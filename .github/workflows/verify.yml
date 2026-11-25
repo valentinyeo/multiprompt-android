@@ -52,6 +52,11 @@ on:
         description: Optional pinned app source, the merge base for the parent side
         required: false
         type: string
+      record_video:
+        description: Record a short emulator video of this journey for before and after review
+        required: false
+        type: boolean
+        default: false
   workflow_dispatch:
     inputs:
       break_it:
@@ -218,6 +223,7 @@ jobs:
       BREAK_IT: ${{ inputs.break_it }}
       BREAK_IT_CONTROL: ${{ inputs.break_it_control }}
       VERIFY_SIDE: ${{ inputs.side }}
+      RECORD_VIDEO: ${{ inputs.record_video }}
       EXPECT_SHARED_MISSING: ${{ inputs.expect_shared_missing }}
       RELEASE_CHANNEL: ${{ inputs.channel || 'android-latest' }}
       PIN_SCROLL_PROOF: ${{ inputs.pins_scroll }}
@@ -523,10 +529,10 @@ jobs:
             proof() {
               adb install -r -g "$VERIFY_APK"
               if [[ "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion || "${VERIFY_PACKAGE:-}" == dev.multiprompt.companion.m3 ]]; then
-                if [ "$VERIFY_FEATURE" = launcher-icon.md ]; then .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; else bash tools/release-choices/run.sh; fi
+                if [ "$VERIFY_FEATURE" = launcher-icon.md ]; then bash tools/journey-video.sh .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"; else bash tools/journey-video.sh bash tools/release-choices/run.sh; fi
               else
                 adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-                .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
+                bash tools/journey-video.sh .claude/skills/verify-multiprompt-android/scripts/drive.sh "$VERIFY_FEATURE"
               fi
               if [[ "$BREAK_IT" == true ]]; then
                 printf 'NORMAL_JOURNEY_PASSED; starting break-it replay on the same emulator\n' | tee "$EVIDENCE/normal-journey-passed.txt"
@@ -674,4 +680,14 @@ jobs:
           name: verify-${{ env.VERIFY_JOURNEY }}-${{ github.run_id }}${{ inputs.side == 'parent' && '-parent' || '' }}${{ inputs.side && inputs.side != 'head' && inputs.side != 'parent' && format('-{0}', inputs.side) || '' }}
           path: verification-evidence/
           if-no-files-found: error
+          retention-days: 7
+      - name: Upload journey video
+        continue-on-error: ${{ inputs.side == 'parent' }}
+        if: always() && inputs.record_video == true
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          name: video-${{ env.VERIFY_JOURNEY }}-${{ github.run_id }}-${{ inputs.side == 'parent' && 'before' || 'after' }}
+          path: verification-evidence/journey-video.mp4
+          if-no-files-found: ignore
           retention-days: 7

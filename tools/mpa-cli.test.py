@@ -490,8 +490,11 @@ class MigratedJourneyTest(unittest.TestCase):
 FAKE_SCREEN_ADB = """#!/usr/bin/env python3
 import json
 import os
+import re
+import struct
 import sys
 import xml.etree.ElementTree as ET
+import zlib
 from pathlib import Path
 
 PKG = "dev.multiprompt.companion.debug"
@@ -533,8 +536,73 @@ def window(body):
     return '<hierarchy rotation="0"><node class="android.widget.FrameLayout" package="' + PKG + '" visible-to-user="true" bounds="[0,0][1080,1920]">' + body + '</node></hierarchy>'
 
 
+AVATAR = 160
+WIDTH, HEIGHT = 1080, 1920
+DEFAULT_BOT = (36, 32, 40)
+CHOSEN_BOT = (80, 150, 210)
+BACK_TO = {"bot-look": "mention-chat", "mention-chat": "inbox"}
+
+
+def avatar(top, left=20):
+    return ('<node class="android.view.View" package="' + PKG + '" bounds="[' + str(left) + ',' + str(top) + ']['
+            + str(left + AVATAR) + ',' + str(top + AVATAR) + ']" content-desc="Robot live-cl_mention-2953" />')
+
+
+def bot_colour(data):
+    return CHOSEN_BOT if data.get("colour") is not None else DEFAULT_BOT
+
+
+def rows():
+    return [bytearray(b"\\xf7\\xf7\\xf7" * WIDTH) for _ in range(HEIGHT)]
+
+
+def draw_bot(image, bounds, colour, face):
+    left, top, right, bottom = bounds
+    centre_x, centre_y = (left + right) / 2, (top + bottom) / 2
+    radius = min(right - left, bottom - top) / 2
+    for y in range(top, bottom):
+        for x in range(left, right):
+            if (x - centre_x + 0.5) ** 2 + (y - centre_y + 0.5) ** 2 <= radius * radius:
+                image[y][x * 3:x * 3 + 3] = bytes(colour)
+    eye = bytes(max(0, channel - 120) for channel in colour)
+    eye_y = int(centre_y) - 10 + face
+    for offset in (-12, 12):
+        for y in range(eye_y - 4, eye_y + 4):
+            for x in range(int(centre_x) + offset - 4, int(centre_x) + offset + 4):
+                image[y][x * 3:x * 3 + 3] = eye
+
+
+def png(image):
+    def chunk(tag, body):
+        return struct.pack(">I", len(body)) + tag + body + struct.pack(">I", zlib.crc32(tag + body) & 0xFFFFFFFF)
+    raw = b"".join(b"\\x00" + bytes(row) for row in image)
+    return (b"\\x89PNG\\r\\n\\x1a\\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", WIDTH, HEIGHT, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(raw, 6))
+            + chunk(b"IEND", b""))
+
+
+def render(data):
+    image = rows()
+    colour = bot_colour(data)
+    for node in ET.fromstring(xml_for(data)).iter("node"):
+        if not (node.get("content-desc") or "").startswith("Robot "):
+            continue
+        draw_bot(image, [int(value) for value in re.findall(r"-?\\d+", node.get("bounds"))], colour, data.get("face") or 0)
+    return png(image)
+
+
 CHAT = text('Native session skills are ready.', 1200) + desc('Session actions', 80) + desc('Send prompt', 1400)
 REPLY_CHAT = text('REPLY_BUBBLE_418', 600, clickable=True) + desc('Session actions', 80) + desc('Send prompt', 1400)
+MENTION_READER = avatar(60) + text('Mention 2953', 320) + desc('Session actions', 80)
+BOT_LOOK = (text('Bot look', 100) + text('Face', 200)
+            + desc('Face 1', 260, left=40, right=100) + desc('Face 2', 260, left=120, right=180) + desc('Face 3', 260, left=200, right=260)
+            + text('Colour', 360)
+            + desc('Colour 1', 420, left=40, right=100) + desc('Colour 2', 420, left=120, right=180)
+            + desc('Colour 3', 420, left=200, right=260) + desc('Colour 4', 420, left=280, right=340)
+            + text('Auto', 500, clickable=True))
+
+
 def mention_row(name, top):
     return ('<node class="android.view.View" package="' + PKG + '" bounds="[40,' + str(top) + '][1040,' + str(top + 80) + ']" clickable="true" enabled="true">'
             + '<node text="' + name + '" package="' + PKG + '" bounds="[40,' + str(top + 10) + '][700,' + str(top + 70) + ']" class="android.widget.TextView" />'
@@ -549,9 +617,11 @@ def mention_open(data):
 def mention(data):
     if not mention_open(data):
         return ''
-    name = 'verify-session' if data["text"].startswith("@verify-session") else 'Mention 2953'
+    if data["text"].startswith("@verify-session"):
+        return ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,1500][1080,1690]">'
+                + mention_row('verify-session', 1560) + '</node>')
     return ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,1500][1080,1690]">'
-            + mention_row(name, 1560) + '</node>')
+            + mention_row('Mention 2953', 1560) + avatar(1520) + '</node>')
 REPLY_BAR = text('Replying', 1500) + desc('Cancel reply', 120, left=700, right=820)
 PICKER = ('<node class="android.widget.ScrollView" package="' + PKG + '" scrollable="true" bounds="[0,600][1080,1200]">'
           + text('/clear', 620, clickable=True) + text('/client', 720, clickable=True) + text('/aaa-paper', 820, clickable=True)
@@ -567,8 +637,15 @@ SHEET = (text('AI usage', 120)
 def xml_for(data):
     screen = data["screen"]
     if screen == "inbox":
-        return window(text('Inbox', 80) + desc('Robot verify-session', 200, left=0, right=1080) + desc('Session list actions', 80))
+        inbox_mention = text('Mention 2953', 300, clickable=True) if mode == "reply" else ''
+        return window(text('Inbox', 80) + desc('Robot verify-session', 200, left=0, right=1080) + desc('Session list actions', 80) + inbox_mention)
     if mode == "reply":
+        if screen == "mention-chat":
+            return window(MENTION_READER)
+        if screen == "mention-menu":
+            return window(MENTION_READER + text('Bot look', 900, clickable=True))
+        if screen == "bot-look":
+            return window(BOT_LOOK)
         if screen == "menu":
             return window(REPLY_CHAT + text('Reply', 900, clickable=True))
         if screen == "replying":
@@ -648,7 +725,18 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
         elif "Bot" in texts and data["text"] == "@verify-session":
             data["text"] = "@verify-session "
         elif "Mention 2953" in texts:
-            data["text"] = "@Mention 2953 "
+            if data["screen"] == "inbox":
+                data["screen"] = "mention-chat"
+            else:
+                data["text"] = "@Mention 2953 "
+        elif "Session actions" in descs and data["screen"] == "mention-chat":
+            data["screen"] = "mention-menu"
+        elif "Bot look" in texts:
+            data["screen"] = "bot-look"
+        elif "Face 3" in descs:
+            data["face"] = 2
+        elif "Colour 4" in descs:
+            data["colour"] = 3
         elif "Cancel reply" in descs:
             data["screen"] = "chat"
         elif "Robot verify-session" in descs:
@@ -674,10 +762,12 @@ if args[:2] == ["shell", "input"] and len(args) > 2:
         data["focused"] = False
         if data["screen"] == "sheet":
             data["screen"] = "closed"
+        elif data["screen"] in BACK_TO:
+            data["screen"] = BACK_TO[data["screen"]]
     save(data)
     sys.exit(0)
 if args[:1] == ["exec-out"]:
-    sys.stdout.buffer.write(b"\\x89PNG\\r\\n\\x1a\\n" + b"0" * 200)
+    sys.stdout.buffer.write(render(load()))
     sys.exit(0)
 sys.exit(0)
 """
@@ -744,7 +834,11 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertRegex(self.log.read_text(), r'shell input swipe 540 640 540 640 800')
         mention_list = json.loads((self.evidence / 'mention-list.json').read_text())
         self.assertTrue(mention_list['passed'])
-        self.assertEqual([{'kind': 'present', 'value': 'Mention 2953', 'passed': True}, {'kind': 'absent', 'value': 'live-cl_mention-2953', 'passed': True}], mention_list['checks'])
+        self.assertEqual([{'kind': 'present', 'value': 'Mention 2953', 'passed': True}, {'kind': 'absent', 'value': 'live-cl_mention-2953', 'passed': True}, {'kind': 'present', 'value': 'Robot live-cl_mention-2953', 'passed': True}], mention_list['checks'])
+        bot_face = json.loads((self.evidence / 'mention-bot-face.json').read_text())
+        self.assertTrue(bot_face['passed'])
+        self.assertEqual(['same-bot', 'look-changed'], [check['kind'] for check in bot_face['checks']])
+        self.assertEqual([(128, 128)] * 3, [tuple(avatar['crop']) for avatar in bot_face['avatars'].values()])
         self.assertEqual('MENTION_LIST_NAMED_BY_CHAT', (self.evidence / 'mention-proof.txt').read_text().splitlines()[0])
         mention_sent = json.loads((self.evidence / 'mention-sent.json').read_text())
         self.assertTrue(mention_sent['passed'])
@@ -763,8 +857,9 @@ class MigratedScreenJourneyTest(unittest.TestCase):
         self.assertEqual(['present', 'absent'], [check['kind'] for check in self_mention['checks']])
         self.assertEqual(['@verify-session', '{verify-session}'], [check['value'] for check in self_mention['checks']])
         self.assertEqual('MENTION_OF_TYPING_CHAT_ROUTES', (self.evidence / 'self-mention-sent-proof.txt').read_text().splitlines()[0])
-        for name in ('01-reply-menu.xml', '02-reply-open.xml', '03-reply-cancelled.xml', '04-reply-sent.xml',
-                     '05-mention-list.xml', '06-mention-sent.xml', '07-self-mention-list.xml', '08-self-mention-sent.xml'):
+        for name in ('01-mention-bot-before.xml', '02-mention-bot-chosen.xml', '03-reply-menu.xml',
+                     '04-reply-open.xml', '05-reply-cancelled.xml', '06-reply-sent.xml', '07-mention-list.xml',
+                     '08-mention-sent.xml', '09-self-mention-list.xml', '10-self-mention-sent.xml'):
             self.assertTrue((self.evidence / name).is_file(), name)
 
     def test_the_clear_ranking_journey_runs_end_to_end_through_the_cli(self):

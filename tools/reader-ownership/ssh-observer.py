@@ -11,8 +11,11 @@ import time
 LOG = Path.home() / "reader-requests.jsonl"
 
 
-def record(kind, session):
-    line = json.dumps(dict(kind=kind, session=session, at=time.monotonic_ns())) + "\n"
+def record(kind, session, scope=None):
+    row = dict(kind=kind, session=session, at=time.monotonic_ns())
+    if scope is not None:
+        row["scope"] = scope
+    line = json.dumps(row) + "\n"
     fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
         os.write(fd, line.encode())
@@ -24,7 +27,8 @@ def snapshot_command(command, observer):
     match = re.search(r"has-session -t '=(.*?)'", command)
     if "__MP_TMUX_SNAPSHOT__" not in command or not match:
         return command
-    prefix = f"python3 {shlex.quote(observer)} snapshot {shlex.quote(match[1])}; "
+    scope = "scrollback" if "-S -5000" in command else "visible"
+    prefix = f"python3 {shlex.quote(observer)} snapshot {shlex.quote(match[1])} {scope}; "
     return command.replace("tmux capture-pane", prefix + "tmux capture-pane")
 
 
@@ -47,7 +51,7 @@ def forward_history(source, destination):
 
 def main():
     if sys.argv[1:] and sys.argv[1] == "snapshot":
-        record("snapshot", sys.argv[2])
+        record("snapshot", sys.argv[2], sys.argv[3])
         return
     command = os.environ["SSH_ORIGINAL_COMMAND"]
     command = snapshot_command(command, str(Path(__file__).resolve()))

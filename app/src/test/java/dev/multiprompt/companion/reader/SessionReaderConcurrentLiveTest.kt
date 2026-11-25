@@ -78,6 +78,53 @@ class SessionReaderConcurrentLiveTest {
         }
     }
 
+    @Test
+    fun nativeChatKeepsHistoryPollingButRequestsOnlyTheVisiblePane() {
+        reader("native").use { connection ->
+            connection.observe(pane = false).use {
+                assertTrue(gateActive(connection))
+                assertFalse(paneActive(connection))
+            }
+            assertFalse(gateActive(connection))
+            assertFalse(paneActive(connection))
+        }
+    }
+
+    @Test
+    fun paneReadersKeepScrollbackUntilTheirOwnLastLeaseCloses() {
+        reader("mixed").use { connection ->
+            val chat = connection.observe(pane = false)
+            val pane = connection.observe()
+            val secondPane = connection.observe()
+            chat.close()
+            assertTrue(gateActive(connection))
+            assertTrue(paneActive(connection))
+            pane.close()
+            pane.close()
+            assertTrue(paneActive(connection))
+            val anotherChat = connection.observe(pane = false)
+            secondPane.close()
+            assertTrue(gateActive(connection))
+            assertFalse(paneActive(connection))
+            anotherChat.close()
+            assertFalse(gateActive(connection))
+        }
+    }
+
+    @Test
+    fun closedOwnerCannotBeRevivedByEitherScreen() {
+        val connection = reader("closed")
+        connection.observe()
+        connection.close()
+        connection.observe(pane = false).close()
+        connection.observe().close()
+        assertFalse(gateActive(connection))
+        assertFalse(paneActive(connection))
+    }
+
+    private fun paneActive(connection: SessionReaderConnection): Boolean =
+        ReflectionHelpers.getField<ChatPollGate>(connection, "paneGate").active.value
+
     private fun gateActive(connection: SessionReaderConnection): Boolean =
         ReflectionHelpers.getField<ChatPollGate>(connection, "pollGate").active.value
 }

@@ -9,6 +9,7 @@ const verifier = require('../.github/scripts/pstack-verifier/verifier.cjs');
 
 const sha = 'a'.repeat(40);
 const apk = 'b'.repeat(64);
+const COVERED = { unmapped: [] };
 
 function retained(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'break-it-test-'));
@@ -231,10 +232,10 @@ test('a stressed replay is carried by its journey result, not by a second verdic
   const options = { features: ['ai-switch.md'], conclusions: { 'ai-switch.md': 'success' } };
   const complete = fixture.inspect();
   assert.ok(complete.evidence.some(line => line.includes('break-it/stream-send.txt')));
-  assert.equal(verifier.applyRules({ ...options, stressProof: complete }).verdict, 'PASS');
+  assert.equal(verifier.applyRules({ coverage: COVERED, ...options, stressProof: complete }).verdict, 'PASS');
   fs.rmSync(path.join(fixture.dir, 'rotate.png'));
   assert.ok(fixture.inspect().errors.length);
-  assert.equal(verifier.applyRules({ ...options, stressProof: fixture.inspect() }).verdict, 'PASS');
+  assert.equal(verifier.applyRules({ coverage: COVERED, ...options, stressProof: fixture.inspect() }).verdict, 'PASS');
 });
 
 test('break-it tooling changes never add a pull request journey', () => {
