@@ -57,6 +57,20 @@ class RelayTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual({entry['stream'] for entry in entries}, {'history'})
 
+    def test_relay_exits_when_the_command_finishes_even_if_stdin_stays_open(self):
+        directory, log = self.prepare()
+        command = '{python} -u -c "print(\'finished\')"'.format(python=sys.executable)
+        env = dict(os.environ, SSH_ORIGINAL_COMMAND=command, SCALE_RELAY_LOG=str(log))
+        process = subprocess.Popen([sys.executable, str(RELAY)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, env=env)
+        try:
+            self.assertEqual(process.stdout.readline(), b'finished\n')
+            self.assertEqual(process.wait(timeout=30), 0)
+            entries = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertEqual(entries[-1]['event'], 'close')
+            self.assertEqual(entries[-1]['calls'], 1)
+        finally:
+            process.kill()
+
     def test_relay_passes_the_exit_code_through(self):
         result, entries, _direct = self.run_relay('{python} -c "import sys; sys.exit(3)"', b'')
         self.assertEqual(result.returncode, 3)

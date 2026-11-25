@@ -60,13 +60,16 @@ def forward_input(child, recorder):
     pending = 0
     try:
         while True:
-            chunk = os.read(sys.stdin.fileno(), CHUNK)
+            try:
+                chunk = os.read(sys.stdin.fileno(), CHUNK)
+            except OSError:
+                break
             if not chunk:
                 break
             try:
                 child.stdin.write(chunk)
                 child.stdin.flush()
-            except (BrokenPipeError, ValueError):
+            except (BrokenPipeError, ValueError, OSError):
                 break
             offset = 0
             while True:
@@ -88,10 +91,16 @@ def forward_output(child, recorder):
     pending = 0
     try:
         while True:
-            chunk = os.read(child.stdout.fileno(), CHUNK)
+            try:
+                chunk = os.read(child.stdout.fileno(), CHUNK)
+            except OSError:
+                break
             if not chunk:
                 break
-            os.write(sys.stdout.fileno(), chunk)
+            try:
+                os.write(sys.stdout.fileno(), chunk)
+            except OSError:
+                break
             offset = 0
             while True:
                 newline = chunk.find(b'\n', offset)
@@ -115,11 +124,20 @@ def main():
     started = time.monotonic()
     recorder.write(dict(event='open', stream=label, command=command[:120], t=round(time.time(), 3)))
     child = subprocess.Popen(['/bin/bash', '-c', command], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    reader = threading.Thread(target=forward_output, args=(child, recorder), daemon=True)
-    reader.start()
-    forward_input(child, recorder)
-    reader.join()
-    code = child.wait()
+    output = threading.Thread(target=forward_output, args=(child, recorder), daemon=True)
+    feeding = threading.Thread(target=forward_input, args=(child, recorder), daemon=True)
+    output.start()
+    feeding.start()
+    output.join()
+    try:
+        child.stdin.close()
+    except OSError:
+        pass
+    try:
+        code = child.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        code = child.wait()
     recorder.write(dict(event='close', stream=label, calls=recorder.calls, bytes=recorder.total,
                         ms=round((time.monotonic() - started) * 1000, 1), code=code, t=round(time.time(), 3)))
     return code

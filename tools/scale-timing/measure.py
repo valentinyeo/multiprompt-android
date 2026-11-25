@@ -215,6 +215,11 @@ def copy_relay(out):
     return True
 
 
+def save_logcat(out):
+    result = adb('shell', 'logcat', '-d', timeout=180, check=False)
+    (Path(out) / 'logcat.txt').write_text(result.stdout)
+
+
 def main(argv):
     global PACKAGE, CLK_TCK, OUT, SEED
     parser = argparse.ArgumentParser(description='Time the phone at the fixture and owner scale on the GitHub emulator.')
@@ -235,9 +240,21 @@ def main(argv):
     CLK_TCK = clk_tck()
     fingerprint_path = Path(arguments.evidence) / 'host-fingerprint.txt'
     fingerprint = fingerprint_path.read_text().strip() if fingerprint_path.is_file() else ''
-    session = sign_in(arguments.fixture, arguments.evidence, fingerprint, arguments.expected_version)
-    steps = measure(targets)
-    kept = copy_relay(OUT)
+    session = None
+    steps = []
+    error = None
+    try:
+        session = sign_in(arguments.fixture, arguments.evidence, fingerprint, arguments.expected_version)
+        steps = measure(targets)
+    except MeasurementError as failure:
+        error = str(failure)
+    finally:
+        kept = copy_relay(OUT)
+        save_logcat(OUT)
+    if error:
+        (OUT / 'failure.txt').write_text(error + '\n')
+        print(json.dumps(dict(ok=False, error=error, relay=kept)), file=sys.stderr)
+        return 1
     summary = dict(seed=arguments.seed, ref=arguments.ref, package=PACKAGE, session=session, clk_tck=CLK_TCK,
                    relay=kept, targets=targets, steps=steps, device=dict(
                        model=adb('shell', 'getprop', 'ro.product.model', check=False).stdout.strip(),
