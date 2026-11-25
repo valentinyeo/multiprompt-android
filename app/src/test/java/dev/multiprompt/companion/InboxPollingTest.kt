@@ -77,7 +77,7 @@ class InboxPollingTest {
         assertEquals(1, calls)
     }
 
-    @Test fun unchangedListsBackOffFromTwoToFourToEightToTenSeconds() {
+    @Test fun unchangedListsBackOffToEightSecondsLeavingTwoSecondsForDelivery() {
         firstPoll()
         advance(1_999); assertEquals(1, calls)
         advance(1); assertEquals(2, calls)
@@ -86,7 +86,7 @@ class InboxPollingTest {
         advance(7_999); assertEquals(3, calls)
         advance(1); assertEquals(4, calls)
         repeat(3) {
-            advance(9_999); assertEquals(4 + it, calls)
+            advance(7_999); assertEquals(4 + it, calls)
             advance(1); assertEquals(5 + it, calls)
         }
     }
@@ -125,7 +125,7 @@ class InboxPollingTest {
     @Test fun aNewReplyAtMaximumBackoffArrivesWithinTenSeconds() {
         firstPoll(); advance(2_000); advance(4_000); advance(8_000)
         sessions = sessions.map { it.copy(lastActivityEpochSeconds = 2, preview = "New reply") }
-        advance(9_999)
+        advance(7_999)
         assertNotEquals("New reply", model.state.value.sessions.single().preview)
         advance(1)
         assertEquals("New reply", model.state.value.sessions.single().preview)

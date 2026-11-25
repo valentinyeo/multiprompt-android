@@ -4,7 +4,7 @@
 
 The registered `inbox-poll-drive.sh` step leaves Inbox untouched for 35 s, then counts real SSH list commands during another 22 s (one to three opens). It sends a new reply on the fixture host and requires its summary on the phone within 10 s, with pane capture and `inbox-message-latency.txt` as independent evidence. It then checks zero list requests during 12 s each in Settings, the reader and the background, and positive discovery after returning or resuming. `inbox-poll-windows.json` and the before/after command logs retain every window.
 
-This exercises `MainActivity` user-input/resume callbacks, `MainViewModel` discovery/backoff and the Compose Inbox visibility signal. JVM `InboxPollingTest` proves exact intervals, user/list resets and no state emissions for identical lists.
+This exercises `MainActivity` user-input/resume callbacks, `MainViewModel` discovery/backoff and the Compose Inbox visibility signal. JVM `InboxPollingTest` proves 2/4/8 s request spacing, user/list resets and no state emissions for identical lists. The 8 s ceiling leaves 2 s of the 10 s visibility budget for SSH, rendering and phone observation; a full 10 s request interval failed the end-to-end bound.
 
 Android inbox rows show the waiting question, current work, or the first sentence of the last assistant reply. Model footers and shell prompts never become summaries.
 
