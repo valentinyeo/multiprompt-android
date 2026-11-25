@@ -946,7 +946,10 @@ test('verify.yml keeps non-PR triggers and delegates PR journeys to the verifier
   assert.match(call, /^ {6}side:\n {8}description: .+\n {8}required: false\n {8}type: string\n/m);
   assert.match(call, /^ {6}app_ref:\n {8}description: .+\n {8}required: false\n {8}type: string\n/m);
   assert.match(call, /^ {6}record_video:\n {8}description: .+\n {8}required: false\n {8}type: boolean\n {8}default: false\n/m);
-  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}-\$\{\{ inputs\.break_it_control \|\| 'none' \}\}$/m);
+  assert.match(verify, /^ {2}group: verify-\$\{\{ github\.ref \}\}\$\{\{ inputs\.feature && inputs\.feature != github\.event\.inputs\.feature && format\('-\{0\}', inputs\.feature\) \|\| '' \}\}\$\{\{ inputs\.side && format\('-\{0\}', inputs\.side\) \|\| '' \}\}-\$\{\{ inputs\.break_it_control \|\| 'none' \}\}\$\{\{ inputs\.trial && format\('-trial-\{0\}', inputs\.trial\) \|\| '' \}\}$/m);
+  const dispatch = triggers.slice(triggers.indexOf('  workflow_dispatch:'));
+  assert.match(dispatch, /^ {6}trial:\n {8}description: .+\n {8}type: string\n {8}required: false$/m);
+  assert.match(verify, /^ {2}cancel-in-progress: true$/m);
 });
 
 test('a change no journey fits schedules no unrelated Android smoke', () => {

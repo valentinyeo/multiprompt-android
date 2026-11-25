@@ -1,0 +1,100 @@
+name: Android typing per-key timing
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_ref:
+        description: Commit to build the app from, empty builds this dispatch's revision
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: typing-timing-${{ github.ref }}-${{ inputs.app_ref || 'head' }}
+  cancel-in-progress: false
+
+jobs:
+  measure:
+    name: typing scale
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
+      EVIDENCE: ${{ github.workspace }}/typing-evidence
+      FIXTURE: ${{ github.workspace }}/verify-ssh
+      APP_REF: ${{ inputs.app_ref }}
+      EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
+      VERIFY_FEATURE: long-chat.md
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check out the measured app revision in its own worktree
+        run: |
+          mkdir -p "$EVIDENCE"
+          app_source="$GITHUB_WORKSPACE"
+          if [ -n "$APP_REF" ]; then
+            git cat-file -e "$APP_REF^{commit}"
+            git worktree add --detach app-source "$APP_REF"
+            app_source="$GITHUB_WORKSPACE/app-source"
+          fi
+          APP_SOURCE="$app_source"
+          printf 'APP_SOURCE=%s\n' "$app_source" >> "$GITHUB_ENV"
+          git -C "$app_source" rev-parse HEAD | tee "$EVIDENCE/app-source-sha.txt"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: ./.github/actions/gradle-ci
+        with:
+          read-only: true
+      - name: Build the debug APK from the measured revision
+        timeout-minutes: 35
+        run: |
+          tools/ci/gradle-retry.sh -p "$APP_SOURCE" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g \
+            -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug assembleDebugAndroidTest 2>&1 | tee "$EVIDENCE/build.txt"
+          printf 'VERIFY_APK=%s\n' "$APP_SOURCE/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
+          printf 'VERIFY_TEST_APK=%s\n' "$APP_SOURCE/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk" >> "$GITHUB_ENV"
+          sha256sum "$APP_SOURCE/app/build/outputs/apk/debug/app-debug.apk" | tee "$EVIDENCE/app-apk-sha256.txt"
+      - name: Start the ephemeral public-key-only SSH and tmux fixture
+        timeout-minutes: 15
+        run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
+      - name: Seed the owner-scale synthetic chats
+        timeout-minutes: 20
+        run: sudo python3 tools/scale-timing/hostseed.py seed --fixture tools/scale-chat/fixture.py --relay tools/scale-timing/relay.py --out "$EVIDENCE/scale-seed.json"
+      - name: Pick the timing targets from the seeded host
+        run: |
+          sudo python3 tools/scale-timing/targets.py --seed scale --out "$EVIDENCE/timing-targets.json"
+          { uptime; nproc; uname -a; git rev-parse HEAD; } > "$EVIDENCE/benchmark-host.txt"
+      - name: Install, sign in and time every key
+        uses: ./.github/actions/android-proof
+        with:
+          stage: typing-scale
+          script: |
+            adb install -r -g "$VERIFY_APK"
+            adb install -r "$VERIFY_TEST_APK"
+            timeout 3000 python3 tools/typing-timing/measure-typing.py
+      - name: Publish the typing table
+        if: always()
+        run: |
+          if [ -s "$EVIDENCE/typing-table.md" ]; then
+            cat "$EVIDENCE/typing-table.md" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'No typing measurement was produced. The artifact holds the diagnostics.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Retain the measurement and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          overwrite: true
+          name: typing-${{ inputs.app_ref || 'head' }}
+          path: typing-evidence/
+          if-no-files-found: warn
+          retention-days: 14
