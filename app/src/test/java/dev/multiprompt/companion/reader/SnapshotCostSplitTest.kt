@@ -31,9 +31,13 @@ class SnapshotCostSplitTest {
         val merge = Timed(SNAPSHOTS)
         val store = Timed(SNAPSHOTS)
         val project = Timed(SNAPSHOTS)
+        val guard = Timed(SNAPSHOTS)
+        val repeat = Timed(SNAPSHOTS)
+        val fingerprint = SnapshotFingerprint()
         val projected = ArrayList<Int>()
         var history = ChatHistory()
         var lastSize = 0
+        var repeats = 0
         repeat(SNAPSHOTS) { snapshot ->
             val id = snapshot + 1L
             val built = LongChatSnapshot.built(id, targetBytes, if (growing) snapshot else 0)
@@ -41,7 +45,13 @@ class SnapshotCostSplitTest {
             val framer = ChatHistoryProtocol.Framer()
             val reply = frame.record(snapshot) { framer.feed(built.bytes + LongChatSnapshot.newline()).single() }
             val page = requireNotNull(parse.record(snapshot) { ChatHistoryProtocol.parse(reply, id, LongChatSnapshot.identity) })
-            val next = merge.record(snapshot) { history.apply(page) }
+            val parsed = merge.record(snapshot) { history.apply(page) }
+            val repeated = guard.record(snapshot) { fingerprint.same(reply) }
+            if (repeated) repeats++
+            val next = if (repeated) {
+                repeat.record(snapshot) { ChatHistoryProtocol.repeated(history) }
+                history
+            } else parsed
             val changed = next != history
             store.record(snapshot) { if (changed) cache.save("mubo-453", next) }
             history = next
@@ -49,16 +59,20 @@ class SnapshotCostSplitTest {
         }
         if (growing) {
             assertTrue("each snapshot must add exactly one message", projected.zipWithNext().all { (a, b) -> b == a + 1 })
+            assertEquals("a growing snapshot must never count as repeated", 0, repeats)
         } else {
             assertEquals("identical snapshots must project the same messages", 1, projected.toSet().size)
+            assertEquals("every snapshot after the first must be skipped", SNAPSHOTS - 1, repeats)
         }
         assertTrue("the long chat must project many messages", projected.last() > 100)
         report("size=$size mode=$mode snapshots=$SNAPSHOTS base_bytes=$base last_bytes=$lastSize", listOf(
-            FRAME to frame, PARSE to parse, MERGE to merge, STORE to store, PROJECT to project,
+            FRAME to frame, PARSE to parse, MERGE to merge, STORE to store, PROJECT to project, GUARD to guard, REPEAT to repeat,
         ))
+        val unchanged = if (growing) "" else " unchanged_before=${parse.add(merge)} unchanged_after=${guard.add(repeat)}"
         return "MUBO453_TABLE size=$size mode=$mode messages=${projected.last()} base_bytes=$base last_bytes=$lastSize" +
             " frame=${frame.median()} parse=${parse.median()} merge=${merge.median()} cache=${store.median()}" +
-            " project=${project.median()} total=${frame.add(parse, merge, store, project)}"
+            " project=${project.median()} guard=${guard.median()} repeat=${repeat.median()} repeats=$repeats" +
+            " total=${frame.add(parse, merge, store, project)}$unchanged"
     }
 
     private class Timed(private val count: Int) {
@@ -116,7 +130,11 @@ class SnapshotCostSplitTest {
         val STORE = Stage("cache", "Dispatchers.IO",
             "ChatHistoryCache.save ChatHistoryCache.kt:53 called at ChatHistoryConnection.kt:546")
         val PROJECT = Stage("project", "Dispatchers.IO when measured here, Main in the app",
-            "ChatHistory.projectMessages ChatHistory.kt:67 called in composition at ChatHistoryList.kt:121")
+            "ChatHistory.projectMessages ChatHistory.kt:67 called in composition at ChatHistoryList.kt:122")
+        val GUARD = Stage("guard", "Dispatchers.IO",
+            "SnapshotFingerprint.same SnapshotFingerprint.kt:6 before ChatHistoryProtocol.parse at ChatHistoryConnection.kt:381")
+        val REPEAT = Stage("repeat", "Dispatchers.IO",
+            "ChatHistoryProtocol.repeated ChatHistoryProtocol.kt:118, the page that changes nothing")
     }
 }
 

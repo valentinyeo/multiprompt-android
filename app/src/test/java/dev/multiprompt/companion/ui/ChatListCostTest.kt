@@ -10,6 +10,7 @@ import androidx.compose.runtime.CompositionTracer
 import androidx.compose.runtime.InternalComposeTracingApi
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.neverEqualPolicy
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -73,9 +74,13 @@ class ChatListCostTest {
         compose.setContent {
             MaterialTheme {
                 Box(Modifier.height(520.dp)) {
-                    val start = System.nanoTime()
-                    val messages = history.value.projectMessages(now = NOW, sent = null)
-                    projectNanos += System.nanoTime() - start
+                    val snapshot = history.value
+                    val messages = remember(snapshot) {
+                        val start = System.nanoTime()
+                        val projected = snapshot.projectMessages(now = NOW, sent = null)
+                        projectNanos += System.nanoTime() - start
+                        projected
+                    }
                     ChatHistoryList(messages, listState = listState)
                 }
             }
@@ -135,7 +140,7 @@ class ChatListCostTest {
             " rows=${rows.sum()} site=ChatHistoryList.kt:236"
         val projectLine = "MUBO453_COST stage=project_on_main thread=Main" +
             " mean_ms=${millis(projections.average().toLong())} median_ms=${median(projections)} p95_ms=${percentile(projections)}" +
-            " site=ChatHistoryList.kt:121 -> ChatHistory.kt:67"
+            " site=ChatHistoryList.kt:122 remember(history) -> ChatHistory.kt:67"
         for (line in listOf(composeLine, projectLine)) println("$prefix $line")
         runCatching {
             val output = File(File(System.getProperty("user.dir"), "build"), "mubo-453")

@@ -202,24 +202,38 @@ object ChatHistoryProtocol {
         }
     }.getOrDefault(emptyList())
 
+    fun repeated(history: ChatHistory): Page = Page(history.sid, history.offset, history.offset, history.inode, history.more,
+        history.mtime, history.probe, "tail", history.start, history.rows, history.deliveries, history.held, history.pendingQuestions)
+
     class Framer {
         private val pending = java.io.ByteArrayOutputStream()
 
         fun feed(chunk: ByteArray): List<String> {
             val replies = ArrayList<String>()
-            for (byte in chunk) {
-                require(pending.size() < MAX_REPLY_BYTES)
-                if (byte == '\n'.code.toByte()) {
-                    replies.add(pending.toString(Charsets.UTF_8.name()))
-                    pending.reset()
-                } else {
-                    pending.write(byte.toInt())
-                }
+            var start = 0
+            while (start < chunk.size) {
+                val end = newlineAt(chunk, start)
+                val stop = if (end < 0) chunk.size else end
+                require(pending.size() + stop - start <= MAX_REPLY_BYTES)
+                pending.write(chunk, start, stop - start)
+                if (end < 0) break
+                replies.add(pending.toString(Charsets.UTF_8.name()))
+                pending.reset()
+                start = end + 1
             }
             return replies
         }
 
         fun hasPending(): Boolean = pending.size() > 0
+
+        private fun newlineAt(chunk: ByteArray, from: Int): Int {
+            for (index in from until chunk.size) if (chunk[index] == NEWLINE) return index
+            return -1
+        }
+
+        private companion object {
+            const val NEWLINE: Byte = 10
+        }
     }
 
     internal fun parseRow(row: JSONObject): Row? {

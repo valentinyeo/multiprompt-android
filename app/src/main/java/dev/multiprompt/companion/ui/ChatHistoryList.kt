@@ -118,8 +118,12 @@ internal fun ChatHistoryView(
     }
     val seen = remember(history) { HashMap<String, Double>() }
     state.replica?.messages?.values?.forEach { if (it.state == MessageProtocol.State.QUEUED || it.state == MessageProtocol.State.SENT) seen.getOrPut(it.id) { System.currentTimeMillis() / 1000.0 } }
-    val messages = state.history.projectMessages(state.replica.takeIf { managed }, state.unresolved, now, state.retrying, seen,
-        sent = reader.sentRecord.takeUnless { managed }, waiting = if (managed) pendingPrompts else emptyList())
+    val shared = state.replica.takeIf { managed }
+    val sent = reader.sentRecord.takeUnless { managed }
+    val waitingPrompts = if (managed) pendingPrompts else emptyList()
+    val messages = remember(state.history, shared, state.unresolved, now, state.retrying, seen, sent, waitingPrompts) {
+        state.history.projectMessages(shared, state.unresolved, now, state.retrying, seen, sent = sent, waiting = waitingPrompts)
+    }
     val speakable = remember(messages) { dev.multiprompt.companion.reader.ReadAloud.replies(messages) }
     LaunchedEffect(speakable) { onSpeakableReplies(speakable) }
     LaunchedEffect(state.ready) { onChatReady(state.ready) }
