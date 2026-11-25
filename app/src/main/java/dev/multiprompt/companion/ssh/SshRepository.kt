@@ -148,7 +148,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
-    suspend fun connect(host: HostProfile): SshClient = openClient(host, pooled = false)
+    suspend fun connect(host: HostProfile, keepAlive: Boolean = false): SshClient = openClient(host, pooled = keepAlive)
 
     private suspend fun openClient(host: HostProfile, pooled: Boolean): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
@@ -211,13 +211,12 @@ class SshRepository(private val secrets: SecretStorage) {
         agent: AgentKind = AgentKind.OTHER,
         onBytes: () -> Unit = {},
         hosted: Boolean = false,
-        visibleOnly: Boolean = false,
         onSnapshot: (StreamSnapshot) -> Unit,
     ) = coroutineScope {
         val session = client.openSession()
             ?: throw SshProblem.Connection("The SSH server refused a reader channel")
         try {
-            if (!session.requestExec(TmuxCommands.stream(sessionName, hosted, visibleOnly))) {
+            if (!session.requestExec(TmuxCommands.stream(sessionName, hosted))) {
                 throw SshProblem.Connection("The SSH server refused the tmux reader")
             }
             val err = async { session.stderr.drain() }

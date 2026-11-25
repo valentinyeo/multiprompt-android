@@ -16,10 +16,23 @@ tap_desc 'Send prompt'
 wait_for_text STREAMCHATSTART
 shot pane-stream-chat-first
 python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-pane-stream-chat-first.xml" STREAMCHATSTART --append "$EVIDENCE/pane-stream-ui.json"
+fill 'Message claude-control' HOLD_545_DOTS
+tap_desc 'Send prompt'
+wait_for_text HOLD_545_DOTS
+select_node visible Working
+wait_for_text Opus
+shot pane-stream-chat-awaiting
+cp "$EVIDENCE/$(printf %02d "$step")-pane-stream-chat-awaiting.xml" "$EVIDENCE/pane-stream-chat-awaiting.xml"
+python3 tools/pane-stream/question.py > "$EVIDENCE/pane-stream-question.jsonl"
+sudo -u verifyssh tee -a /home/verifyssh/.claude/projects/-home-verifyssh/25340000-0000-4000-8000-000000000002.jsonl < "$EVIDENCE/pane-stream-question.jsonl" > /dev/null
+wait_for_text 'Which reply style do you want?'
+wait_for_text Concise
 sudo -u verifyssh touch /home/verifyssh/pane-stream-release-0
 wait_for_text STREAMCHATUPDATE
 shot pane-stream-chat-updated
+cp "$EVIDENCE/$(printf %02d "$step")-pane-stream-chat-updated.xml" "$EVIDENCE/pane-stream-chat-updated.xml"
 python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-pane-stream-chat-updated.xml" STREAMCHATUPDATE --append "$EVIDENCE/pane-stream-ui.json"
+sleep 3
 sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pane-native-after.jsonl"
 tap_desc 'Session actions'
 tap_text 'Open live terminal'

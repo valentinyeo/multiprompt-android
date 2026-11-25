@@ -18,11 +18,14 @@ internal object ChatOpenAnchor {
         return first
     }
 
-    fun listIndex(messages: List<ChatHistoryMessage>, key: String?, questionCount: Int, showDots: Boolean): Int? {
+    fun leading(questionCount: Int, showDots: Boolean, showModelChoices: Boolean): Int =
+        questionCount + (if (showDots) 1 else 0) + (if (showModelChoices) 1 else 0)
+
+    fun listIndex(messages: List<ChatHistoryMessage>, key: String?, leading: Int): Int? {
         if (key == null) return null
         val position = messages.indexOfFirst { it.key == key }
         if (position < 0) return null
-        return messages.lastIndex - position + questionCount + (if (showDots) 1 else 0)
+        return messages.lastIndex - position + leading
     }
 
     fun scrollOffset(itemHeight: Int, viewportHeight: Int): Int = itemHeight - viewportHeight

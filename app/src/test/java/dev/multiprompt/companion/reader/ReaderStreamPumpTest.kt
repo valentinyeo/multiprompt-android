@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -198,6 +199,40 @@ class ReaderStreamPumpTest {
     }
 
     @Test
+    fun historyRepliesKeepAResumedChatWarmWithoutPaneFrames() = runTest {
+        val host = FakeHost()
+        val gate = ChatPollGate()
+        var historyReply: (() -> Unit)? = null
+        val pump = ReaderStreamPump<Int>(
+            wanted = gate.active,
+            connect = { ++host.connects },
+            stream = { _, heard -> historyReply = heard; delay(Long.MAX_VALUE) },
+            release = { host.releases++ },
+            onClient = {},
+            onConnecting = {},
+            onFailure = { throw it },
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        val lease = gate.acquire()
+        runCurrent()
+        requireNotNull(historyReply).invoke()
+        lease.close()
+        runCurrent()
+        gate.acquire()
+        runCurrent()
+        advanceTimeBy(500L)
+        requireNotNull(historyReply).invoke()
+        advanceTimeBy(5_000L)
+        runCurrent()
+        assertEquals(1, host.connects)
+        assertEquals(0, host.releases)
+        assertEquals(0, host.snapshots)
+        assertEquals(2, pump.streamStarts)
+    }
+
+    @Test
     fun silentWarmConnectionIsReplacedWithinTwoSecondsOfOpening() = runTest {
         val host = FakeHost()
         val failures = mutableListOf<Throwable>()
@@ -378,6 +413,19 @@ class ReaderStreamPumpTest {
         assertEquals(1, hostB.connects)
         assertEquals(1, hostA.snapshots)
         assertEquals(1, hostB.snapshots)
+    }
+
+    @Test
+    fun anObservedModelCommandResultCannotExpireOrPressEnterLater() = runTest {
+        val confirmation = ModelSwitchConfirmation({ currentTime }, 25_000L)
+        confirmation.begin()
+        confirmation.complete()
+        advanceTimeBy(25_001L)
+        assertFalse(confirmation.pending.value)
+        assertFalse(confirmation.expire())
+        assertFalse(confirmation.shouldPress(true))
+        confirmation.begin()
+        assertTrue(confirmation.shouldPress(true))
     }
 
     @Test

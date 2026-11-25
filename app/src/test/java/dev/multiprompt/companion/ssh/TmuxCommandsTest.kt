@@ -156,11 +156,10 @@ class TmuxCommandsTest {
     }
 
     @Test
-    fun nativeChatCapturesOnlyTheVisiblePaneAndStillQuotesItsTarget() {
+    fun thePaneReaderCapturesScrollbackAndQuotesItsTarget() {
         val hostile = "a'; touch /bad; '"
-        val command = TmuxCommands.stream(hostile, visibleOnly = true)
-        assertTrue(command.contains("tmux capture-pane -p -J -t ${TmuxParser.shellQuote("=$hostile:")}"))
-        assertFalse(command.contains("-S -5000"))
+        val command = TmuxCommands.stream(hostile)
+        assertTrue(command.contains("tmux capture-pane -p -J -S -5000 -t ${TmuxParser.shellQuote("=$hostile:")}"))
         assertTrue(command.contains(TmuxCommands.ETA_PREFIX))
         assertTrue(command.contains(TmuxCommands.SNAPSHOT_PREFIX))
         assertTrue(command.contains("sleep 1"))

@@ -1287,7 +1287,7 @@
     },
     "pi-login.md": {
       "name": "Sign in to Pi from a chat",
-      "description": "Open a Pi chat with a pending host login, tap its card, prove the HTTPS browser handoff, and clear the card on the host result. Uses the ai-switch driver.",
+      "description": "Open a Pi chat, show the host-served model choices with no pane capture, then prove the pending login card, HTTPS browser handoff and host result. Uses the ai-switch driver.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -1298,18 +1298,22 @@
         "driver": false,
         "scripts": [
           ".claude/skills/verify-multiprompt-android/scripts/pi-login-drive.sh",
-          ".claude/skills/verify-multiprompt-android/scripts/pi-login-browser.py"
+          ".claude/skills/verify-multiprompt-android/scripts/pi-login-browser.py",
+          ".claude/skills/verify-multiprompt-android/scripts/ai-switch-fixture.py"
         ]
       },
       "outcomes": [
-        "chat.pi-login"
+        "chat.pi-login",
+        "pi.model-switch"
       ],
       "evidence": {
         "pi-login-pending.json": 2000,
         "pi-login-host.json": 2000,
         "pi-login-browser.json": 1000,
         "pi-login-completed.json": 2000,
-        "pi-login-after.json": 1000
+        "pi-login-after.json": 1000,
+        "pi-model-choices.json": 1000,
+        "pi-model-host.json": 2000
       }
     },
     "workspace-group-controls.md": {
@@ -1670,12 +1674,30 @@
       ]
     },
     "pi.model-switch": {
-      "description": "Discover Pi models, switch them and retry.",
-      "journey": null,
+      "description": "Show enabled host-served Pi model choices in the chat view without reading pane text. Switching and retry remain outside this journey.",
+      "journey": "pi-login.md",
       "sideEffect": true,
       "match": [
         "PiModels|piModels|piModel"
-      ]
+      ],
+      "paths": [
+        "^app/src/(?:main|test)/java/dev/multiprompt/companion/reader/ModelChoices(?:Test)?\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList\\.kt$"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "read --select visible --value pi-deep --extra enabled"
+        },
+        "result": {
+          "file": "pi-model-choices.json",
+          "quote": "pi-deep"
+        },
+        "sideEffect": {
+          "file": "pi-model-host.json",
+          "quote": "\"pane_captures\": 0"
+        }
+      }
     },
     "chat-search.open": {
       "description": "Open chat search, count and mark hits, navigate, wrap and close.",
@@ -2043,12 +2065,15 @@
       ]
     },
     "reader.lifecycle": {
-      "description": "Hax and Claude stop snapshot and history requests while hidden, wake on return, and publish after another reader closes. Action evidence: driver-transcript.txt records adb shell input keyevent KEYCODE_HOME. Result evidence: reader-ui.json retains CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax and CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE. Independent side-effect evidence: hax-hidden-before.json and hax-hidden-after.json retain equal host request counts; hax-resumed.json retains increased counts. reader-second-close-receipt.txt records VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE. The *-result.txt files are assertion summaries, not independent side-effect citations.",
+      "description": "Hax and Claude stop history requests while hidden, wake on return, and publish after another reader closes. A native chat takes no pane lease, so its positive control is the history query and no snapshot is expected while it is on screen. Action evidence: driver-transcript.txt records adb shell input keyevent KEYCODE_HOME. Result evidence: reader-ui.json retains CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax and CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE. Independent side-effect evidence: hax-hidden-before.json and hax-hidden-after.json retain equal host request counts; hax-resumed.json retains increased counts. reader-second-close-receipt.txt records VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE. The *-result.txt files are assertion summaries, not independent side-effect citations. Successful structured history replies acknowledge the same shared SSH client on resume; an absent pane stream must not make a live conversation look disconnected.",
       "journey": "chat-codex.md",
       "sideEffect": true,
       "match": [
         "ChatPollGate",
         "ReaderStreamPump"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryConnection\\.kt$"
       ]
     },
     "bot.look": {
@@ -2362,15 +2387,16 @@
       }
     },
     "reader.pane-budget": {
-      "description": "Native chat captures only the visible pane while still updating a streamed reply. Terminal detail keeps scrollback, and the independent terminal fallback renders two new streaming markers in the production terminal accessibility view and screenshots before completion. Retains pane-stream-result.json, XML, screenshots, actual SSH capture scopes and the independent prompt receipt.",
+      "description": "Native chat runs no pane capture and no pane parse while a reply streams: the history view holds no pane lease, so the streamed reply arrives through history queries, the working dots come from structured history and the host running flag, model choices come from the structured model list and a question card comes from the transcript question. Terminal detail still opens a full-scrollback capture, and the independent terminal fallback renders two new streaming markers in the production terminal accessibility view and screenshots before completion. Retains pane-stream-result.json, XML, screenshots, the actual request log and the independent prompt receipt.",
       "journey": "chat-codex.md",
       "sideEffect": true,
       "paths": [
-        "^app/src/main/java/dev/multiprompt/companion/reader/SessionReaderConnection\\.kt$",
-        "^app/src/main/java/dev/multiprompt/companion/ssh/(TmuxCommands|SshRepository)\\.kt$"
+        "^app/src/main/java/dev/multiprompt/companion/reader/(?:SessionReaderConnection|ReaderStreamPump|ModelChoices)\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/ssh/(TmuxCommands|SshRepository)\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/ui/(?:ChatHistoryList|WorkingDots)\\.kt$"
       ],
       "match": [
-        "paneGate|visibleOnly|observe\\(pane\\s*="
+        "paneGate|paneFrames|observe\\(pane\\s*=|host\\?\\.running|ModelChoices"
       ],
       "citations": {
         "action": {

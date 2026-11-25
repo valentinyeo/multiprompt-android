@@ -133,7 +133,7 @@ class ReaderChromeTest {
         compose.onNodeWithText(f.session.displayName, useUnmergedTree = true).assertIsDisplayed()
         compose.onNodeWithText("Disconnected · retrying").assertDoesNotExist()
         screenshot("chat-live")
-        compose.onNodeWithTag("chat-history").performScrollToIndex(messageCount - 1)
+        compose.onNodeWithTag("chat-history").performScrollToIndex(ChatOpenAnchor.leading(questionCount = 0, showDots = false, showModelChoices = true) + messageCount - 1)
         val bar = compose.onNodeWithTag("reader-floating-controls").getUnclippedBoundsInRoot()
         val viewport = compose.onNodeWithTag("chat-history").getUnclippedBoundsInRoot()
         assertTrue("Conversation must extend under controls: $viewport $bar", viewport.top < bar.bottom)

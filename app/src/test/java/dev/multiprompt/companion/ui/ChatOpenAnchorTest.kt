@@ -62,22 +62,29 @@ class ChatOpenAnchorTest {
     @Test
     fun listIndexCountsFromTheNewestEnd() {
         val messages = listOf(message("assistant", "a"), message("user", "b"), message("assistant", "c"))
-        assertEquals(0, ChatOpenAnchor.listIndex(messages, "c", 0, false))
-        assertEquals(2, ChatOpenAnchor.listIndex(messages, "a", 0, false))
+        assertEquals(0, ChatOpenAnchor.listIndex(messages, "c", 0))
+        assertEquals(2, ChatOpenAnchor.listIndex(messages, "a", 0))
     }
 
     @Test
-    fun listIndexSkipsQuestionsAndWorkingDots() {
+    fun leadingCountsQuestionsWorkingDotsAndModelChoices() {
+        assertEquals(0, ChatOpenAnchor.leading(0, showDots = false, showModelChoices = false))
+        assertEquals(3, ChatOpenAnchor.leading(2, showDots = true, showModelChoices = false))
+        assertEquals(4, ChatOpenAnchor.leading(2, showDots = true, showModelChoices = true))
+    }
+
+    @Test
+    fun listIndexSkipsTheLeadingChatControls() {
         val messages = listOf(message("assistant", "a"), message("assistant", "b"))
-        assertEquals(3, ChatOpenAnchor.listIndex(messages, "a", 2, false))
-        assertEquals(4, ChatOpenAnchor.listIndex(messages, "a", 2, true))
+        assertEquals(3, ChatOpenAnchor.listIndex(messages, "a", ChatOpenAnchor.leading(2, showDots = false, showModelChoices = false)))
+        assertEquals(5, ChatOpenAnchor.listIndex(messages, "a", ChatOpenAnchor.leading(2, showDots = true, showModelChoices = true)))
     }
 
     @Test
     fun listIndexIsNullWithoutTarget() {
         val messages = listOf(message("assistant", "a"))
-        assertNull(ChatOpenAnchor.listIndex(messages, null, 0, false))
-        assertNull(ChatOpenAnchor.listIndex(messages, "missing", 0, false))
+        assertNull(ChatOpenAnchor.listIndex(messages, null, 0))
+        assertNull(ChatOpenAnchor.listIndex(messages, "missing", 0))
     }
 
     @Test
