@@ -14,6 +14,7 @@ import dev.multiprompt.companion.reader.HostSettings
 import dev.multiprompt.companion.reader.ModelChoice
 import dev.multiprompt.companion.reader.ModelChoices
 import dev.multiprompt.companion.reader.PendingQuestion
+import dev.multiprompt.companion.reader.PiModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -51,6 +52,20 @@ class ModelChoiceRowTest {
         compose.onNodeWithText("Opus · current").assertIsDisplayed()
         compose.onNodeWithText("Sonnet").performScrollTo().performClick()
         compose.runOnIdle { assertEquals(HostChange.SONNET, picked?.change) }
+    }
+
+    @Test
+    fun piModelChoicesComeFromTheStructuredListWithNoPaneText() {
+        var picked: ModelChoice? = null
+        val models = listOf(PiModel("gpt-5.2", "openai"), PiModel("claude-sonnet", "anthropic"))
+        val choices = ModelChoices.pi(models, "openai/gpt-5.2")
+        compose.setContent {
+            MultipromptTheme(readerStyle = true) { ModelChoiceRow(choices) { picked = it } }
+        }
+
+        compose.onNodeWithText("gpt-5.2 · current").assertIsDisplayed()
+        compose.onNodeWithText("claude-sonnet").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("anthropic/claude-sonnet", picked?.pi?.reference) }
     }
 
     @Test

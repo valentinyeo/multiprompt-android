@@ -60,6 +60,7 @@ import dev.multiprompt.companion.reader.PiLoginPrompt
 import dev.multiprompt.companion.reader.ChatHistoryMessage
 import dev.multiprompt.companion.reader.ModelChoice
 import dev.multiprompt.companion.reader.ModelChoices
+import dev.multiprompt.companion.reader.PiModels
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -159,8 +160,11 @@ internal fun ChatHistoryView(
         }
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
         val hostSettings = connection.hostSettings()
-        val modelChoices = remember(agent, hostSettings, reader.pendingModelFamily) {
-            ModelChoices.of(agent, hostSettings, reader.pendingModelFamily)
+        val piModels by connection.piModels.collectAsState()
+        LaunchedEffect(agent, connection) { if (agent == AgentKind.PI) connection.loadPiModels() }
+        val modelChoices = remember(agent, hostSettings, reader.pendingModelFamily, piModels.models) {
+            if (agent == AgentKind.PI) ModelChoices.pi(piModels.models, hostSettings?.model)
+            else ModelChoices.of(agent, hostSettings, reader.pendingModelFamily)
         }
         ChatHistoryList(
             messages = messages,
@@ -220,13 +224,24 @@ internal fun ChatHistoryView(
             working = reader.sending || state.replica?.host?.running == true,
             modelChoices = modelChoices,
             onModelPick = { choice ->
-                if (!reader.sending && choice.command != null) {
-                    if (connection.sendRuntimeCommand(choice.command)) onSessionUsed() else toast("Could not send command")
-                } else if (!reader.sending) scope.launch {
-                    connection.markModelPick(choice.change.value)
-                    val applied = connection.changeHost(choice.change) == MessageActionResult.Applied
-                    if (applied) onSessionUsed() else connection.markModelPickFailed(choice.change.failure)
-                    toast(if (applied) choice.change.notice else choice.change.failure)
+                val pi = choice.pi
+                val change = choice.change
+                when {
+                    pi != null -> if (!reader.sending) scope.launch {
+                        val result = connection.changePiModel(pi)
+                        if (result == MessageActionResult.Applied) onSessionUsed()
+                        toast(PiModels.resultMessage(result, pi))
+                    }
+                    change == null -> Unit
+                    !reader.sending && choice.command != null -> {
+                        if (connection.sendRuntimeCommand(choice.command)) onSessionUsed() else toast("Could not send command")
+                    }
+                    !reader.sending -> scope.launch {
+                        connection.markModelPick(change.value)
+                        val applied = connection.changeHost(change) == MessageActionResult.Applied
+                        if (applied) onSessionUsed() else connection.markModelPickFailed(change.failure)
+                        toast(if (applied) change.notice else change.failure)
+                    }
                 }
             },
             onNearTop = history::nearTop,

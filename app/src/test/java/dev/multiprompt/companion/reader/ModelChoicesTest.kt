@@ -46,4 +46,16 @@ class ModelChoicesTest {
     fun anAgentWithoutModelSettingsOffersNothing() {
         assertTrue(ModelChoices.of(AgentKind.PI, HostSettings("opus", "", "", true)).isEmpty())
     }
+
+    @Test
+    fun piChoicesComeFromTheStructuredModelList() {
+        val models = listOf(PiModel("gpt-5.2", "openai"), PiModel("claude-sonnet", "anthropic"))
+
+        val choices = ModelChoices.pi(models, "openai/gpt-5.2")
+
+        assertEquals(listOf("gpt-5.2", "claude-sonnet"), choices.map { it.label })
+        assertEquals(listOf(true, false), choices.map { it.current })
+        assertTrue(choices.all { it.change == null && it.command == null && it.pi != null })
+        assertEquals(listOf("openai/gpt-5.2", "anthropic/claude-sonnet"), choices.map { it.pi?.reference })
+    }
 }
