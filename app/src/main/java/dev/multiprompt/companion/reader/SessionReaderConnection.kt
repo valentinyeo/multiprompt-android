@@ -228,7 +228,7 @@ class SessionReaderConnection(
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
-        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate, sharedClient = { streamClient }, pollGate = pollGate)
+        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate, pollGate = pollGate)
             .also {
                 historyIdentity = identity
                 historyConnection = it
@@ -626,7 +626,10 @@ class SessionReaderConnection(
                 connect = { withTimeout(CONNECT_TIMEOUT_MS) { adopt(repository.rentServerLink(host)) } },
                 stream = { link, heard ->
                     paneGate.active.collectLatest { pane ->
-                        streamFrames(link.client, heard, visibleOnly = !pane)
+                        link.use { client ->
+                            streamClient = client
+                            streamFrames(client, heard, visibleOnly = !pane)
+                        }
                         error("The tmux reader ended")
                     }
                 },

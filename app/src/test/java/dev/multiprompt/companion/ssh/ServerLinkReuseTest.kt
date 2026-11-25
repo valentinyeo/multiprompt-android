@@ -81,6 +81,45 @@ class ServerLinkReuseTest {
     }
 
     @Test
+    fun rentedReaderMovesToAnOverflowLinkWithoutClosingOtherReaders() = runBlocking {
+        val server = Server()
+        val pool = pool()
+        val first = pool.chatOpen(server)
+        val overflow = pool.chatOpen(server)
+        val used = overflow.use { link ->
+            if (link === first.link) throw SshProblem.LinkUnavailable("administratively prohibited")
+            link.number
+        }
+        assertEquals(2, used)
+        assertEquals(2, overflow.link.number)
+        assertEquals(1, first.link.number)
+        assertEquals(2, server.opened.size)
+        pool.sweep(idleMs = 0L)
+        assertTrue(server.opened.none { it.closed })
+        overflow.release()
+        pool.sweep(idleMs = 0L)
+        assertTrue(server.opened[1].closed)
+        assertFalse(first.link.closed)
+        first.release()
+        pool.sweep(idleMs = 0L)
+        assertTrue(server.opened.all { it.closed })
+    }
+
+    @Test
+    fun warmReaderOnADeadLinkJoinsTheReplacementLogin() = runBlocking {
+        val server = Server()
+        val pool = pool()
+        val streams = List(5) { pool.chatOpen(server) }
+        server.opened.single().alive = false
+        pool.listing(server) { }
+        streams.forEach { stream ->
+            assertEquals(2, stream.use { it.number })
+            stream.release()
+        }
+        assertEquals(2, server.opened.size)
+    }
+
+    @Test
     fun aChatOpenAfterADropReconnectsOnce() = runBlocking {
         val server = Server()
         val pool = pool()

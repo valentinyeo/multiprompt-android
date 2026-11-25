@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import dev.multiprompt.companion.model.HostProfile
 import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxCommands
+import dev.multiprompt.companion.ssh.openSshChannel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,44 +68,44 @@ class TerminalConnection(
             try {
                 val opened = repository.rentServerLink(host)
                 link = opened
-                val connectedClient = opened.client
-                val connectedSession = connectedClient.openSession()
-                    ?: error("The SSH server refused a terminal channel")
-                session = connectedSession
+                opened.use { connectedClient ->
+                    val connectedSession = openSshChannel { connectedClient.openSession() }
+                    session = connectedSession
 
-                val dimensions = resizes.value
-                check(
-                    connectedSession.requestPty(
-                        terminalType = "xterm-256color",
-                        widthChars = dimensions.columns,
-                        heightRows = dimensions.rows,
-                    ),
-                ) { "The SSH server refused a PTY" }
+                    val dimensions = resizes.value
+                    check(
+                        connectedSession.requestPty(
+                            terminalType = "xterm-256color",
+                            widthChars = dimensions.columns,
+                            heightRows = dimensions.rows,
+                        ),
+                    ) { "The SSH server refused a PTY" }
 
-                val command = TmuxCommands.attach(tmuxSessionName)
-                check(connectedSession.requestExec(command)) { "tmux attach was refused" }
-                _status.value = TerminalStatus.Connected
+                    val command = TmuxCommands.attach(tmuxSessionName)
+                    check(connectedSession.requestExec(command)) { "tmux attach was refused" }
+                    _status.value = TerminalStatus.Connected
 
-                launch {
-                    for (data in keyboard) connectedSession.write(data)
-                }
-                if (fixedSize == null) {
                     launch {
-                        resizes.collectLatest { next ->
-                            connectedSession.resizeTerminal(
-                                widthChars = next.columns,
-                                heightRows = next.rows,
-                                widthPixels = 0,
-                                heightPixels = 0,
-                            )
+                        for (data in keyboard) connectedSession.write(data)
+                    }
+                    if (fixedSize == null) {
+                        launch {
+                            resizes.collectLatest { next ->
+                                connectedSession.resizeTerminal(
+                                    widthChars = next.columns,
+                                    heightRows = next.rows,
+                                    widthPixels = 0,
+                                    heightPixels = 0,
+                                )
+                            }
                         }
                     }
+                    launch {
+                        for (data in connectedSession.stderr) emulator.writeInput(data)
+                    }
+                    for (data in connectedSession.stdout) emulator.writeInput(data)
+                    _status.value = TerminalStatus.Closed
                 }
-                launch {
-                    for (data in connectedSession.stderr) emulator.writeInput(data)
-                }
-                for (data in connectedSession.stdout) emulator.writeInput(data)
-                _status.value = TerminalStatus.Closed
             } catch (throwable: Throwable) {
                 if (_status.value != TerminalStatus.Closed) {
                     _status.value = TerminalStatus.Failed(

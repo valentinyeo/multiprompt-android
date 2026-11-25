@@ -21,7 +21,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
-import org.connectbot.sshlib.SshClient
 import org.json.JSONObject
 
 data class ChatHistoryState(
@@ -54,7 +53,6 @@ class ChatHistoryConnection(
     private val journal: MessageJournal? = null,
     private val gate: MessageGate? = null,
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
-    private val sharedClient: (() -> SshClient?)? = null,
     private val beforeAdmission: (suspend () -> Unit)? = null,
     private val stallMillis: Long = ConversationLoad.TIMEOUT_MS,
     internal val pollGate: ChatPollGate,
@@ -315,15 +313,14 @@ class ChatHistoryConnection(
         }
         try {
             val transport = connectedExchange
-            val shared = if (transport == null) sharedClient?.invoke() else null
-            val rented = if (transport == null && shared == null) {
+            val rented = if (transport == null) {
                 withTimeout(20_000L) { repository.rentServerLink(host) }
             } else {
                 null
             }
             try {
                 if (transport != null) transport(tracked) else {
-                    repository.streamChatHistory(shared ?: requireNotNull(rented).client, script, tracked)
+                    requireNotNull(rented).use { client -> repository.streamChatHistory(client, script, tracked) }
                 }
             } finally {
                 rented?.releaseNow()
