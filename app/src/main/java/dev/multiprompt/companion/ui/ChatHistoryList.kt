@@ -158,16 +158,6 @@ internal fun ChatHistoryView(
         val modelChoices = remember(agent, hostSettings, reader.pendingModelFamily) {
             ModelChoices.of(agent, hostSettings, reader.pendingModelFamily)
         }
-        ModelChoiceRow(modelChoices, enabled = !reader.sending) { choice ->
-            if (choice.command != null) {
-                if (connection.sendRuntimeCommand(choice.command)) onSessionUsed() else toast("Could not send command")
-            } else scope.launch {
-                if (choice.change.key == "model") connection.markModelPick(choice.change.value)
-                val applied = connection.changeHost(choice.change) == MessageActionResult.Applied
-                if (applied) onSessionUsed() else if (choice.change.key == "model") connection.markModelPickFailed(choice.change.failure)
-                toast(if (applied) choice.change.notice else choice.change.failure)
-            }
-        }
         ChatHistoryList(
             messages = messages,
             focusKey = focusKey,
@@ -224,6 +214,17 @@ internal fun ChatHistoryView(
             } else null,
             collapsePendingReactions = reader.actionError == null,
             working = reader.sending || state.replica?.host?.running == true,
+            modelChoices = modelChoices,
+            onModelPick = { choice ->
+                if (!reader.sending && choice.command != null) {
+                    if (connection.sendRuntimeCommand(choice.command)) onSessionUsed() else toast("Could not send command")
+                } else if (!reader.sending) scope.launch {
+                    connection.markModelPick(choice.change.value)
+                    val applied = connection.changeHost(choice.change) == MessageActionResult.Applied
+                    if (applied) onSessionUsed() else connection.markModelPickFailed(choice.change.failure)
+                    toast(if (applied) choice.change.notice else choice.change.failure)
+                }
+            },
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
@@ -244,7 +245,6 @@ internal fun ChatHistoryView(
 @Composable
 internal fun ModelChoiceRow(
     choices: List<ModelChoice>,
-    enabled: Boolean = true,
     onPick: (ModelChoice) -> Unit,
 ) {
     if (choices.isEmpty()) return
@@ -258,7 +258,6 @@ internal fun ModelChoiceRow(
             KitSecondaryButton(
                 text = if (choice.current) choice.label + " · current" else choice.label,
                 onClick = { onPick(choice) },
-                enabled = enabled,
             )
         }
     }
@@ -280,6 +279,8 @@ internal fun ChatHistoryList(
     questions: List<PendingQuestion> = emptyList(),
     questionError: String? = null,
     onQuestionChoice: ((PendingQuestion, Set<Int>, String) -> Boolean)? = null,
+    modelChoices: List<ModelChoice> = emptyList(),
+    onModelPick: ((ModelChoice) -> Unit)? = null,
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     followRequest: Int = 0,
@@ -317,6 +318,8 @@ internal fun ChatHistoryList(
     val hitsByMessage = remember(findHits) { findHits.groupBy { it.message } }
     SideEffect { onFindCount(findHits.size) }
     val showDots = working || awaitingReply(presentation.messages, questions.size)
+    val showModels = modelChoices.isNotEmpty() && onModelPick != null
+    val leading = ChatOpenAnchor.leading(questions.size, showDots, showModels)
     val piLogin = remember(presentation.messages) {
         PiLoginPrompt.current(presentation.messages)
     }
@@ -342,7 +345,7 @@ internal fun ChatHistoryList(
     }
     LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val context = LocalContext.current
-    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, showDots) {
+    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, showDots, showModels) {
         val request = pendingJump ?: return@LaunchedEffect
         val visible = presentation.messages
         val keys = visible.map { it.key }
@@ -352,7 +355,7 @@ internal fun ChatHistoryList(
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
-            listState.scrollToItem(keys.lastIndex - source + questions.size + (if (showDots) 1 else 0))
+            listState.scrollToItem(keys.lastIndex - source + leading)
             pendingJump = null
         } else if (before < 0 || (!hasOlder && loaded)) {
             pendingJump = null
@@ -366,17 +369,17 @@ internal fun ChatHistoryList(
         }
     }
     val atBottom = !listState.canScrollBackward && pendingJump == null
-    val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, questions.size, showDots)
+    val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, leading)
     val holdingForUnread = openHold && anchorPosition != null
     val newest = messages.lastOrNull()
     LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
         if (atBottom && !holdingForUnread && findQuery.isBlank()) listState.scrollToItem(0)
     }
-    LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, showDots, questions.size) {
+    LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, leading) {
         val hit = activeFind ?: return@LaunchedEffect
         if (findQuery.isBlank()) return@LaunchedEffect
         openHold = false
-        val listIndex = (if (showDots) 1 else 0) + questions.size + (presentation.messages.lastIndex - hit.message)
+        val listIndex = leading + (presentation.messages.lastIndex - hit.message)
         if (listIndex >= 0) listState.scrollToItem(listIndex)
     }
     LaunchedEffect(followRequest) {
@@ -428,6 +431,9 @@ internal fun ChatHistoryList(
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + bottomPadding) else androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding),
     ) {
         if (showDots) item(key = "working") { WorkingDots() }
+        if (showModels) item(key = "models") {
+            ModelChoiceRow(modelChoices) { choice -> onModelPick?.invoke(choice) }
+        }
         questions.asReversed().forEach { question ->
             item(key = "question:${question.callId}:${question.index}") {
                 QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { choices, other ->
