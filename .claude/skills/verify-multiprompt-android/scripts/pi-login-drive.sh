@@ -1,5 +1,31 @@
 #!/usr/bin/env bash
 mpa="$scripts/mpa"
+sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-before.jsonl"
+"$mpa" read --wait-text pi-fast
+"$mpa" read --wait-text pi-deep
+scroll_to_newest
+"$mpa" read --select visible --value pi-fast --extra enabled
+"$mpa" read --select visible --value pi-deep --extra enabled
+"$mpa" screenshot pi-model-choices
+"$mpa" proof --name pi-model-choices --require-text pi-fast --require-text pi-deep --forbid-text PI_PANE_ONLY_545 --forbid-desc 'Jump to newest'
+sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-after.jsonl"
+sudo cat /home/verifyssh/ai-switch-models.json > "$EVIDENCE/pi-models-served.json"
+python3 - "$EVIDENCE" > "$EVIDENCE/pi-model-host.json" <<'PYMODEL'
+import json
+from pathlib import Path
+import sys
+root = Path(sys.argv[1])
+models = json.loads((root / 'pi-models-served.json').read_text())
+assert [model['name'] for model in models] == ['pi-fast', 'pi-deep'], models
+before = [json.loads(line) for line in (root / 'pi-model-requests-before.jsonl').read_text().splitlines()]
+after = [json.loads(line) for line in (root / 'pi-model-requests-after.jsonl').read_text().splitlines()]
+assert after[:len(before)] == before
+requests = [row for row in after[len(before):] if row['session'] == 'live-verify-session']
+history = [row for row in requests if row['kind'] == 'history']
+assert history, 'Pi chat never queried structured history'
+assert not [row for row in requests if row['kind'] == 'snapshot'], 'Pi chat captured pane text'
+print(json.dumps(dict(models=models, history_queries=len(history), pane_captures=0)))
+PYMODEL
 "$mpa" fill 'Message verify-session' PI_LOGIN_PROMPT_2276
 "$mpa" tap desc 'Send prompt'
 "$mpa" read --wait-text 'Sign in to Pi to continue'

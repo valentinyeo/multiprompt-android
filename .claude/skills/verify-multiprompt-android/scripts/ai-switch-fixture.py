@@ -36,7 +36,7 @@ def console():
     enabled = subprocess.check_output([sys.executable, str(HOME / 'ai-switch-reader.py'), 'host', 'enable',
         'claude', SID, '--tmux', TMUX, '--cwd', str(CWD)], text=True)
     assert json.loads(enabled)['status'] == 'enabled', enabled
-    print('Claude Code\nAI_SWITCH_READY_2538\nReady', flush=True)
+    print('Claude Code\nAI_SWITCH_READY_2538\nPI_PANE_ONLY_545\nReady', flush=True)
     os.execvp('sleep', ['sleep', 'infinity'])
 
 
@@ -67,6 +67,19 @@ def claude():
             emit(dict(type='assistant', uuid=str(uuid.uuid4()), session_id=sid,
                 message=dict(id='msg_' + uuid.uuid4().hex, role='assistant', content=[dict(type='text', text=reply)])))
             emit(dict(type='result', subtype='success', stop_reason='end_turn', session_id=sid, usage={}))
+
+
+def models():
+    boundary()
+    for line in sys.stdin:
+        fields = line.rstrip('\n').split('\t')
+        assert fields[1:3] == ['models', 'pi'], fields
+        choices = [dict(name='pi-fast', provider='anthropic'), dict(name='pi-deep', provider='anthropic')]
+        (HOME / 'ai-switch-models.json').write_text(json.dumps(choices))
+        print(f'@mp\t{fields[0]}\tmodels\tok\t-\t{len(choices)}')
+        for model in choices:
+            print(f'M\t{model["name"]}\t{model["provider"]}\t')
+        print('@@MP_END@@', flush=True)
 
 
 def pi():
@@ -123,6 +136,8 @@ def pi():
 if __name__ == '__main__':
     if sys.argv[1:] == ['console']:
         console()
+    elif sys.argv[1:] == ['--serve']:
+        models()
     elif '--print' in sys.argv[1:]:
         claude()
     else:

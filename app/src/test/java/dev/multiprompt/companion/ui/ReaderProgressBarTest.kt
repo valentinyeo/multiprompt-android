@@ -14,6 +14,8 @@ import dev.multiprompt.companion.reader.ChatHistoryProtocol
 import dev.multiprompt.companion.reader.ChatHistoryState
 import dev.multiprompt.companion.reader.ChatHistoryCache
 import org.robolectric.util.ReflectionHelpers
+import dev.multiprompt.companion.reader.HostStream
+import dev.multiprompt.companion.reader.MessageReplica
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.ReaderStatus
 import dev.multiprompt.companion.reader.SessionReaderConnection
@@ -40,6 +42,7 @@ class ReaderProgressBarTest {
     @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private lateinit var f: SessionActivityFixture
     private lateinit var connection: SessionReaderConnection
+    private lateinit var history: MutableStateFlow<ChatHistoryState>
     @Before fun setup() {
         f = SessionActivityFixture()
         val cache = ChatHistoryCache(f.app.cacheDir.resolve("progress-bar-history"))
@@ -47,7 +50,8 @@ class ReaderProgressBarTest {
             agent = AgentKind.CLAUDE, historyScript = byteArrayOf(), historyCache = cache)
         val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, f.session.name, f.session.workingDirectory)
         val chat = ChatHistoryConnection(f.app.sshRepository, f.host, identity, byteArrayOf(), cache, pollGate = ChatPollGate())
-        f.field<MutableStateFlow<ChatHistoryState>>(chat, "_state").value = ChatHistoryState(loaded = true)
+        history = f.field(chat, "_state")
+        history.value = ChatHistoryState(loaded = true)
         ReflectionHelpers.setField(connection, "historyIdentity", identity)
         ReflectionHelpers.setField(connection, "historyConnection", chat)
     }
@@ -73,18 +77,17 @@ class ReaderProgressBarTest {
         }
     }
 
-    @Test fun serverTurnKeepsDotsThroughQuietToolsAndReconnectUntilIdle() {
-        val started = System.currentTimeMillis() / 1000 - 3600
-        render(ReaderState(status = ReaderStatus.Live,
-            hookState = TmuxText.HookState(active = true, atEpochSeconds = started)))
+    @Test fun serverTurnKeepsDotsThroughReconnectUntilIdle() {
+        render()
         val reader = f.field<MutableStateFlow<ReaderState>>(connection, "_state")
+        compose.runOnIdle { history.value = history.value.copy(replica = MessageReplica(epoch = 1, cursor = 0, host = HostStream(running = true))) }
         compose.onNodeWithContentDescription("Working").assertIsDisplayed()
         for (status in listOf(ReaderStatus.Connecting, ReaderStatus.Live)) {
             compose.runOnIdle { reader.value = reader.value.copy(status = status) }
             compose.onNodeWithContentDescription("Working").assertIsDisplayed()
         }
         compose.runOnIdle {
-            reader.value = reader.value.copy(hookState = TmuxText.HookState(false, started + 3600))
+            history.value = history.value.copy(replica = history.value.replica?.copy(host = HostStream(running = false)))
         }
         compose.onNodeWithContentDescription("Working").assertDoesNotExist()
     }

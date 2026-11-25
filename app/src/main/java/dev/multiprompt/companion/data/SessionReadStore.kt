@@ -298,8 +298,10 @@ class SessionReadStore(context: Context) {
 
     fun setComposerDraft(session: TmuxSession, text: String) {
         val prefKey = DRAFT_PREFIX + key(session.hostId, session.name)
+        val stored = if (text.isBlank()) null else text
+        if (preferences.getString(prefKey, null) == stored) return
         val editor = preferences.edit()
-        if (text.isBlank()) editor.remove(prefKey) else editor.putString(prefKey, text)
+        if (stored == null) editor.remove(prefKey) else editor.putString(prefKey, stored)
         editor.apply()
     }
 

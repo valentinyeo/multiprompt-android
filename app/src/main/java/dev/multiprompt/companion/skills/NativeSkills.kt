@@ -39,7 +39,7 @@ object NativeSkills {
     fun query(text: String, cursor: Int): String? = token(text, cursor)?.text
 
     fun spans(text: String, skills: List<NativeSkill>): List<SkillSpan> {
-        if (text.isEmpty() || skills.isEmpty()) return emptyList()
+        if (text.isEmpty() || skills.isEmpty() || '/' !in text) return emptyList()
         val names = skills.map { it.name }.filter { it.isNotEmpty() && !pathWord(it) }.distinct().sortedByDescending { it.length }
         if (names.isEmpty()) return emptyList()
         val found = ArrayList<SkillSpan>()

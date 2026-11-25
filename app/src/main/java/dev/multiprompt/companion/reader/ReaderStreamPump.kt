@@ -26,6 +26,10 @@ internal class ModelSwitchConfirmation(
         _pending.value = true
     }
 
+    fun complete() {
+        _pending.value = false
+    }
+
     fun expire(): Boolean {
         if (!_pending.value || now() <= deadline) return false
         _pending.value = false
@@ -38,6 +42,10 @@ internal class ModelSwitchConfirmation(
         _pending.value = false
         return due
     }
+}
+
+internal suspend fun paneFrames(pane: StateFlow<Boolean>, frames: suspend () -> Unit) {
+    pane.collectLatest { visible -> if (visible) frames() }
 }
 
 internal class ReaderStreamPump<C : Any>(

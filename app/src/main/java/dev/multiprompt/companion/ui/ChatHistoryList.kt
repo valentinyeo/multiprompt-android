@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +40,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.semantics
@@ -56,6 +59,9 @@ import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.reader.PendingQuestion
 import dev.multiprompt.companion.reader.PiLoginPrompt
 import dev.multiprompt.companion.reader.ChatHistoryMessage
+import dev.multiprompt.companion.reader.ModelChoice
+import dev.multiprompt.companion.reader.ModelChoices
+import dev.multiprompt.companion.reader.PiModels
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -105,6 +111,7 @@ internal fun ChatHistoryView(
     mentionChats: List<MentionChat> = emptyList(),
     onSessionLink: ((String) -> Unit)? = null,
 ) {
+    if (TypingProbe.enabled) SideEffect { TypingProbe.composed("ChatHistoryView") }
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
     val managed = connection.sharedMessages
@@ -154,13 +161,12 @@ internal fun ChatHistoryView(
             }
         }
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
-        reader.modelPickerOptions.forEach { option ->
-            KitSecondaryButton(
-                text = option.label + if (option.current) " · current" else "",
-                onClick = { if (connection.selectModelPickerOption(option.index)) onSessionUsed() },
-                enabled = !reader.sending,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        val hostSettings = connection.hostSettings()
+        val piModels by connection.piModels.collectAsState()
+        LaunchedEffect(agent, connection) { if (agent == AgentKind.PI) connection.loadPiModels() }
+        val modelChoices = remember(agent, hostSettings, reader.pendingModelFamily, piModels.models) {
+            if (agent == AgentKind.PI) ModelChoices.pi(piModels.models, hostSettings?.model)
+            else ModelChoices.of(agent, hostSettings, reader.pendingModelFamily)
         }
         ChatHistoryList(
             messages = messages,
@@ -181,7 +187,6 @@ internal fun ChatHistoryView(
             } else if (!reader.sending && reader.status == ReaderStatus.Live) { question, choices, other ->
                 connection.answerQuestion(question, choices, other).also { if (it) onSessionUsed() }
             } else null,
-            questionScreen = reader.screenOutput,
             sessionName = sessionName,
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
@@ -218,7 +223,29 @@ internal fun ChatHistoryView(
                 }
             } else null,
             collapsePendingReactions = reader.actionError == null,
-            working = reader.isWorking() || state.replica?.host?.running == true,
+            working = reader.sending || state.replica?.host?.running == true,
+            modelChoices = modelChoices,
+            onModelPick = { choice ->
+                val pi = choice.pi
+                val change = choice.change
+                when {
+                    pi != null -> if (!reader.sending) scope.launch {
+                        val result = connection.changePiModel(pi)
+                        if (result == MessageActionResult.Applied) onSessionUsed()
+                        toast(PiModels.resultMessage(result, pi))
+                    }
+                    change == null -> Unit
+                    !reader.sending && choice.command != null -> {
+                        if (connection.sendRuntimeCommand(choice.command)) onSessionUsed() else toast("Could not send command")
+                    }
+                    !reader.sending -> scope.launch {
+                        connection.markModelPick(change.value)
+                        val applied = connection.changeHost(change) == MessageActionResult.Applied
+                        if (applied) onSessionUsed() else connection.markModelPickFailed(change.failure)
+                        toast(if (applied) change.notice else change.failure)
+                    }
+                }
+            },
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
@@ -237,6 +264,27 @@ internal fun ChatHistoryView(
 }
 
 @Composable
+internal fun ModelChoiceRow(
+    choices: List<ModelChoice>,
+    onPick: (ModelChoice) -> Unit,
+) {
+    if (choices.isEmpty()) return
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
+        horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        choices.forEach { choice ->
+            KitSecondaryButton(
+                text = if (choice.current) choice.label + " · current" else choice.label,
+                onClick = { onPick(choice) },
+            )
+        }
+    }
+}
+
+@Composable
 internal fun ChatHistoryList(
     messages: List<ChatHistoryMessage>,
     modifier: Modifier = Modifier,
@@ -250,9 +298,10 @@ internal fun ChatHistoryList(
     replyGate: ReplySwipeGate = remember { ReplySwipeGate() },
     onReply: (String, Boolean) -> Unit = { _, _ -> },
     questions: List<PendingQuestion> = emptyList(),
-    questionScreen: String = "",
     questionError: String? = null,
     onQuestionChoice: ((PendingQuestion, Set<Int>, String) -> Boolean)? = null,
+    modelChoices: List<ModelChoice> = emptyList(),
+    onModelPick: ((ModelChoice) -> Unit)? = null,
     onNearTop: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(),
     followRequest: Int = 0,
@@ -276,6 +325,7 @@ internal fun ChatHistoryList(
     mentionChats: List<MentionChat> = emptyList(),
     onSessionLink: ((String) -> Unit)? = null,
 ) {
+    if (TypingProbe.enabled) SideEffect { TypingProbe.composed("ChatHistoryList") }
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
         else ChatReactions.Presentation(messages, emptyMap())
@@ -290,6 +340,8 @@ internal fun ChatHistoryList(
     val hitsByMessage = remember(findHits) { findHits.groupBy { it.message } }
     SideEffect { onFindCount(findHits.size) }
     val showDots = working || awaitingReply(presentation.messages, questions.size)
+    val showModels = modelChoices.isNotEmpty() && onModelPick != null
+    val leading = ChatOpenAnchor.leading(questions.size, showDots, showModels)
     val piLogin = remember(presentation.messages) {
         PiLoginPrompt.current(presentation.messages)
     }
@@ -315,7 +367,7 @@ internal fun ChatHistoryList(
     }
     LaunchedEffect(focusKey) { if (focusKey != null) highlightedKey = focusKey }
     val context = LocalContext.current
-    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, showDots) {
+    LaunchedEffect(pendingJump, presentation.messages, hasOlder, loaded, questions, showDots, showModels) {
         val request = pendingJump ?: return@LaunchedEffect
         val visible = presentation.messages
         val keys = visible.map { it.key }
@@ -325,7 +377,7 @@ internal fun ChatHistoryList(
         val source = ReplyQuote.sourceIndex(texts, before, request.reply.quoted)
         if (source != null) {
             highlightedKey = keys[source]
-            listState.scrollToItem(keys.lastIndex - source + questions.size + (if (showDots) 1 else 0))
+            listState.scrollToItem(keys.lastIndex - source + leading)
             pendingJump = null
         } else if (before < 0 || (!hasOlder && loaded)) {
             pendingJump = null
@@ -339,17 +391,17 @@ internal fun ChatHistoryList(
         }
     }
     val atBottom = !listState.canScrollBackward && pendingJump == null
-    val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, questions.size, showDots)
+    val anchorPosition = ChatOpenAnchor.listIndex(presentation.messages, firstUnreadKey, leading)
     val holdingForUnread = openHold && anchorPosition != null
     val newest = messages.lastOrNull()
     LaunchedEffect(newest?.key, newest?.text, newest?.pending, questions) {
         if (atBottom && !holdingForUnread && findQuery.isBlank()) listState.scrollToItem(0)
     }
-    LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, showDots, questions.size) {
+    LaunchedEffect(activeFind?.message, activeFind?.start, activeFind?.end, leading) {
         val hit = activeFind ?: return@LaunchedEffect
         if (findQuery.isBlank()) return@LaunchedEffect
         openHold = false
-        val listIndex = (if (showDots) 1 else 0) + questions.size + (presentation.messages.lastIndex - hit.message)
+        val listIndex = leading + (presentation.messages.lastIndex - hit.message)
         if (listIndex >= 0) listState.scrollToItem(listIndex)
     }
     LaunchedEffect(followRequest) {
@@ -394,16 +446,21 @@ internal fun ChatHistoryList(
     DisposableEffect(Unit) { onDispose { nearTop(false) } }
     val fontSize = (14f * fontScale).sp
     LazyColumn(
-        modifier = modifier.fillMaxSize().testTag("chat-history"),
+        modifier = modifier.fillMaxSize()
+            .then(if (TypingProbe.enabled) Modifier.onSizeChanged { TypingProbe.laidOut("ChatHistoryListSize") } else Modifier)
+            .testTag("chat-history"),
         state = listState,
         reverseLayout = true,
         verticalArrangement = Arrangement.spacedBy(if (LocalReaderStyle.current) ReaderMessageSpacing else 10.dp),
         contentPadding = if (LocalReaderStyle.current) androidx.compose.foundation.layout.PaddingValues(top = ReaderFloatingInset + WindowInsets.statusBars.asPaddingValues().calculateTopPadding(), bottom = ReaderMessageSpacing + bottomPadding) else androidx.compose.foundation.layout.PaddingValues(bottom = bottomPadding),
     ) {
         if (showDots) item(key = "working") { WorkingDots() }
+        if (showModels) item(key = "models") {
+            ModelChoiceRow(modelChoices) { choice -> onModelPick?.invoke(choice) }
+        }
         questions.asReversed().forEach { question ->
             item(key = "question:${question.callId}:${question.index}") {
-                QuestionChoices(question, enabled = onQuestionChoice != null && (question.host != null || question.isVisible(questionScreen)), error = questionError) { choices, other ->
+                QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { choices, other ->
                     onQuestionChoice?.invoke(question, choices, other) == true
                 }
             }

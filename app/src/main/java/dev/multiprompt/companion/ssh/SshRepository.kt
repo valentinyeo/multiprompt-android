@@ -256,12 +256,11 @@ class SshRepository(private val secrets: SecretStorage) {
         agent: AgentKind = AgentKind.OTHER,
         onBytes: () -> Unit = {},
         hosted: Boolean = false,
-        visibleOnly: Boolean = false,
         onSnapshot: (StreamSnapshot) -> Unit,
     ) = coroutineScope {
         val session = openSshChannel { client.openSession() }
         try {
-            if (!session.requestExec(TmuxCommands.stream(sessionName, hosted, visibleOnly))) {
+            if (!session.requestExec(TmuxCommands.stream(sessionName, hosted))) {
                 throw SshProblem.Connection("The SSH server refused the tmux reader")
             }
             val err = async { session.stderr.drain() }

@@ -49,7 +49,7 @@ PYCATCHUP
 wait_for_text PI_HISTORY_CAUGHT_UP_2569
 shot ai-switch-reply
 source "$scripts/pi-login-drive.sh"
-step=$((step + 4))
+step=$((step + 5))
 python3 - "$EVIDENCE" <<'PYPI'
 import json
 from pathlib import Path

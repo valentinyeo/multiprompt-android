@@ -79,7 +79,7 @@ class SessionReaderConcurrentLiveTest {
     }
 
     @Test
-    fun nativeChatKeepsHistoryPollingButRequestsOnlyTheVisiblePane() {
+    fun nativeChatKeepsTheConnectionWarmAndAsksForNoPaneFrames() {
         reader("native").use { connection ->
             connection.observe(pane = false).use {
                 assertTrue(gateActive(connection))

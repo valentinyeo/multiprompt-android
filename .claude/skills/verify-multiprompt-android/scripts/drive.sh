@@ -3096,20 +3096,25 @@ python3 "$scripts/ui.py" "$EVIDENCE/current.xml" lacks 'ETA '
 adb shell input keyevent KEYCODE_BACK
 shot eta-idle
 python3 "$scripts/no-chat-bar.py" "$EVIDENCE/current.xml" "$EVIDENCE/$(printf '%02d' "$step")-eta-idle.png" idle
-sudo -u verifyssh tee /home/verifyssh/send-delay.sh >/dev/null <<'DELAY'
+agent_tmux=$(command -v tmux)
+if [[ "$agent_tmux" == /usr/local/bin/tmux ]]; then
+    printf 'SEND_HOLD_TMUX_AMBIGUOUS: %s\n' "$agent_tmux" >&2
+    exit 1
+fi
+printf '%s\n' "$agent_tmux" | sudo -u verifyssh tee /home/verifyssh/real-tmux >/dev/null
+sudo -u verifyssh rm -f /home/verifyssh/send-release /home/verifyssh/send-delay.log
+sudo -u verifyssh touch /home/verifyssh/send-hold
+sudo tee /usr/local/bin/tmux >/dev/null <<'DELAY'
 #!/usr/bin/env bash
-printf '%s start %s\n' "$(date +%T.%N)" "${SSH_ORIGINAL_COMMAND:0:90}" >> /home/verifyssh/commands.log
-case "$SSH_ORIGINAL_COMMAND" in
-    *mp_buffer=*) timeout 60s bash -c 'until test -f /home/verifyssh/send-release; do sleep 1; done' || exit 1 ;;
-esac
-bash -c "$SSH_ORIGINAL_COMMAND"
-code=$?
-printf '%s exit %s %s\n' "$(date +%T.%N)" "$code" "${SSH_ORIGINAL_COMMAND:0:60}" >> /home/verifyssh/commands.log
-exit "$code"
+if [[ "${1:-}" == paste-buffer && -e /home/verifyssh/send-hold && ! -e /home/verifyssh/send-release ]]; then
+    printf '%s held %s\n' "$(date +%T.%N)" "$*" >> /home/verifyssh/send-delay.log
+    timeout 60s bash -c 'until test -f /home/verifyssh/send-release; do sleep 1; done' || exit 1
+    printf '%s released %s\n' "$(date +%T.%N)" "$*" >> /home/verifyssh/send-delay.log
+fi
+real=$(cat /home/verifyssh/real-tmux) || exit 1
+exec "$real" "$@"
 DELAY
-sudo chmod 755 /home/verifyssh/send-delay.sh
-sudo -u verifyssh rm -f /home/verifyssh/send-release
-sudo sed -i 's|^|command="/home/verifyssh/send-delay.sh" |' /home/verifyssh/.ssh/authorized_keys
+sudo chmod 755 /usr/local/bin/tmux
 fill 'Message verify-session' VERIFY_SENT_528
 shot send-draft
 tap_desc 'Send prompt'
@@ -3120,6 +3125,9 @@ timeout 15s adb logcat -d -s SendTiming:I > "$EVIDENCE/send-timing.txt"
 send_timing "$EVIDENCE/current.xml" "$EVIDENCE/send-timing.txt" VERIFY_SENT_528
 sudo -u verifyssh touch /home/verifyssh/send-release
 wait_receipt 'VERIFY_RECEIVED:VERIFY_SENT_528'
+sudo -u verifyssh cat /home/verifyssh/send-delay.log > "$EVIDENCE/send-delay.txt"
+grep -q ' held ' "$EVIDENCE/send-delay.txt"
+sudo rm -f /usr/local/bin/tmux
 wait_for_text 'VERIFY_RECEIVED:VERIFY_SENT_528'
 shot send-result
 if [[ "$feature" == session-reader.md ]]; then python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-send-result.xml" VERIFY_RECEIVED:VERIFY_SENT_528 --append "$EVIDENCE/reader-ui.json"; fi

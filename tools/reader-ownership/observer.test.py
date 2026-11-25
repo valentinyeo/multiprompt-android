@@ -87,6 +87,17 @@ printf 'attempts=%s\\n' "$attempts"
         with self.assertRaises(ValueError):
             receipts.compare(dict(history=2, snapshot=3), dict(history=2, snapshot=4), "resumed")
 
+    def test_the_pane_free_chat_reader_proves_itself_with_history_requests(self):
+        receipts.compare(dict(history=4, snapshot=0), dict(history=4, snapshot=0), "hidden")
+        receipts.compare(dict(history=4, snapshot=0), dict(history=7, snapshot=0), "resumed")
+        for after in (dict(history=5, snapshot=0), dict(history=4, snapshot=1)):
+            with self.assertRaises(ValueError):
+                receipts.compare(dict(history=4, snapshot=0), after, "hidden")
+        with self.assertRaises(ValueError):
+            receipts.compare(dict(history=4, snapshot=0), dict(history=4, snapshot=0), "resumed")
+        with self.assertRaises(ValueError):
+            receipts.compare(dict(history=0, snapshot=0), dict(history=3, snapshot=0), "resumed")
+
 
 if __name__ == "__main__":
     unittest.main()

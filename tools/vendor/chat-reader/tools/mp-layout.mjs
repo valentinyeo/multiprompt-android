@@ -14,13 +14,15 @@ commands:
   create-section <name>                            add a workspace
   move --to <workspace> [--create] <session>...    move sessions into a workspace in one change
   move --to <workspace> --match <glob> [--host N]  move every session whose name matches
-  spawn --name NAME --folder DIR --workspace WORKSPACE --host N [--group GROUP] [--mode visible|headless] [--provider claude|hax] [--task TEXT]  create or reveal a live chat
+  spawn --name NAME --folder DIR --workspace WORKSPACE [--host N] [--group GROUP] [--mode visible|headless] [--provider claude|hax] [--task TEXT]  create or reveal a live chat
   open <session> [--workspace <name>] [--host N] [--title <text>|--name <text>] [--group <group>] [--star] [--move] [--no-tmux]
   open --kind shell --tmux <session> --name <title> --workspace <name> [--host N] [--group <group>] [--star] [--move] [--no-tmux]
-  open --kind chat --name NAME --folder DIR --workspace WORKSPACE --host N [--group GROUP] [--mode visible|headless] [--provider claude|hax] [--task TEXT]
+  open --kind chat --name NAME --folder DIR --workspace WORKSPACE [--host N] [--group GROUP] [--mode visible|headless] [--provider claude|hax] [--task TEXT]
 
-every write names its server: --host is required to create a tab, and a reopen takes the
-host recorded when the chat was created. There is no default host.
+every write names its server: --host wins, then the host recorded when the chat was created,
+then this machine's slot, which is MULTIPROMPT_HOST or "multiprompt_slot" on this machine's
+entry in the installed servers file. A tab that is already open keeps its own host, so a
+reopen never needs a slot.
 
 environment:
   MULTIPROMPT_KEY   admin or workspace key (never printed)
@@ -129,43 +131,68 @@ function hostnamesMatch(left, right) {
   return typeof left === 'string' && typeof right === 'string' && left.toLowerCase() === right.toLowerCase();
 }
 
+function serversSlot(env, session) {
+  const path = serversPath(env);
+  if (!path) return null;
+  const facts = readRecord(path);
+  const servers = Array.isArray(facts?.servers) ? facts.servers : [];
+  const matched = servers.filter(server => serverHostnames(server).some(name => hostnamesMatch(name, hostname())));
+  if (matched.length > 1) throw new Failure(`give --host: ${session} matches more than one server in ${path}; keep one entry or set MULTIPROMPT_HOST`);
+  if (matched.length !== 1) return null;
+  const slot = matched[0].multiprompt_slot;
+  if (slot === undefined) return null;
+  if (!Number.isInteger(slot) || slot < 0 || slot > 2) throw new Failure(`give --host: ${session} has an invalid multiprompt_slot in ${path}; it must be 0, 1 or 2`);
+  return slot;
+}
+
+function noSlot(env, session) {
+  const path = serversPath(env) || '~/.local/share/vstack/config/servers.json';
+  return new Failure(`give --host: ${session} has no recorded host and this machine has no multiprompt_slot; set MULTIPROMPT_HOST or add "multiprompt_slot": 0, 1 or 2 to its entry in ${path}`);
+}
+
+function configuredHost(env, session) {
+  const text = (env.MULTIPROMPT_HOST || '').trim();
+  if (text) return hostSlot(text);
+  return serversSlot(env, session);
+}
+
 function slotFromServers(env, session, layoutHosts, configs) {
   const path = serversPath(env);
-  if (!path) throw new Failure(`give --host: ${session} has no recorded host`);
-  const facts = readRecord(path);
-  if (!facts) throw new Failure(`give --host: ${session} has no recorded host`);
+  const facts = path ? readRecord(path) : null;
+  const servers = Array.isArray(facts?.servers) ? facts.servers : [];
   const user = osUser(env);
-  if (!user) throw new Failure(`give --host: ${session} has no recorded host`);
-  const servers = Array.isArray(facts.servers) ? facts.servers : [];
   const machines = machineNames(env, configs, facts);
   const matched = servers.filter(server => {
     if (!server || !Array.isArray(server.users) || !server.users.includes(user)) return false;
     return serverHostnames(server).some(name => machines.has(name));
   });
-  if (matched.length > 1) throw new Failure(`give --host: ${session} matches more than one server`);
-  if (matched.length !== 1) throw new Failure(`give --host: ${session} has no matching server`);
+  if (matched.length > 1) throw new Failure(`give --host: ${session} matches more than one server in ${path}; keep one entry or set MULTIPROMPT_HOST`);
+  if (matched.length !== 1) throw noSlot(env, session);
   const server = matched[0];
   const hosts = Array.isArray(layoutHosts) ? layoutHosts : [];
   const slots = hosts.filter(item => item && item.user === user && serverHostnames(server).some(name => hostnamesMatch(item.hostname, name)));
-  if (slots.length > 1) throw new Failure(`give --host: ${session} is on more than one listed server`);
-  if (slots.length !== 1) throw new Failure(`give --host: ${session} is not on any listed server`);
+  if (slots.length !== 1) throw noSlot(env, session);
   const slot = slots[0].slot;
-  if (!Number.isInteger(slot) || slot < 0 || slot > 2) throw new Failure(`give --host: ${session} is not on any listed server`);
+  if (!Number.isInteger(slot) || slot < 0 || slot > 2) throw noSlot(env, session);
   return slot;
 }
 
-export function resolveTabHost(env, session, explicit, layoutHosts) {
+export function resolveTabHost(env, session, explicit, layoutHosts, existingHost) {
   const configs = agentConfigs(env, session);
   const records = recordedHosts(configs);
   if (explicit !== undefined) {
     const slot = hostSlot(explicit);
     const conflicting = records.find(host => host !== slot);
     if (conflicting !== undefined) throw new Failure(`--host ${slot} contradicts the host ${conflicting} recorded for ${session}`);
+    if (Number.isInteger(existingHost) && existingHost !== slot) throw new Failure(`--host ${slot} contradicts the host ${existingHost} this tab is already open on`);
     return slot;
   }
+  if (Number.isInteger(existingHost)) return existingHost;
   if (records.length === 1) return records[0];
   if (records.length > 1) throw new Failure(`give --host: ${session} has conflicting recorded hosts`);
-  if (layoutHosts === undefined) throw new Failure(`give --host: ${session} has no recorded host`);
+  const configured = configuredHost(env, session);
+  if (configured !== null) return configured;
+  if (layoutHosts === undefined) throw noSlot(env, session);
   return slotFromServers(env, session, layoutHosts, configs);
 }
 
@@ -280,12 +307,15 @@ async function open(ctx, flags) {
   if (!session || positional.length > 1 || (flags.tmux && positional.length === 1 && positional[0] !== flags.tmux)) throw new Failure('give one session name');
   if (!/^[A-Za-z0-9_-]{1,63}$/.test(session)) throw new Failure('session names use letters, digits, - and _ (63 at most)');
   let layoutHosts;
+  let existingHost;
   if (needsLayoutHosts(ctx.env, session, flags.host)) {
     const read = await call(ctx, 'GET');
     if (read.status !== 200) throw refusal(read);
     layoutHosts = read.data.layout.hosts;
+    const present = (read.data.layout.tabs || []).filter(tab => String(tab.tmux_session || '').toLowerCase() === session.toLowerCase() && Number.isInteger(tab.tmux_host));
+    if (present.length === 1) existingHost = present[0].tmux_host;
   }
-  const host = resolveTabHost(ctx.env, session, flags.host, layoutHosts);
+  const host = resolveTabHost(ctx.env, session, flags.host, layoutHosts, existingHost);
   const title = flags.name || flags.title || session;
   const group = normalizedGroup(flags.group);
   ctx.features = flags.star ? 'groups,favorite' : 'groups';
@@ -350,9 +380,7 @@ async function spawnSession(ctx, flags) {
   if (!name || name.length > 64 || /[\p{Cc}\p{Cs}]/u.test(name)) throw new Failure('invalid session name');
   if (!flags.workspace.trim() || Buffer.byteLength(flags.workspace, 'utf8') > 31 || /[\p{Cc}\p{Cs}]/u.test(flags.workspace)) throw new Failure('invalid workspace');
   if (flags.task !== undefined && (!flags.task.trim() || flags.task.includes('\0') || Buffer.byteLength(flags.task, 'utf8') > 65536)) throw new Failure('invalid task');
-  if (flags.host === undefined) throw new Failure('give --host: a new chat must name the server it runs on');
-  if (!/^[0-2]$/.test(flags.host)) throw new Failure('host must be 0, 1 or 2');
-  const host = hostSlot(flags.host);
+  const host = resolveTabHost(ctx.env, name, flags.host, undefined);
   let folder;
   try { folder = ctx.resolveFolder(flags.folder); }
   catch { throw new Failure('invalid folder'); }
