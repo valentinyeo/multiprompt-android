@@ -38,7 +38,7 @@ class UpdateCardNotesTest {
         compose.setContent {
             MultipromptTheme {
                 Surface(Modifier.fillMaxWidth().wrapContentHeight()) {
-                    UpdateAvailableCard(release) { installs += it }
+                    UpdateAvailableCard(release) { installs += release }
                 }
             }
         }
