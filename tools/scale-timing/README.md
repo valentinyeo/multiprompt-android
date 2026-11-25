@@ -53,8 +53,9 @@ A step's wall clock answers none of "is this the app" on its own, because this h
 calls are inside it. `tools/scale-timing/runtime.py` keeps every `adb` and `mpa` call with its own start and
 end, so each row can be split into `driver ms` (the harness) and `wait ms` (the app and the emulator drawing).
 A resolved `mpa tap` costs two `uiautomator dump` calls and one input event; the `driver-alone` step times a raw
-dump, a single `mpa read`, an input tap on the same point and a resolved tap on the same point, so the shared
-`driver ms` can be checked arithmetically instead of assumed.
+dump, a single `mpa read` and a resolved tap on a control that changes nothing, so a tap's dump count and its
+input-event share are checked arithmetically instead of assumed. The step taps only through `mpa`, which
+resolves the control first, so it adds no raw coordinate tap to the journey ratchet.
 
 App CPU is the app process's own time from `/proc/<pid>/stat`, sectioned by [sampler.sh](sampler.sh) reading
 `/proc/<pid>/task/*/stat` per thread, so the table can name the thread that spent it. The `idle-inbox` step sits

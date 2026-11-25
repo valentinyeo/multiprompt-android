@@ -110,12 +110,13 @@ class BreakdownTest(unittest.TestCase):
     def test_driver_probe_shows_how_many_dumps_a_tap_costs(self):
         probed = dict(STEP, name='driver-alone', detail=dict(
             dump=dict(label='uiautomator dump (driver)', ms=1300.0), read=dict(label='mpa read', ms=1450.0),
-            wait_present=dict(label='mpa read --wait-text', ms=1500.0), input=dict(label='input tap', ms=120.0),
-            tap=dict(label='mpa tap', ms=3120.0)))
+            wait_present=dict(label='mpa read --wait-text', ms=1500.0), tap=dict(label='mpa tap', ms=3120.0),
+            input_ms=520.0))
         text = report.render([report.enrich(dict(timing(), steps=[probed]), relay_lines())])
         self.assertIn('## The driver on its own', text)
         self.assertIn('| head | scale | uiautomator dump (driver) | 1300 |', text)
-        self.assertIn('| head | scale | resolved tap minus the raw input, in dumps | 2.3 |', text)
+        self.assertIn('| head | scale | the input event, resolved tap minus two dumps | 520 |', text)
+        self.assertIn('| head | scale | a resolved tap, in dumps | 2.4 |', text)
 
     def test_idle_inbox_shows_what_the_app_costs_with_nothing_happening(self):
         idle = dict(STEP, name='idle-inbox', wall_ms=21000.0, cpu_ms=4200.0, detail=dict(seconds=20))

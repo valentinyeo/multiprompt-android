@@ -62,13 +62,10 @@ def noop_point(value):
     return [int(point[0]), int(point[1])]
 
 
-def raw_input_ms(point):
-    def tap():
-        adb('shell', 'input', 'tap', point[0], point[1], timeout=90, label='input tap')
-    return sample(tap, 'adb shell input tap on the same point')
-
-
 def driver_probe(noop):
     point = noop_point(noop)
-    return dict(noop=noop, point=point, dump=raw_dump_ms(), read=read_ms(),
-                wait_present=wait_present_ms(noop), input=raw_input_ms(point), tap=resolved_tap_ms(noop))
+    dump = raw_dump_ms()
+    tap = resolved_tap_ms(noop)
+    return dict(noop=noop, point=point, dump=dump, read=read_ms(),
+                wait_present=wait_present_ms(noop), tap=tap,
+                input_ms=round(max(0.0, tap['ms'] - 2 * dump['ms']), 1))

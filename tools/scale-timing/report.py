@@ -169,17 +169,19 @@ def driver_table(timings):
             if step.get('name') != 'driver-alone':
                 continue
             detail = step.get('detail') or {}
-            for key in ('dump', 'read', 'wait_present', 'input', 'tap'):
+            for key in ('dump', 'read', 'wait_present', 'tap'):
                 entry = detail.get(key) or {}
                 if entry.get('ms') is None:
                     continue
                 rows.append('| %s | %s | %s | %s |' % (ref, seed, entry.get('label', key), millis(entry['ms'])))
             dump = (detail.get('dump') or {}).get('ms') or 0
-            input_ms = (detail.get('input') or {}).get('ms') or 0
             tap_ms = (detail.get('tap') or {}).get('ms') or 0
+            if detail.get('input_ms') is not None:
+                rows.append('| %s | %s | the input event, resolved tap minus two dumps | %s |' % (
+                    ref, seed, millis(detail['input_ms'])))
             if dump > 0 and tap_ms > 0:
-                rows.append('| %s | %s | resolved tap minus the raw input, in dumps | %.1f |' % (
-                    ref, seed, max(0.0, (tap_ms - input_ms) / dump)))
+                rows.append('| %s | %s | a resolved tap, in dumps | %.1f |' % (
+                    ref, seed, max(0.0, tap_ms / dump)))
     if not rows:
         return []
     return ['| ref | seed | probe | ms |', '| --- | --- | --- | --- |'] + rows
