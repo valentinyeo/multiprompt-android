@@ -1,5 +1,6 @@
 package dev.multiprompt.companion.ui
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -18,6 +19,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -56,6 +58,8 @@ import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.reader.PendingQuestion
 import dev.multiprompt.companion.reader.PiLoginPrompt
 import dev.multiprompt.companion.reader.ChatHistoryMessage
+import dev.multiprompt.companion.reader.ModelChoice
+import dev.multiprompt.companion.reader.ModelChoices
 import dev.multiprompt.companion.reader.ReaderState
 import dev.multiprompt.companion.reader.SessionReaderConnection
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -150,13 +154,19 @@ internal fun ChatHistoryView(
             }
         }
         state.messageError?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(8.dp)) }
-        reader.modelPickerOptions.forEach { option ->
-            KitSecondaryButton(
-                text = option.label + if (option.current) " · current" else "",
-                onClick = { if (connection.selectModelPickerOption(option.index)) onSessionUsed() },
-                enabled = !reader.sending,
-                modifier = Modifier.fillMaxWidth(),
-            )
+        val hostSettings = connection.hostSettings()
+        val modelChoices = remember(agent, hostSettings, reader.pendingModelFamily) {
+            ModelChoices.of(agent, hostSettings, reader.pendingModelFamily)
+        }
+        ModelChoiceRow(modelChoices, enabled = !reader.sending) { choice ->
+            if (choice.command != null) {
+                if (connection.sendRuntimeCommand(choice.command)) onSessionUsed() else toast("Could not send command")
+            } else scope.launch {
+                if (choice.change.key == "model") connection.markModelPick(choice.change.value)
+                val applied = connection.changeHost(choice.change) == MessageActionResult.Applied
+                if (applied) onSessionUsed() else if (choice.change.key == "model") connection.markModelPickFailed(choice.change.failure)
+                toast(if (applied) choice.change.notice else choice.change.failure)
+            }
         }
         ChatHistoryList(
             messages = messages,
@@ -228,6 +238,29 @@ internal fun ChatHistoryView(
             onSessionLink = onSessionLink,
         )
 
+    }
+}
+
+@Composable
+internal fun ModelChoiceRow(
+    choices: List<ModelChoice>,
+    enabled: Boolean = true,
+    onPick: (ModelChoice) -> Unit,
+) {
+    if (choices.isEmpty()) return
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+            .padding(horizontal = Kit.SideChange, vertical = Kit.ControlGap),
+        horizontalArrangement = Arrangement.spacedBy(Kit.ControlGap),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        choices.forEach { choice ->
+            KitSecondaryButton(
+                text = if (choice.current) choice.label + " · current" else choice.label,
+                onClick = { onPick(choice) },
+                enabled = enabled,
+            )
+        }
     }
 }
 

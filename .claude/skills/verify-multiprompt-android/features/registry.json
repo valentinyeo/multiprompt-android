@@ -2334,16 +2334,16 @@
       }
     },
     "reader.pane-budget": {
-      "description": "Native chat runs no pane capture and no pane parse while a reply streams: the history view holds no pane lease, so the streamed reply arrives through history queries and the chat list working status comes from the host running flag. Terminal detail still opens a full-scrollback capture, and the independent terminal fallback renders two new streaming markers in the production terminal accessibility view and screenshots before completion. Retains pane-stream-result.json, XML, screenshots, the actual request log and the independent prompt receipt.",
+      "description": "Native chat runs no pane capture and no pane parse while a reply streams: the history view holds no pane lease, so the streamed reply arrives through history queries, the working dots come from structured history and the host running flag, model choices come from the structured model list and a question card comes from the transcript question. Terminal detail still opens a full-scrollback capture, and the independent terminal fallback renders two new streaming markers in the production terminal accessibility view and screenshots before completion. Retains pane-stream-result.json, XML, screenshots, the actual request log and the independent prompt receipt.",
       "journey": "chat-codex.md",
       "sideEffect": true,
       "paths": [
-        "^app/src/main/java/dev/multiprompt/companion/reader/(?:SessionReaderConnection|ReaderStreamPump)\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/reader/(?:SessionReaderConnection|ReaderStreamPump|ModelChoices)\\.kt$",
         "^app/src/main/java/dev/multiprompt/companion/ssh/(TmuxCommands|SshRepository)\\.kt$",
         "^app/src/main/java/dev/multiprompt/companion/ui/(?:ChatHistoryList|WorkingDots)\\.kt$"
       ],
       "match": [
-        "paneGate|paneFrames|observe\\(pane\\s*=|host\\?\\.running"
+        "paneGate|paneFrames|observe\\(pane\\s*=|host\\?\\.running|ModelChoices"
       ],
       "citations": {
         "action": {

@@ -1,0 +1,1 @@
+Android: chat view needs no screen text
