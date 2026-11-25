@@ -134,6 +134,7 @@ Two pairs ran in the same window, each with a concurrent base control:
 | --- | --- | --- | --- | --- |
 | 1 | `4c9f2c36` | `5ed79144` | [45602881727](https://github.com/valentinyeo/multiprompt-android/actions/runs/45602881727) | [45602885651](https://github.com/valentinyeo/multiprompt-android/actions/runs/45602885651) |
 | 2 | `4c9f2c36` | `5ed79144` | [45604592131](https://github.com/valentinyeo/multiprompt-android/actions/runs/45604592131) | [45604596950](https://github.com/valentinyeo/multiprompt-android/actions/runs/45604596950) |
+| 3 | `9f8ad7c8` | `5ed79144` | [45616481136](https://github.com/valentinyeo/multiprompt-android/actions/runs/45616481136) | [45616485948](https://github.com/valentinyeo/multiprompt-android/actions/runs/45616485948) |
 
 Medians of five trials, with each trial range under them:
 
@@ -144,8 +145,16 @@ Medians of five trials, with each trial range under them:
 | 1 | base | 8160 (6750-8530) | 820 (740-930) | 131 (121-136) | 23.1 (21.9-23.9 s) |
 | 2 | head | 6970 (6270-8440) | 730 (660-940) | 126 (117-137) | 20.9 (20.1-22.6 s) |
 | 2 | base | 7750 (7110-8260) | 830 (750-950) | 127 (121-135) | 22.9 (22.2-23.8 s) |
+| 3 | head | 9640 (9140-9970) | 680 (660-710) | 126 (121-132) | 21.5 (20.9-22.4 s) |
+| 3 | base | 10530 (9850-11040) | 970 (880-1040) | 129 (122-137) | 23.9 (22.7-24.6 s) |
 
-App CPU and Main CPU drop in both pairs and the direction never reverses. Pair 1 separates on
+Pair 3 runs after the merge from `main` and after PR #619, so it is the harness with zero
+errors. Main CPU separates again (head max 710 below base min 880, minus 30%), and the direction
+never reverses in any pair. App CPU is lower at the median (9640 against 10530, minus 8%) but
+overlaps by one trial, so read pair 3's App CPU as within noise and pair 1's as the separated
+result. Every run in the session reported one error per trial before #619 and zero after it.
+
+App CPU and Main CPU drop in both first pairs and the direction never reverses. Pair 1 separates on
 the harness's own range rule (head max 6590 below base min 6750 for App CPU, 710 below 740 for
 Main); pair 2 overlaps by one trial (head max 8440 above base max 8260), so read pair 2's CPU
 as within noise and pair 1 as the separated result. Errors are one per trial on both sides in
@@ -171,10 +180,14 @@ trials, ranges under them:
 | 1 | base | 200 (200-200) | 300 (300-300) | 300 (300-350) | 350 (350-400) | 104 (94-106) |
 | 2 | head | 150 (150-200) | 250 (200-250) | 250 (250-300) | 300 (300-350) | 96 (86-115) |
 | 2 | base | 200 (200-200) | 300 (300-300) | 300 (300-350) | 400 (350-450) | 104 (98-107) |
+| 3 | head | 250 (250-250) | 350 (350-400) | 400 (400-400) | 450 (450-500) | 96 (85-103) |
+| 3 | base | 250 (250-300) | 400 (400-400) | 400 (400-450) | 450 (450-500) | 107 (101-115) |
 
-Head p50 is 150 ms in nine of ten trials and 200 ms in one; base is 200 ms in all ten. The
-whole p50, p90 and p99 ranges separate in both pairs. p95 touches at 300 in pair 2, so treat
-p95 there as within noise. Every key press in this build costs a frame a quarter shorter than
+Head p50 is 150 ms in nine of ten trials and 200 ms in one in pairs 1 and 2; base is 200 ms in
+all ten. The whole p50, p90 and p99 ranges separate there. p95 touches at 300 in pair 2, so treat
+p95 there as within noise. Pair 3 ran on a slower pair of runners: both sides move up about
+50 ms, p50 ties at 250, and the separation survives at p90 (350 against 400) and in slow UI
+frames (96 against 107). Frames over 16 ms in pair 3 are 126 against 129, within noise. Every key press in this build costs a frame a quarter shorter than
 the base's, and the share of frames that miss the UI-thread deadline falls with it.
 
 ### What still costs a frame per key
@@ -182,12 +195,15 @@ the base's, and the share of frames that miss the UI-thread deadline falls with 
 Recomposition is not it any more, and this is measured with the branch's own counter
 (`TypingProbe`), which the debug APK reports per key in `typing/keys.json`:
 
-| Composable | Compositions per typed key, before `af89f77d` | After `dba212eb` |
-| --- | ---: | ---: |
-| `ReaderScreen` (whole chat screen) | 1.123 | 0.060 |
-| `MultipromptApp` | 0.103 | 0.060 |
-| Composer `BasicTextField` | 2.14 | 2.16 |
-| `ChatHistoryList` (message list) | 0.137 | 0.093 |
+| Per typed key | Before `af89f77d` | After `dba212eb` | After `9f8ad7c8` |
+| --- | ---: | ---: | ---: |
+| `ReaderScreen` (whole chat screen) compositions | 1.123 | 0.060 | 0.087 |
+| `MultipromptApp` compositions | 0.103 | 0.060 | 0.087 |
+| Composer `BasicTextField` compositions | 2.14 | 2.16 | 1.14 |
+| `ChatHistoryList` (message list) compositions | 0.137 | 0.093 | 0.120 |
+| Composer text layouts | not measured | not measured | 1.073 |
+| Message list viewport layouts | not measured | not measured | 0.000 |
+| IME inset at the key | not measured | not measured | 901 px, all 350 keys |
 
 `4c9f2c36` on top of `dba212eb` removes the composer's per-key layout-state loop, the skill-span
 scan for drafts without a slash, and the per-key draft write, so its counts are at or below the
@@ -195,6 +211,14 @@ right-hand column. The reader's 0.060 is its two-second repoll landing inside th
 list's 0.093 is the same live traffic. The JVM guard
 `ComposerLongDraftTest.typingAndMiddleEditsDoNotRecomposeTheReaderOrMessageList` puts key-driven reader and list
 compositions at zero.
+
+[Head run 45616332136](https://github.com/valentinyeo/multiprompt-android/actions/runs/45616332136)
+at `9f8ad7c8` adds the three probes the last round asked for, on the same seed, chat, five
+trials and key events: every composition by composable, every text-field layout through
+`onTextLayout`, every layout of the message list's viewport through `onSizeChanged`, and the IME
+inset read from the decor view on each key. Composer compositions per key fall to 1.14, one text
+layout per key remains because the text changed, and the message list's viewport does not
+relayout at all. The byte-identical reopened draft and all 350 post-input frames still hold.
 
 The remaining per-key cost is the composer's own text layout, about 2 ms of the ~13.8 ms Main
 CPU per key, and then drawing. The sampled Main trace in this build spends 36.09 ms exclusive in
@@ -208,12 +232,16 @@ The reader's message list takes its bottom padding from the Scaffold's bottom-ba
 (`MultipromptApp.kt`, `bottomPadding = padding.calculateBottomPadding()` into
 `ChatHistoryList`), and the bar carries `Modifier.imePadding()`. Every frame of the keyboard
 open animation therefore changes the list's content padding and remeasures the visible rows.
-That is real, and it is not per key: the app logs exactly one
-`FrameTracker ... IME_INSETS_SHOW_ANIMATION` timeout per keyboard open, 5 in 5 trials, and
-identical counts at base and head in both pairs. Rows are not moved behind the keyboard in this
-change, because that would be a visible regression while typing. Making the list keep one
-padding for the whole animation is the next candidate, and it needs its own measurement before
-any edit.
+
+That animation costs one keyboard-open event, and it is not a per-key cost. The probe run above
+measures the IME inset on every key: 901 px on all 350 keys, unchanged, and the message list's
+viewport size changes 0 times in the same 350 keys. The keyboard is fully up before the first
+timed key, so no insets frame lands inside the typing window. In the frozen benchmark the app
+logs exactly one `FrameTracker ... IME_INSETS_SHOW_ANIMATION` timeout per keyboard open, 5 in 5
+trials, identical at base and head in every pair. There is no per-key insets relayout to remove,
+so the composer keeps its current padding and the list keeps one padding per animation. Moving
+`imePadding()` onto the composer alone would change where the keyboard pushes the composer and
+needs its own visible-difference measurement before any edit.
 
 ## Skill pills under the same head
 
@@ -227,3 +255,9 @@ placeholder label, and the placeholder is gone once the attempt has typed anythi
 could never succeed. It now clears the focused field by class and retypes the draft before the
 second attempt, and each attempt waits for the picker row instead of reading one dump. The
 assertions are unchanged: `Please / this` in the composer and `/pill-guide-01` in the picker.
+On the branch head the journey passes
+([45616338846](https://github.com/valentinyeo/multiprompt-android/actions/runs/45616338846)):
+the composer reads `Please / this`, the picker opens, the pill inserts, the sent message carries
+one pill and the host receipt matches. Cursor placement and composing text are unchanged by this
+change; the caret sat where the driver left it because the keyboard was composing the word it had
+just typed, which happens on `main` too.
