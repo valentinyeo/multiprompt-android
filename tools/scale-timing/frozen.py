@@ -16,11 +16,15 @@ from runtime import DRIVER, MeasurementError, adb, mpa
 
 SCENARIOS = ('cold_start', 'chat_switch', 'idle_inbox', 'typing_long_chat', 'streaming_reply')
 METRICS = ('app_cpu_ms', 'main_thread_ms', 'frames_over_16_ms_secondary',
-           'list_sessions_per_minute', 'bytes_per_minute', 'errors')
+           'list_sessions_per_minute', 'bytes_per_minute', 'errors', 'platform_warnings')
+ERROR_FIELDS = ('crashes', 'anrs', 'failed_steps', 'app_logcat_e', 'relay_failures')
+PLATFORM_WARNING_PATTERNS = (
+    ('FrameTracker', r'^force finish cuj, time out: J<IME_INSETS_(?:SHOW|HIDE)_ANIMATION::\d+@\d+@{package}>\Z'),
+)
 REPEATS = 5
 SECONDS = 20
 DRAFT = 'Frozen benchmark types this everyday message.'
-VERSION = 'mubo-555-v1'
+VERSION = 'mubo-555-v2'
 DIRECTORY = Path(__file__).resolve().parent
 
 
@@ -45,6 +49,14 @@ def frames_over_16(text):
     return sum(int(count) for millis, count in re.findall(r'(\d+)ms=(\d+)', histogram[1]) if int(millis) > 16)
 
 
+def is_platform_warning(tag, body, package):
+    escaped = re.escape(package)
+    for allowed_tag, pattern in PLATFORM_WARNING_PATTERNS:
+        if tag == allowed_tag and re.match(pattern.replace('{package}', escaped), body):
+            return True
+    return False
+
+
 def errors(log, package, pids, failed=False):
     owned = set(map(str, pids))
     for line in log.splitlines():
@@ -54,19 +66,24 @@ def errors(log, package, pids, failed=False):
         event = re.search(r'am_proc_start\s*:\s*\[[^,]+,(\d+),[^,]+,' + re.escape(package) + r',', line)
         if event:
             owned.add(event[1])
-    app_e = crashes = anrs = 0
+    app_e = crashes = anrs = platform_warnings = 0
     for line in log.splitlines():
         match = re.match(r'\s*\d+(?:\.\d+)?\s+(\d+)\s+\d+\s+([VDIWEF])\s+([^:]+):\s*(.*)', line)
         if not match:
             continue
         pid, priority, tag, body = match.groups()
+        name = tag.strip()
         if pid in owned and priority == 'E':
-            app_e += 1
-        if ('FATAL EXCEPTION:' in body and pid in owned) or (tag.strip() == 'am_crash' and package in body):
+            if is_platform_warning(name, body.strip(), package):
+                platform_warnings += 1
+            else:
+                app_e += 1
+        if ('FATAL EXCEPTION:' in body and pid in owned) or (name == 'am_crash' and package in body):
             crashes += 1
-        if ('ANR in ' + package in body) or (tag.strip() == 'am_anr' and package in body):
+        if ('ANR in ' + package in body) or (name == 'am_anr' and package in body):
             anrs += 1
-    return dict(crashes=crashes, anrs=anrs, failed_steps=int(failed), app_logcat_e=app_e)
+    return dict(crashes=crashes, anrs=anrs, failed_steps=int(failed),
+                app_logcat_e=app_e, platform_warnings=platform_warnings)
 
 
 def traffic(events, started, ended):
@@ -105,8 +122,8 @@ def compare(baseline, candidate):
 
 def table(result):
     lines = [f"### {result['seed']} · {result['app_sha']}", '',
-             '| Scenario | App CPU ms | Main ms | >16 ms frames (secondary) | listSessions/min | bytes/min | Errors |',
-             '| --- | ---: | ---: | ---: | ---: | ---: | ---: |']
+             '| Scenario | App CPU ms | Main ms | >16 ms frames (secondary) | listSessions/min | bytes/min | Errors | Platform warnings |',
+             '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |']
     for scenario in SCENARIOS:
         values = result['scenarios'][scenario]
         cells = [f"{values[metric]['median']:g} [{values[metric]['min']:g}, {values[metric]['max']:g}]" for metric in METRICS]
@@ -199,7 +216,9 @@ def sample(scenario, repetition, work, args, out):
     counts['relay_failures'] = relay['relay_failures']
     metrics = dict(**cpu, frames_over_16_ms_secondary=frames,
                    list_sessions_per_minute=relay['list_sessions_per_minute'],
-                   bytes_per_minute=relay['bytes_per_minute'], errors=sum(counts.values()))
+                   bytes_per_minute=relay['bytes_per_minute'],
+                   errors=sum(counts[key] for key in ERROR_FIELDS),
+                   platform_warnings=counts['platform_warnings'])
     record = dict(scenario=scenario, repetition=repetition, valid=not failed,
                   metrics=metrics, error_counts=counts, failure=failed,
                   started_unix=started, ended_unix=ended, cpu_before=before, cpu_after=after,
