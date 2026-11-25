@@ -34,6 +34,11 @@ class SessionCacheStoreTest {
             decodes++
             SessionCacheCodec.decode(hostId, raw)
         }
+        var encodes = 0
+        val encode: (List<TmuxSession>) -> String = { sessions ->
+            encodes++
+            SessionCacheCodec.encode(sessions)
+        }
     }
 
     private fun session(name: String, preview: String = "hello") = TmuxSession(
@@ -112,6 +117,19 @@ class SessionCacheStoreTest {
         SessionCacheStore(backing).save("h1", listOf(session("a")))
 
         assertEquals(0, backing.writes)
+    }
+
+    @Test
+    fun unchangedWriteSkipsTheEncodingToo() {
+        val backing = FakeBacking()
+        seeded(backing, session("a"), session("b"))
+        val counting = Counting()
+        val store = SessionCacheStore(backing, counting.decode, counting.encode)
+
+        repeat(5) { store.save("h1", listOf(session("a"), session("b"))) }
+
+        assertEquals(0, backing.writes)
+        assertEquals(1, counting.encodes)
     }
 
     @Test

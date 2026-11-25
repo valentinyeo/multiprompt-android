@@ -882,7 +882,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             },
                         )
                     results[host.id] = result
-                    _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+                    if (RefreshMerge.publishesWhileWaiting(snapshot.size, results.size)) {
+                        _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+                    }
                 }
             }.awaitAll()
             results.values.filter { it.error == null }.forEach { result ->

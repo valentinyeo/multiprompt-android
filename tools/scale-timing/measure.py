@@ -144,6 +144,10 @@ def phase(phases, name, started, ended, before, after):
                        cpu_ms=parsers.thread_total(deltas), threads=deltas[:6]))
 
 
+def zero_baseline(sample):
+    return {tid: dict(ticks=0, name=entry['name']) for tid, entry in sample.items()}
+
+
 def step(name, out, work):
     gfx_reset()
     DRIVER.reset()
@@ -153,14 +157,16 @@ def step(name, out, work):
     result = work(before_wall)
     ended = time.time()
     after = app_ticks()
+    driver = DRIVER.summary()
     after_threads = probe_threads()
     mpa('screenshot', f'{SEED}-{name}', timeout=240)
     ticks = cpu_delta(before, after)
     record = dict(name=name, started_unix=before_wall, ended_unix=ended,
                   wall_ms=elapsed_ms(before_wall, ended),
                   cpu_ticks=ticks, cpu_ms=round(ticks * 1000 / CLK_TCK, 1),
-                  pids=after['pids'], gfx=gfx_totals(), driver=DRIVER.summary(),
-                  threads=parsers.thread_deltas(before_threads, after_threads, CLK_TCK)[:8],
+                  pids=after['pids'], gfx=gfx_totals(), driver=driver,
+                  threads=parsers.thread_deltas(before_threads or zero_baseline(after_threads),
+                                                after_threads, CLK_TCK)[:8],
                   detail=result)
     (Path(out) / f'{name}.json').write_text(json.dumps(record, indent=2) + '\n')
     return record

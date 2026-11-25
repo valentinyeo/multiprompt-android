@@ -11,14 +11,22 @@ data class BotLook(val picture: String?, val face: Int?, val color: Int?)
 
 class SessionReadStore(context: Context) {
     private val preferences = context.getSharedPreferences("session_read_state", Context.MODE_PRIVATE)
+    private val unreadStates = HashMap<String, UnreadCount.State>()
 
     fun isUnread(session: TmuxSession): Boolean =
         session.replyActivityEpochSeconds > preferences.getLong(key(session.hostId, session.name), 0L)
 
     fun readAt(session: TmuxSession): Long = preferences.getLong(key(session.hostId, session.name), 0L)
 
-    fun unreadCountState(session: TmuxSession): UnreadCount.State = runCatching {
-        val stored = preferences.getString("$UNREAD_COUNT_PREFIX${key(session.hostId, session.name)}", null)
+    fun unreadCountState(session: TmuxSession): UnreadCount.State =
+        unreadCountStateFor(key(session.hostId, session.name))
+
+    private fun unreadCountStateFor(sessionKey: String): UnreadCount.State = synchronized(unreadStates) {
+        unreadStates[sessionKey] ?: parseUnreadCountState(sessionKey).also { unreadStates[sessionKey] = it }
+    }
+
+    private fun parseUnreadCountState(sessionKey: String): UnreadCount.State = runCatching {
+        val stored = preferences.getString("$UNREAD_COUNT_PREFIX$sessionKey", null)
             ?: return UnreadCount.State()
         val json = JSONObject(stored)
         UnreadCount.State(
@@ -30,8 +38,10 @@ class SessionReadStore(context: Context) {
     }.getOrDefault(UnreadCount.State())
 
     fun saveUnreadCountState(session: TmuxSession, state: UnreadCount.State) {
+        val sessionKey = key(session.hostId, session.name)
+        synchronized(unreadStates) { unreadStates[sessionKey] = state }
         preferences.edit().putString(
-            "$UNREAD_COUNT_PREFIX${key(session.hostId, session.name)}",
+            "$UNREAD_COUNT_PREFIX$sessionKey",
             JSONObject()
                 .put("count", state.count)
                 .put("activity", state.lastActivity)
@@ -337,6 +347,7 @@ class SessionReadStore(context: Context) {
 
     fun removeHost(hostId: String) {
         val prefix = "$hostId::"
+        synchronized(unreadStates) { unreadStates.keys.removeAll { it.startsWith(prefix) } }
         val editor = preferences.edit()
         preferences.all.keys
             .filter {

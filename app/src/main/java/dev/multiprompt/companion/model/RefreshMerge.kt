@@ -12,6 +12,8 @@ object RefreshMerge {
         val updatingHostIds: Set<String>,
     )
 
+    fun publishesWhileWaiting(hosts: Int, answered: Int): Boolean = answered in 1 until hosts
+
     fun merge(
         hostIds: List<String>,
         currentSessions: List<TmuxSession>,

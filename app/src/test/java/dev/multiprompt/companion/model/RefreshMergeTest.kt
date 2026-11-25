@@ -1,6 +1,7 @@
 package dev.multiprompt.companion.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -150,6 +151,14 @@ class RefreshMergeTest {
         assertEquals(listOf(firstCached, fresh), merged.sessions)
         assertEquals(setOf("first"), merged.cachedHostIds)
         assertTrue(merged.updatingHostIds.isEmpty())
+    }
+
+    @Test
+    fun theOnlyHostIsPublishedOnceByTheFinalPass() {
+        assertTrue(RefreshMerge.publishesWhileWaiting(2, 1))
+        assertFalse(RefreshMerge.publishesWhileWaiting(1, 1))
+        assertFalse(RefreshMerge.publishesWhileWaiting(3, 3))
+        assertFalse(RefreshMerge.publishesWhileWaiting(2, 0))
     }
 
     private fun session(hostId: String, name: String) = TmuxSession(
