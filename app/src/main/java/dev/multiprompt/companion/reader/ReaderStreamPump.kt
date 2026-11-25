@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 internal class ModelSwitchConfirmation(
@@ -61,7 +60,7 @@ internal class ReaderStreamPump<C : Any>(
 
     suspend fun pump() {
         var warm: C? = null
-        wanted.distinctUntilChanged().collectLatest {
+        wanted.collectLatest {
             if (!wanted.value) return@collectLatest
             while (wanted.value) {
                 val wasWarm = warm != null
