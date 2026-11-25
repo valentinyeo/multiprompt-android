@@ -1,9 +1,21 @@
 import json
 import os
-from pathlib import Path
+from functools import lru_cache
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
+
+try:
+    import pwd
+except ImportError:
+    pwd = None
+
+ACCOUNT_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]{0,31}\Z")
+ACCOUNT_HOMES = PurePosixPath("/home")
+LAUNCHER = ("import sys;s=sys.stdin.buffer.read().decode();"
+            'exec(compile(s,"<native-skills>","exec"),'
+            '{"__name__":"__main__","NATIVE_SKILLS_SOURCE":s,"NATIVE_SKILLS_OWNER":True})')
 
 
 def metadata(path, fallback, use_name):
@@ -88,24 +100,86 @@ def discover(home, cwd, config=None):
     return sorted(result.values(), key=lambda row: row["name"].lower())
 
 
-def usable(value):
+def loose(value):
+    if isinstance(value, Path):
+        return value
     if not isinstance(value, str) or not value.strip():
         return None
     path = Path(value.strip()).expanduser()
-    return path if path.is_absolute() and path.is_dir() else None
+    return path if path.is_absolute() else None
 
 
-def tmux_directory(session):
+def usable(value):
+    path = loose(value)
+    try:
+        return path if path is not None and path.is_dir() else None
+    except OSError:
+        return None
+
+
+def owner_account(folder, home=None, lookup=None):
+    lookup = lookup if lookup is not None else (pwd.getpwnam if pwd is not None else None)
+    if lookup is None or folder is None:
+        return None
+    parts = PurePosixPath(str(folder)).parts
+    if len(parts) < 3 or parts[:2] != ("/", "home") or ".." in parts:
+        return None
+    if not ACCOUNT_NAME.fullmatch(parts[2]):
+        return None
+    try:
+        account = lookup(parts[2])
+    except KeyError:
+        return None
+    folder = PurePosixPath(str(account.pw_dir))
+    if account.pw_uid == 0 or folder != ACCOUNT_HOMES / parts[2]:
+        return None
+    if home is not None and folder == PurePosixPath(str(home)):
+        return None
+    return account.pw_name
+
+
+def own_source():
+    source = globals().get("NATIVE_SKILLS_SOURCE")
+    if isinstance(source, str) and source:
+        return source
+    try:
+        return Path(__file__).read_text(encoding="utf-8")
+    except (OSError, NameError, TypeError):
+        return None
+
+
+def owner_skills(account, session, requested):
+    source = own_source()
+    if source is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["sudo", "-n", "-H", "-u", account, "--", "python3", "-c", LAUNCHER, session, requested],
+            input=source, capture_output=True, text=True, encoding="utf-8", timeout=8, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        rows = json.loads(result.stdout)
+    except ValueError:
+        return None
+    return result.stdout if isinstance(rows, list) else None
+
+
+@lru_cache(maxsize=None)
+def tmux_folder(session):
     try:
         output = subprocess.check_output(
             ["tmux", "display-message", "-p", "-t", "=" + session + ":", "#{pane_current_path}"],
             text=True, stderr=subprocess.DEVNULL, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return None
-    return usable(output)
+    return loose(output)
 
 
-def hosted_directory(session):
+@lru_cache(maxsize=None)
+def hosted_folder(session):
     reader = Path.home() / ".multiprompt-runtime/reader.py"
     try:
         output = subprocess.check_output(
@@ -115,20 +189,39 @@ def hosted_directory(session):
         return None
     for chat in chats if isinstance(chats, list) else []:
         if isinstance(chat, dict) and chat.get("name") == session:
-            return usable(chat.get("cwd"))
+            return loose(chat.get("cwd"))
     return None
 
 
+def chat_folder(session, requested):
+    return tmux_folder(session) or loose(requested) or hosted_folder(session)
+
+
 def project_directory(session, requested):
-    path = tmux_directory(session) or usable(requested) or hosted_directory(session)
-    if path is None:
-        raise SystemExit("The session project directory is unavailable")
-    return path
+    for folder in (tmux_folder(session), loose(requested), hosted_folder(session)):
+        path = usable(folder)
+        if path is not None:
+            return path
+    raise SystemExit("The session project directory is unavailable")
+
+
+def owner_answer(session, requested, home=None):
+    folder = chat_folder(session, requested)
+    account = owner_account(folder, Path.home() if home is None else home)
+    return (owner_skills(account, session, str(folder)) or "[]") if account else None
 
 
 def main():
-    cwd = project_directory(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else "")
-    config = Path(os.environ["CLAUDE_CONFIG_DIR"]).expanduser() if os.environ.get("CLAUDE_CONFIG_DIR") else None
+    session = sys.argv[1]
+    requested = sys.argv[2] if len(sys.argv) > 2 else ""
+    if not globals().get("NATIVE_SKILLS_OWNER"):
+        answer = owner_answer(session, requested)
+        if answer is not None:
+            sys.stdout.write(answer)
+            return
+    cwd = project_directory(session, requested)
+    configured = None if globals().get("NATIVE_SKILLS_OWNER") else os.environ.get("CLAUDE_CONFIG_DIR")
+    config = Path(configured).expanduser() if configured else None
     print(json.dumps(discover(Path.home(), cwd, config), ensure_ascii=False))
 
 

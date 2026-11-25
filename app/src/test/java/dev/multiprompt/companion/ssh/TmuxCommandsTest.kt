@@ -21,10 +21,28 @@ class TmuxCommandsTest {
 
     @Test
     fun nativeSkillsQuotesTheSessionAndTheWorkingDirectory() {
-        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc"))
-        assertEquals("python3 - 'live-abc'", TmuxCommands.nativeSkills("live-abc", "  "))
+        val launcher = "python3 -c 'import sys;s=sys.stdin.buffer.read().decode();" +
+            "exec(compile(s,\"<native-skills>\",\"exec\")," +
+            "{\"__name__\":\"__main__\",\"NATIVE_SKILLS_SOURCE\":s})'"
+        assertEquals("$launcher 'live-abc'", TmuxCommands.nativeSkills("live-abc"))
+        assertEquals("$launcher 'live-abc'", TmuxCommands.nativeSkills("live-abc", "  "))
         val command = TmuxCommands.nativeSkills("live-abc", "/home/me/it's here; reboot")
-        assertEquals("python3 - 'live-abc' '/home/me/it'\"'\"'s here; reboot'", command)
+        assertEquals("$launcher 'live-abc' '/home/me/it'\"'\"'s here; reboot'", command)
+    }
+
+    @Test
+    fun nativeSkillsKeepsTheScriptTextForTheOwnerHandover() {
+        val command = TmuxCommands.nativeSkills("live-abc")
+        assertTrue(command.contains("sys.stdin.buffer.read().decode()"))
+        assertTrue(command.contains("NATIVE_SKILLS_SOURCE"))
+        assertFalse(command.contains("NATIVE_SKILLS_OWNER"))
+        assertFalse(command.contains("sudo"))
+    }
+
+    @Test
+    fun nativeSkillsRejectsAShellInjectedSessionName() {
+        val command = TmuxCommands.nativeSkills("a'; reboot", "/tmp/x'; reboot")
+        assertTrue(command.endsWith(" 'a'\"'\"'; reboot' '/tmp/x'\"'\"'; reboot'"))
     }
 
     @Test

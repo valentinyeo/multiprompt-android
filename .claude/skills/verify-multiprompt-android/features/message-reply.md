@@ -27,6 +27,20 @@ The fixture adds one live chat whose tmux session is `live-cl_mention-2953` and 
 
 `mention-list.json`, `mention-sent.json` and `mention-receipts.txt` retain that action, result and independent receipt. This proves the name and the routing; it does not prove the account-layout name. A signed-in account supplies those names and the debug fixture has no account layout. `MentionNamesTest` covers that case on the JVM, where the @ names are compared with the inbox rows the account named.
 
+## Mentioning the typing chat
+
+Still inside `verify-session`, which is chat A, and with the fixture window name `verify-session` as its chat-list name.
+
+10. `mpa fill` types `@verify-session`, so the mention query starts with `@` and the list opens for the typing chat's own name. The scoped read `--select text --value verify-session --inside Bot` requires one mention row carrying that name. The row is only offered after the fix; before it, the same read finds nothing because the typing chat was filtered out of the list.
+11. `mpa tap text Bot` taps that row's label, which is inside the row's own button, so the pick runs through `ChatMention.pick` and lands in `mentionPicks`, the same path as the X pick above. The composer then reads `@verify-session`.
+12. Send. The host receipt must contain the exact line `@verify-session{verify-session}`, so the phone marks the typing chat itself with its tmux session and the shared desktop send still decides delivery. No wire note is added on the phone.
+
+The bare `@` list contents, including the typing chat, are proved on the JVM by `ChatMentionTest.theListIsEveryChatOnThisHostIncludingTheTypingChat`; the phone proves that row is offered and picked.
+
+`self-mention-list.json` and `self-mention-sent.json` retain the offered row and the sent state; `mention-receipts.txt` is captured after this send, so it carries both the X line and the self line. `MentionDecisionTest` keeps the phone from adding a wire note or choosing recipients.
+
+The fixture console answers every prompt it receives, so this journey proves both lines reach the host through the normal send path, not that chat A answers a line that also mentions X. Whether A replies depends on desktop MUBO-454 on the host.
+
 ## Not covered
 
 Swipe-right reply uses the same bar, but this driver long-presses. A second finger is not required.

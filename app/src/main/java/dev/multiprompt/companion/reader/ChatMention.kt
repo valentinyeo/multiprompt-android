@@ -16,7 +16,7 @@ object ChatMention {
     private const val MAX_NAME = 192
 
     fun chats(sessions: List<TmuxSession>, current: TmuxSession): List<MentionChat> = sessions
-        .filter { it.hostId == current.hostId && it.name != current.name && SESSION.matches(it.name) }
+        .filter { it.hostId == current.hostId && SESSION.matches(it.name) }
         .mapNotNull { session ->
             session.displayName.trim().takeIf { it.isNotEmpty() && it.length < MAX_NAME }?.let {
                 MentionChat(it, session.name, session.hostId, session.workspaceColor)

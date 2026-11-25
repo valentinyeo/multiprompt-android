@@ -333,6 +333,28 @@
         "native-result.json": 1000
       }
     },
+    "owner-skills.md": {
+      "name": "Skills for another server account",
+      "description": "a chat under another server account lists that account's skills.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true
+      },
+      "outcomes": [
+        "skills.other-account"
+      ],
+      "evidence": {
+        "owner-skill-list.xml": 1500,
+        "owner-skill-inserted.xml": 800,
+        "owner-receipts.txt": 800,
+        "owner-receipts-before.txt": 400,
+        "owner-session-path.txt": 200,
+        "owner-sudo.txt": 600
+      }
+    },
     "robot-faces.md": {
       "name": "Robot inbox and chat",
       "description": "Run `verify.yml` with `feature=robot-faces.md`. For the signed candidate, set `released_robots=true` and `candidate=true`. For the published update, set `released_robots=true` and `expected_commit` to the released SHA.",
@@ -950,7 +972,7 @@
     },
     "message-reply.md": {
       "name": "Reply to a message",
-      "description": "Long-press a Claude bubble, cancel the reply bar, send a quoted reply with a host receipt, then mention another chat by its real name and route the mention by tmux name.",
+      "description": "Long-press a Claude bubble, cancel the reply bar, send a quoted reply with a host receipt, then mention another chat by its real name and route it by tmux name, and mention the typing chat itself.",
       "runner": {
         "kind": "debug",
         "workflow": "verify.yml",
@@ -963,7 +985,8 @@
       },
       "outcomes": [
         "legacy.igsh-418",
-        "chat.mentions"
+        "chat.mentions",
+        "chat.mentions.self"
       ],
       "evidence": {
         "reply-open.json": 400,
@@ -972,8 +995,8 @@
         "reply-receipts.txt": 800,
         "mention-list.json": 400,
         "mention-sent.json": 400,
-        "mention-receipts.txt": 400,
-        "mention-session.txt": 80
+        "self-mention-sent.json": 400,
+        "mention-receipts.txt": 600
       }
     },
     "settings-controls.md": {
@@ -1424,8 +1447,17 @@
       "journey": "native-skills.md",
       "sideEffect": true,
       "match": [
-        "NativeSkills|SkillsLoader",
+        "NativeSkills|SkillsLoader|native_skills",
         "HostChange|HostSettings|ReaderMenuPage\\.MODEL|sendModelCommand|Use Claude|Set effort:|Open model picker|attachMenuSection"
+      ]
+    },
+    "skills.other-account": {
+      "description": "A chat whose folder is under another server account lists that account's skills.",
+      "journey": "owner-skills.md",
+      "sideEffect": true,
+      "match": [
+        "owner_account|owner_skills",
+        "NATIVE_SKILLS_PROGRAM"
       ]
     },
     "robot-faces.journey": {
@@ -1849,6 +1881,28 @@
         "sideEffect": {
           "file": "mention-receipts.txt",
           "quote": "@Mention 2953{live-cl_mention-2953}"
+        }
+      }
+    },
+    "chat.mentions.self": {
+      "description": "The @ menu offers the chat being typed in under the name the chat list shows, picking it marks the draft like any other pick, and the send leaves the phone as the same plain marked line so the desktop decides delivery.",
+      "journey": "message-reply.md",
+      "sideEffect": true,
+      "match": [
+        "ChatMention|MentionChat|mentionChats"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "--select text --value verify-session --inside Bot"
+        },
+        "result": {
+          "file": "self-mention-sent.json",
+          "quote": "\"value\":\"@verify-session\""
+        },
+        "sideEffect": {
+          "file": "mention-receipts.txt",
+          "quote": "@verify-session{verify-session}"
         }
       }
     },
