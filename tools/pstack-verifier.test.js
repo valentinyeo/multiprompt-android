@@ -1162,7 +1162,7 @@ test('every step of verify.yml cannot turn the parent run red, and the head run 
   assert.doesNotMatch(jobBlock(verify, 'verify'), /^ {4}continue-on-error:/m);
   const drive = steps.find(step => /id: native-ui/.test(step));
   assert.match(drive, /continue-on-error: \$\{\{ inputs\.side == 'parent' \|\| github\.event_name == 'workflow_dispatch' && \(/);
-  assert.match(drive, /timeout-minutes: \$\{\{ inputs\.feature == 'reader-controls\.md' && 40 \|\| inputs\.side == 'parent' && 35 \|\| inputs\.break_it && 55 \|\| 35 \}\}/);
+  assert.match(drive, /timeout-minutes: \$\{\{ inputs\.feature == 'reader-controls\.md' && 40 \|\| inputs\.side == 'parent' && 20 \|\| inputs\.break_it && 55 \|\| 35 \}\}/);
   assert.match(jobBlock(verify, 'verify'), /^ {4}timeout-minutes: \$\{\{ inputs\.feature == 'reader-controls\.md' && 50 \|\| inputs\.side == 'parent' && 50 \|\| inputs\.break_it && 55 \|\| 35 \}\}$/m);
   const ids = steps.map(step => step.match(/^ {8}id: (\S+)$/m)?.[1]).filter(Boolean);
   assert.equal(new Set(ids).size, ids.length);

@@ -65,11 +65,14 @@ elif [[ "${VERIFY_FEATURE:-}" == host-restart.md ]]; then
 elif [[ "${VERIFY_FEATURE:-}" == claude-remote-control.md ]]; then
     source "$(dirname "$0")/remote-control-setup.sh"
 elif [[ "${VERIFY_FEATURE:-}" == ai-switch.md ]]; then
+    sudo install -m 644 tools/reader-ownership/ssh-observer.py /home/verifyssh/ssh-observer.py
+    { printf 'command="python3 /home/verifyssh/ssh-observer.py" '; cat "$FIXTURE/user-key.pub"; } | sudo tee /home/verifyssh/.ssh/authorized_keys >/dev/null
     fixture_session=live-verify-session
     [[ "${GITHUB_ACTIONS:-}" == true ]]
     sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/ai-switch-fixture.py
     sudo install -m 644 app/src/main/assets/chat_history_reader.py /home/verifyssh/ai-switch-reader.py
-    sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin
+    sudo -u verifyssh mkdir -p /home/verifyssh/.local/bin /home/verifyssh/.local/share/zigshell
+    sudo install -m 644 "$(dirname "$0")/ai-switch-fixture.py" /home/verifyssh/.local/share/zigshell/mp_complete.py
     for binary in claude pi; do
         sudo install -m 755 "$(dirname "$0")/ai-switch-fixture.py" "/home/verifyssh/.local/bin/$binary"
     done

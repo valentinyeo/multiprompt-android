@@ -262,6 +262,31 @@ class FixtureJourneyTest(unittest.TestCase):
             self.assertEqual(dict(type='control_response', response=dict(subtype='success', request_id='remote-control-2538', response={})), events[1])
             self.assertFalse((home / 'ai-switch-wrong-provider.txt').exists())
 
+    def test_ai_switch_pi_models_are_served_by_the_completion_helper(self):
+        fixture = load('ai_switch_models', SCRIPTS / 'ai-switch-fixture.py')
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            with patch.object(fixture, 'HOME', home), patch.object(fixture, 'boundary'), patch.object(sys, 'stdin', io.StringIO('7\tmodels\tpi\t-\t-\t\n')), redirect_stdout(io.StringIO()) as output:
+                fixture.models()
+            self.assertEqual('@mp\t7\tmodels\tok\t-\t2\nM\tpi-fast\tanthropic\t\nM\tpi-deep\tanthropic\t\n@@MP_END@@\n', output.getvalue())
+            self.assertEqual([dict(name='pi-fast', provider='anthropic'), dict(name='pi-deep', provider='anthropic')], json.loads((home / 'ai-switch-models.json').read_text()))
+
+    def test_pi_model_row_proof_rejects_pane_reads_and_missing_history(self):
+        program = (SCRIPTS / 'pi-login-drive.sh').read_text().split("<<'PYMODEL'\n", 1)[1].split('\nPYMODEL', 1)[0]
+        with tempfile.TemporaryDirectory() as temporary:
+            home = Path(temporary)
+            (home / 'ai-switch-models.json').write_text(json.dumps([dict(name='pi-fast', provider='anthropic'), dict(name='pi-deep', provider='anthropic')]))
+            before = dict(session='live-verify-session', kind='history', at=1)
+            (home / 'pi-model-requests-before.jsonl').write_text(json.dumps(before) + '\n')
+            for kinds, valid in ((['history'], True), (['history', 'snapshot'], False), ([], False)):
+                with self.subTest(kinds=kinds):
+                    rows = [before] + [dict(session='live-verify-session', kind=kind, at=index + 2) for index, kind in enumerate(kinds)]
+                    (home / 'pi-model-requests-after.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
+                    result = subprocess.run([sys.executable, '-B', '-c', program.replace('home = Path.home()', f'home = Path({str(home)!r})'), str(home)], capture_output=True, text=True)
+                    self.assertEqual(valid, result.returncode == 0, result.stdout + result.stderr)
+                    if valid:
+                        self.assertEqual(0, json.loads(result.stdout)['pane_captures'])
+
     def test_ai_switch_pi_receipts_and_replies_follow_the_received_messages(self):
         fixture = load('ai_switch_pi', SCRIPTS / 'ai-switch-fixture.py')
         sid = 'c001c001-2538-4000-8000-000000002539'

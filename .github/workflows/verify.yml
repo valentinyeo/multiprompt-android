@@ -519,7 +519,7 @@ jobs:
       - name: Install, doctor and drive the real app
         if: steps.parent-cache.outputs.hit != 'true'
         id: native-ui
-        timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 40 || inputs.side == 'parent' && 35 || inputs.break_it && 55 || 35 }}
+        timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 40 || inputs.side == 'parent' && 20 || inputs.break_it && 55 || 35 }}
         continue-on-error: ${{ inputs.side == 'parent' || github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
