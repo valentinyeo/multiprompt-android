@@ -93,7 +93,9 @@ class TmuxPaneFrameCostTest {
         var payload = ""
         measure(timing, RECEIVE_SPLIT) { payload = splitFrame(line) }
         var compressed = ByteArray(0)
-        measure(timing, BASE64) { compressed = Base64.getDecoder().decode(payload) }
+        measure(timing, BASE64) {
+            compressed = Base64.getDecoder().decode(payload.removePrefix(TmuxCommands.SNAPSHOT_PACKED_MARKER))
+        }
         var raw = ""
         measure(timing, GUNZIP) { raw = gunzip(compressed) }
         if (raw != expected) throw AssertionError("the decoded pane text differs from the sent pane")
@@ -276,7 +278,7 @@ class TmuxPaneFrameCostTest {
 
         val STAGES = listOf(
             Triple(RECEIVE_SPLIT, "Dispatchers.IO", "SshRepository.kt:227-258"),
-            Triple(BASE64, "Dispatchers.IO", "TmuxText.kt:200"),
+            Triple(BASE64, "Dispatchers.IO", "TmuxText.kt:192-201"),
             Triple(GUNZIP, "Dispatchers.IO", "TmuxText.kt:203-219"),
             Triple(LEFT_ALIGN, "Dispatchers.IO", "SshRepository.kt:259"),
             Triple(COMPOSER_TRIM, "Dispatchers.IO", "TmuxText.kt:274"),
