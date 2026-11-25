@@ -217,6 +217,11 @@ class TmuxPaneFrameCostTest {
         println(report)
         val summary = System.getenv("GITHUB_STEP_SUMMARY")
         if (!summary.isNullOrBlank()) runCatching { java.io.File(summary).appendText(report + "\n") }
+        runCatching {
+            val file = java.io.File("build/mubo-453-frame/frame-cost.md")
+            file.parentFile?.mkdirs()
+            file.writeText(report + "\n")
+        }
     }
 
     private fun seedState(): ReaderState = ReaderState(
