@@ -17,6 +17,7 @@ HOST_LOG = '/home/verifyssh/scale-relay.jsonl'
 ADB = os.environ.get('ADB') or 'adb'
 INBOX_TIMEOUT = 180
 CHAT_TIMEOUT = 240
+LARGEST_TIMEOUT = 600
 FLINGS = 10
 SWITCHES = 5
 
@@ -104,12 +105,19 @@ def clk_tck():
 
 
 def app_ticks():
-    pid = adb('shell', 'pidof', PACKAGE, check=False).stdout.split()
-    total = 0
-    for one in pid:
+    pids = adb('shell', 'pidof', PACKAGE, check=False).stdout.split()
+    per = {}
+    for one in pids:
         raw = adb('shell', 'cat', f'/proc/{one}/stat', check=False).stdout
-        total += parsers.parse_proc_stat(raw)['total']
-    return dict(ticks=total, pids=pid)
+        per[one] = parsers.parse_proc_stat(raw)['total']
+    return dict(ticks=sum(per.values()), pids=pids, per=per)
+
+
+def cpu_delta(before, after):
+    measured = 0
+    for pid, ticks in after['per'].items():
+        measured += ticks - before['per'].get(pid, 0)
+    return measured
 
 
 def gfx_reset():
@@ -168,19 +176,19 @@ def step(name, out, work):
     ended = time.time()
     after = app_ticks()
     mpa('screenshot', f'{SEED}-{name}', timeout=240)
+    ticks = cpu_delta(before, after)
     record = dict(name=name, started_unix=before_wall, ended_unix=ended,
                   wall_ms=round((ended - before_wall) * 1000, 1),
-                  cpu_ticks=after['ticks'] - before['ticks'],
-                  cpu_ms=round((after['ticks'] - before['ticks']) * 1000 / CLK_TCK, 1),
-                  pids=before['pids'], gfx=gfx_totals(), detail=result)
+                  cpu_ticks=ticks, cpu_ms=round(ticks * 1000 / CLK_TCK, 1),
+                  pids=after['pids'], gfx=gfx_totals(), detail=result)
     (Path(out) / f'{name}.json').write_text(json.dumps(record, indent=2) + '\n')
     return record
 
 
-def open_chat(chat):
-    mpa('tap', 'desc', 'Robot ' + chat['session'], timeout=CHAT_TIMEOUT + 120)
-    mpa('read', '--wait-text', chat['marker'], '--timeout', str(CHAT_TIMEOUT), timeout=CHAT_TIMEOUT + 120)
-    return dict(session=chat['session'], marker=chat['marker'], bytes=chat['bytes'])
+def open_chat(chat, timeout):
+    mpa('tap', 'desc', 'Robot ' + chat['session'], timeout=timeout + 120)
+    mpa('read', '--wait-text', chat['marker'], '--timeout', str(timeout), timeout=timeout + 120)
+    return dict(session=chat['session'], marker=chat['marker'], bytes=chat['bytes'], rows=chat.get('rows'))
 
 
 def measure(targets):
@@ -196,8 +204,27 @@ def measure(targets):
         return dict(inbox='shown', am_start=started.stdout.strip())
     steps.append(step('launch-inbox', OUT, launch))
     largest = targets['largest']
-    steps.append(step('open-largest', OUT, lambda: open_chat(largest)))
+    opened = {}
+    def open_largest():
+        try:
+            opened['chat'] = open_chat(largest, LARGEST_TIMEOUT)
+            return dict(opened['chat'], opened=True)
+        except MeasurementError as failure:
+            opened['error'] = str(failure)
+            return dict(session=largest['session'], bytes=largest['bytes'], rows=largest.get('rows'), opened=False,
+                        error=str(failure))
+    steps.append(step('open-largest', OUT, open_largest))
     def flings():
+        if 'chat' not in opened:
+            for chat in targets['chats'][1:]:
+                try:
+                    opened['chat'] = open_chat(chat, CHAT_TIMEOUT)
+                    break
+                except MeasurementError:
+                    continue
+        if 'chat' not in opened:
+            raise MeasurementError('NO_CHAT_OPENED: the largest chat and the next four never opened: '
+                                   + opened.get('error', 'no error recorded'))
         payload = screen()
         bounds = parsers.biggest_scrollable(payload['nodes'])
         if bounds is None:
@@ -205,15 +232,20 @@ def measure(targets):
         points = parsers.fling_points(bounds)
         for _ in range(FLINGS):
             adb('shell', 'input', 'swipe', *points, 300)
-        return dict(flings=FLINGS, bounds=bounds, points=points)
+        return dict(flings=FLINGS, session=opened['chat']['session'], bounds=bounds, points=points)
     steps.append(step('ten-flings', OUT, flings))
     def switches():
-        opened = []
+        results = []
         for chat in targets['chats'][:SWITCHES]:
             mpa('key', 'back', timeout=120)
             wait_inbox(INBOX_TIMEOUT)
-            opened.append(open_chat(chat))
-        return dict(switches=len(opened), chats=[item['session'] for item in opened])
+            try:
+                results.append(dict(open_chat(chat, CHAT_TIMEOUT), opened=True))
+            except MeasurementError as failure:
+                results.append(dict(session=chat['session'], opened=False, error=str(failure)))
+        if not any(item['opened'] for item in results):
+            raise MeasurementError('NO_CHAT_OPENED: none of the five switch targets opened')
+        return dict(attempted=len(results), opened=sum(1 for item in results if item['opened']), chats=results)
     steps.append(step('switch-five', OUT, switches))
     mpa('key', 'back', timeout=120, check=False)
     return steps

@@ -61,7 +61,7 @@ class RenderTest(unittest.TestCase):
         self.assertIn('10000 / 5500', text)
         self.assertIn('cold launch to Inbox', text)
         self.assertIn('54000000 bytes, 30000 rows', text)
-        self.assertIn('| head | scale | launch-inbox | 10000 | 5500 | 50 | 40 | 2 | 900 | 40 | 1 | 4500 |', text)
+        self.assertIn('| main | scale | launch-inbox | 10000 | 5500 | 50 | 40 | 2 | 900 | 40 | 1 | 4500 |', text)
 
     def test_render_orders_columns_by_ref_then_seed(self):
         text = report.render([report.enrich(timing(seed='scale', ref='9374e19f'), ''),

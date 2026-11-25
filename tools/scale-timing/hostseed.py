@@ -87,7 +87,8 @@ def sessions(manifest):
 def install_relay(source):
     install(source, RELAY, '755')
     wrapped = wrap_authorized_keys()
-    subprocess.run(['sudo', 'truncate', '-s', '0', str(RELAY_LOG)], capture_output=True)
+    subprocess.run(['sudo', 'install', '-m', '600', '-o', 'verifyssh', '-g', 'verifyssh', '/dev/null', str(RELAY_LOG)],
+                   check=True)
     return dict(relay=str(RELAY), authorized_keys=wrapped, log=str(RELAY_LOG))
 
 

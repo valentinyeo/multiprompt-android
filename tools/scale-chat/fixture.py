@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from datetime import datetime, timedelta
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -44,6 +45,10 @@ def project_folder(home, chat):
     return Path(home) / '.claude/projects' / str(Path(home) / chat['project']).replace('/', '-')
 
 
+def host_key(chat):
+    return hashlib.sha256(('claude:' + chat['chat']).encode()).hexdigest()[:32]
+
+
 def stale_sid(chat, offset):
     return f'b45301{chat["index"]:02d}-0000-4000-8000-{offset + 1:012x}'
 
@@ -51,9 +56,10 @@ def stale_sid(chat, offset):
 def paths(home, chat):
     folder = project_folder(home, chat)
     host = Path(home) / HOST_ROOT
+    key = host_key(chat)
     return dict(cwd=Path(home) / chat['project'], folder=folder, live=folder / (chat['sid'] + '.jsonl'),
-                config=host / (chat['chat'] + '.config.json'), state=host / (chat['chat'] + '.state.json'),
-                log=host / (chat['chat'] + '.events.log'))
+                config=host / (key + '.config.json'), state=host / (key + '.state.json'),
+                log=host / (key + '.events.log'))
 
 
 def moment(step):
@@ -193,7 +199,7 @@ def summary(chats):
                 largest_session=max(chats, key=lambda chat: chat['bytes'])['session'])
 
 
-def check(home):
+def check(home, expect_distribution=True):
     home = Path(home)
     manifest = read_json(home / MANIFEST)
     expected = plan()
@@ -215,13 +221,19 @@ def check(home):
         transcripts += 1 + STALE
     assert transcripts == expected['transcript_target'], 'SCALE_CHAT_TRANSCRIPT_COUNT'
     counts = summary(manifest['chats'])
+    assert manifest['measured'] == counts, 'SCALE_CHAT_MEASURED_STALE'
+    assert_distribution(counts, expect_distribution)
+    return manifest
+
+
+def assert_distribution(counts, expect_distribution):
+    if not expect_distribution:
+        return
     assert counts['largest_bytes'] >= 50 * 1024 * 1024, 'SCALE_CHAT_LARGEST_BYTES'
     assert counts['largest_rows'] >= 25_000, 'SCALE_CHAT_LARGEST_ROWS'
     assert counts['big_chats'] >= 6, 'SCALE_CHAT_BIG_CHATS'
     assert 1_000_000 <= counts['median_bytes'] <= 2_200_000, 'SCALE_CHAT_MEDIAN_BYTES'
     assert counts['p90_bytes'] >= 10_000_000, 'SCALE_CHAT_P90_BYTES'
-    assert manifest['measured'] == counts, 'SCALE_CHAT_MEASURED_STALE'
-    return manifest
 
 
 COMMANDS = {'plan': plan, 'seed': create, 'check': check}

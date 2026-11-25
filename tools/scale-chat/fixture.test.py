@@ -100,12 +100,12 @@ class SeedTest(unittest.TestCase):
         fixture = self.small()
         with tempfile.TemporaryDirectory() as directory:
             manifest = fixture.create(Path(directory))
-            fixture.check(Path(directory))
+            fixture.check(Path(directory), expect_distribution=False)
             live = Path(manifest['chats'][0]['transcript'])
             lines = live.read_bytes().splitlines()
             live.write_bytes(b'\n'.join(lines[:-1]) + b'\n')
             with self.assertRaises(AssertionError):
-                fixture.check(Path(directory))
+                fixture.check(Path(directory), expect_distribution=False)
 
 
 if __name__ == '__main__':

@@ -62,7 +62,7 @@ class ScrollableTest(unittest.TestCase):
     ]
 
     def test_picks_the_largest_scrollable_container(self):
-        self.assertEqual(parsers.biggest_scrollable(nodes), [0, 700, 1080, 2100])
+        self.assertEqual(parsers.biggest_scrollable(self.nodes), [0, 700, 1080, 2100])
 
     def test_no_container_returns_none(self):
         self.assertIsNone(parsers.biggest_scrollable([dict(bounds='[0,0][10,10]', scrollable=False)]))

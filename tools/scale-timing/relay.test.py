@@ -44,13 +44,14 @@ class RelayTest(unittest.TestCase):
         self.assertEqual(len(opened), 1)
         self.assertEqual(len(closed), 1)
         self.assertEqual(closed[0]['code'], 0)
-        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(calls), 3)
         self.assertEqual(calls[0]['bytes'], len('reply-one-synthetic-request\n'))
-        self.assertEqual(calls[1]['bytes'], len('reply-two-\n') + len('reply-three\n'))
+        self.assertEqual(calls[1]['bytes'], len('reply-two-\n'))
+        self.assertEqual(calls[2]['bytes'], len('reply-three\n'))
         self.assertEqual(calls[0]['request'], 1)
         self.assertGreaterEqual(calls[1]['ms'], 0)
         self.assertEqual(closed[0]['bytes'], sum(call['bytes'] for call in calls))
-        self.assertEqual(closed[0]['calls'], 2)
+        self.assertEqual(closed[0]['calls'], 3)
 
     def test_relay_labels_the_history_channel(self):
         result, entries, _direct = self.run_relay('{python} -B {responder} --serve abcdef', b'one\n')
