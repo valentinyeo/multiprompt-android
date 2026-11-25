@@ -7,12 +7,6 @@ import dev.multiprompt.companion.ssh.SshRepository
 
 class RoomService(private val context: Context, private val repository: SshRepository) {
 
-    suspend fun open(host: HostProfile, accountId: String): RoomClient {
-        val client = repository.connect(host)
-        val wire = SshRoomWire(client, accountId, serviceSource, bridgeSource)
-        return RoomClient(wire)
-    }
-
     private suspend fun <T> onServerLink(host: HostProfile, accountId: String, block: suspend (RoomClient) -> T): T =
         repository.withServerLink(host, stallMs = LinkPolicy.LIST_STALL_MS) { link ->
             RoomClient(SshRoomWire(link, accountId, serviceSource, bridgeSource)).use { block(it) }
@@ -33,7 +27,7 @@ class RoomService(private val context: Context, private val repository: SshRepos
         }
 
     suspend fun post(host: HostProfile, accountId: String, roomId: String, text: String, recipients: List<String>, commandId: String): Long =
-        open(host, accountId).use { client ->
+        onServerLink(host, accountId) { client ->
             if (!client.capabilities().liveSend) throw RoomFailure("agents_offline")
             client.postHuman(roomId, client.revision(roomId), text, recipients, commandId)
         }

@@ -16,7 +16,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.connectbot.sshlib.SshClient
 import org.connectbot.sshlib.SshSession
 import org.connectbot.terminal.TerminalDimensions
 import org.connectbot.terminal.TerminalEmulator
@@ -48,7 +47,7 @@ class TerminalConnection(
     private val _status = MutableStateFlow<TerminalStatus>(TerminalStatus.Connecting)
     val status: StateFlow<TerminalStatus> = _status.asStateFlow()
 
-    private var client: SshClient? = null
+    private var link: SshRepository.ServerLink? = null
     private var session: SshSession? = null
     private var connectionJob: Job? = null
 
@@ -66,8 +65,9 @@ class TerminalConnection(
         if (connectionJob != null) return
         connectionJob = scope.launch {
             try {
-                val connectedClient = repository.connect(host)
-                client = connectedClient
+                val opened = repository.rentServerLink(host)
+                link = opened
+                val connectedClient = opened.client
                 val connectedSession = connectedClient.openSession()
                     ?: error("The SSH server refused a terminal channel")
                 session = connectedSession
@@ -118,11 +118,8 @@ class TerminalConnection(
     }
 
     suspend fun history(): List<String> = withContext(Dispatchers.IO) {
-        val historyClient = repository.connect(host)
-        try {
-            shellHistoryLines(repository.captureSession(historyClient, tmuxSessionName))
-        } finally {
-            historyClient.disconnect()
+        repository.withServerLink(host) { client ->
+            shellHistoryLines(repository.captureSession(client, tmuxSessionName))
         }
     }
 
@@ -144,11 +141,11 @@ class TerminalConnection(
 
     private suspend fun cleanupTransport() {
         val oldSession = session
-        val oldClient = client
+        val oldLink = link
         session = null
-        client = null
+        link = null
         runCatching { oldSession?.close() }
-        runCatching { oldClient?.disconnect() }
+        runCatching { oldLink?.releaseNow() }
     }
 
 }

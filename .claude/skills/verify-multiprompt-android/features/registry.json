@@ -2040,6 +2040,9 @@
       "match": [
         "ChatPollGate",
         "ReaderStreamPump"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/ssh/LinkPool\\.kt$"
       ]
     },
     "bot.look": {

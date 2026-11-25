@@ -2,6 +2,7 @@ package dev.multiprompt.companion.ssh
 
 import dev.multiprompt.companion.model.HostProfile
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
@@ -63,6 +64,14 @@ class LinkPool<L : Any>(
     private val close: suspend (L) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
+    class Rented<L : Any> internal constructor(val link: L, private val onRelease: suspend () -> Unit) {
+        private val released = AtomicBoolean(false)
+
+        suspend fun release() {
+            if (released.compareAndSet(false, true)) onRelease()
+        }
+    }
+
     private class Held<L>(val identity: LinkPolicy.Identity, val link: L, var inUse: Int, var lastUsedAtMillis: Long)
 
     private val locks = ConcurrentHashMap<String, Mutex>()
@@ -81,7 +90,7 @@ class LinkPool<L : Any>(
             try {
                 return if (reused && stallMs != null) onReused(entry.link, stallMs, block) else block(entry.link)
             } catch (cancelled: CancellationException) {
-                withContext(NonCancellable) { evict(hostId, entry) }
+                withContext(NonCancellable) { if (!isAlive(entry.link)) evict(hostId, entry) }
                 throw cancelled
             } catch (error: Throwable) {
                 val outcome = LinkPolicy.afterFailure(error, isAlive(entry.link), attempt, reused)
@@ -94,6 +103,22 @@ class LinkPool<L : Any>(
                         entry.inUse--
                         entry.lastUsedAtMillis = now()
                     }
+                }
+            }
+        }
+    }
+
+    suspend fun rent(
+        hostId: String,
+        identity: LinkPolicy.Identity,
+        open: suspend () -> L,
+    ): Rented<L> {
+        val entry = acquire(hostId, identity, open).first
+        return Rented(entry.link) {
+            withContext(NonCancellable) {
+                lock(hostId).withLock {
+                    entry.inUse--
+                    entry.lastUsedAtMillis = now()
                 }
             }
         }

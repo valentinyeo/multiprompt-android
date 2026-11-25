@@ -43,6 +43,7 @@ import org.connectbot.sshlib.SessionExit
 import org.connectbot.sshlib.SshClient
 import org.connectbot.sshlib.SshClientConfig
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class PresentedHostKey(
     val type: String,
@@ -102,12 +103,40 @@ class SshRepository(private val secrets: SecretStorage) {
         block: suspend (SshClient) -> T,
     ): T = withContext(Dispatchers.IO) {
         try {
-            links.use(host.id, LinkPolicy.identity(host), stallMs, { openClient(host, pooled = true) }, block)
+            links.use(host.id, LinkPolicy.identity(host), stallMs, { openClient(host) }, block)
         } finally {
-            linkScope.launch {
-                delay(LinkPolicy.IDLE_MS)
-                links.sweep()
-            }
+            sweepLater()
+        }
+    }
+
+    class ServerLink internal constructor(
+        private val scope: CoroutineScope,
+        val client: SshClient,
+        private val onRelease: suspend () -> Unit,
+    ) : AutoCloseable {
+        private val released = AtomicBoolean(false)
+
+        suspend fun releaseNow() {
+            if (released.compareAndSet(false, true)) onRelease()
+        }
+
+        override fun close() {
+            scope.launch { releaseNow() }
+        }
+    }
+
+    suspend fun rentServerLink(host: HostProfile): ServerLink = withContext(Dispatchers.IO) {
+        val rented = links.rent(host.id, LinkPolicy.identity(host)) { openClient(host) }
+        ServerLink(linkScope, rented.link) {
+            rented.release()
+            sweepLater()
+        }
+    }
+
+    private fun sweepLater() {
+        linkScope.launch {
+            delay(LinkPolicy.IDLE_MS)
+            links.sweep()
         }
     }
 
@@ -148,9 +177,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
-    suspend fun connect(host: HostProfile): SshClient = openClient(host, pooled = false)
-
-    private suspend fun openClient(host: HostProfile, pooled: Boolean): SshClient = withContext(Dispatchers.IO) {
+    private suspend fun openClient(host: HostProfile): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
         val client = SshClient(
             SshClientConfig {
@@ -158,10 +185,8 @@ class SshRepository(private val secrets: SecretStorage) {
                 this.port = host.port
                 hostKeyVerifier = probe
                 clientVersion = "SSH-2.0-multiprompt_android_1"
-                if (pooled) {
-                    autoDisconnectOnLastChannelClose = false
-                    keepAliveIntervalMs = LinkPolicy.KEEPALIVE_MS
-                }
+                autoDisconnectOnLastChannelClose = false
+                keepAliveIntervalMs = LinkPolicy.KEEPALIVE_MS
             },
         )
         val result = client.connect()
@@ -781,14 +806,7 @@ class SshRepository(private val secrets: SecretStorage) {
     private suspend fun <T> withAuthenticatedClient(
         host: HostProfile,
         block: suspend (SshClient) -> T,
-    ): T {
-        val client = connect(host)
-        return try {
-            block(client)
-        } finally {
-            runCatching { client.disconnect() }
-        }
-    }
+    ): T = withServerLink(host, block = block)
 
     suspend fun answerQuestion(client: SshClient, sessionName: String, question: dev.multiprompt.companion.reader.PendingQuestion, screen: String, choices: Set<Int>, other: String) {
         execute(client, TmuxCommands.questionAnswer(sessionName, question, screen, choices, other),

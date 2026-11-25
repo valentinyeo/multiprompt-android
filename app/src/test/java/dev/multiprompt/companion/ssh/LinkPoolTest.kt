@@ -192,7 +192,7 @@ class LinkPoolTest {
     }
 
     @Test
-    fun timedOutCommandDropsTheLinkSoTheNextRefreshReconnects() = runBlocking {
+    fun timedOutCommandKeepsTheLinkForItsOtherChannels() = runBlocking {
         val server = Server()
         val pool = pool()
         pool.refresh(server) { }
@@ -200,8 +200,9 @@ class LinkPoolTest {
             pool.refresh(server, stallMs = null) { delay(5_000L) }
         }
         assertNull(timedOut)
-        assertTrue(server.opened.single().closed)
-        assertEquals(2, pool.refresh(server) { link -> link.number })
+        assertFalse(server.opened.single().closed)
+        assertEquals(1, pool.refresh(server) { link -> link.number })
+        assertEquals(1, server.opened.size)
     }
 
     @Test
