@@ -41,6 +41,7 @@ source_checks() {
   python3 -B tools/working-dots/check.test.py
   bash tools/check-canonical-chat-reader.sh
   python3 -B tools/chat-reader-bundle.test.py
+  python3 -B tools/message-worker.test.py
   python3 -B tools/history-continuity.test.py
   python3 -B tools/queue-receipts.test.py
   python3 tools/terminal-console.test.py
@@ -72,6 +73,10 @@ source_checks() {
   python3 -B tools/session-fresh-start/fresh-start.test.py
   python3 -B tools/real-chat/real-chat.test.py
   python3 -B tools/real-chat/phone-cache.test.py
+  python3 -B tools/scale-chat/fixture.test.py
+  python3 -B tools/scale-timing/parsers.test.py
+  python3 -B tools/scale-timing/relay.test.py
+  python3 -B tools/scale-timing/report.test.py
   python3 -B tools/app-name/drive.test.py
   python3 -B tools/app-name/select_run.test.py
   node .github/scripts/pstack-verifier/coverage.cjs check
