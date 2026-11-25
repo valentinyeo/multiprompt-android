@@ -320,18 +320,15 @@ class ChatHistoryConnection(
         }
         try {
             val transport = connectedExchange
-            when {
-                transport != null -> transport(tracked)
-                else -> {
-                    val shared = sharedClient?.invoke()
-                    if (shared != null) {
-                        repository.streamChatHistory(shared, script, tracked)
-                    } else {
-                        val connectedClient = withTimeout(20_000L) { repository.connect(host) }
-                        own.set(connectedClient)
-                        try { repository.streamChatHistory(connectedClient, script, tracked) }
-                        finally { disconnectAside(connectedClient) }
-                    }
+            if (transport != null) {
+                transport(tracked)
+            } else {
+                val shared = sharedClient?.invoke()
+                val client = shared ?: withTimeout(20_000L) { repository.connect(host) }.also { own.set(it) }
+                try {
+                    repository.streamChatHistory(client, script, tracked)
+                } finally {
+                    if (shared == null) disconnectAside(client)
                 }
             }
         } finally {
