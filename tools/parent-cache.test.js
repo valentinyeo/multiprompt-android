@@ -95,3 +95,12 @@ test('an unavailable cache API falls back to driving the base', () => fixture(({
   assert.equal(restore({ repo: 'a/b', sha, feature: 'hosts.md', directory, runId: '10', key, run() { throw new Error('HTTP 503'); } }), false);
   assert.equal(fs.existsSync(directory), false);
 }));
+
+test('video-required base cache checks reject cached evidence without a non-empty journey video', () => fixture(({ directory, evidence }) => {
+  evidence();
+  assert.equal(reusable(directory, sha, { requireVideo: true }), false);
+  fs.writeFileSync(path.join(directory, 'journey-video.mp4'), '');
+  assert.equal(reusable(directory, sha, { requireVideo: true }), false);
+  fs.writeFileSync(path.join(directory, 'journey-video.mp4'), 'mp4bytes');
+  assert.equal(reusable(directory, sha, { requireVideo: true }), true);
+}));
