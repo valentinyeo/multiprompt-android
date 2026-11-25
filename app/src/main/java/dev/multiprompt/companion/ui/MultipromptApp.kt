@@ -293,6 +293,7 @@ import dev.multiprompt.companion.terminal.TerminalKeys
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
+    androidx.compose.runtime.SideEffect { TypingProbe.composed("MultipromptApp") }
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
@@ -3128,6 +3129,7 @@ internal fun ReaderScreen(
     onTogglePin: (() -> Unit)? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
+    androidx.compose.runtime.SideEffect { TypingProbe.composed("ReaderScreen") }
     val reader by connection.state.collectAsState()
     val piModels by connection.piModels.collectAsState()
     val displayName = stringResource(R.string.app_name)
@@ -3161,7 +3163,7 @@ internal fun ReaderScreen(
         mutableStateOf(TextFieldValue(draftStore.composerDraft(session)))
     }
     LaunchedEffect(connection, session.hostId, session.name, promptField.text) {
-        draftStore.setComposerDraft(session, promptField.text)
+        TypingProbe.measure("draftSave") { draftStore.setComposerDraft(session, promptField.text) }
     }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     val replyGate = remember(connection, session.hostId, session.name) { ReplySwipeGate() }
@@ -4710,7 +4712,7 @@ internal fun ReaderScreen(
                             draftEmpty = prompt.isEmpty() && imageAttachments.isEmpty(),
                         ) == ComposerSlot.STOP
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
-                        val skillSpans = remember(prompt, pillSkills) { NativeSkills.spans(prompt, pillSkills) }
+                        val skillSpans = remember(prompt, pillSkills) { TypingProbe.measure("skillSpans") { NativeSkills.spans(prompt, pillSkills) } }
                         var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
                         val laidOut = composerLayout
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
@@ -4718,6 +4720,7 @@ internal fun ReaderScreen(
                         val skillText = remember(skillSpans, pillsDrawn, kitColors.text) {
                             if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans, kitColors.text)
                         }
+                        androidx.compose.runtime.SideEffect { TypingProbe.composed("Composer") }
                         BasicTextField(
                             value = promptField,
                             onValueChange = { promptField = it },

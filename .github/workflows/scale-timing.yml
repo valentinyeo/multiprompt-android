@@ -8,6 +8,14 @@ on:
         type: string
         required: false
         default: ''
+      typing:
+        description: Measure single-key typing and middle edits on the largest scale chat
+        type: boolean
+        default: false
+      assert_isolated:
+        description: Require typing not to recompose the message list
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -25,13 +33,14 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        seed: [small, scale]
+        seed: ${{ inputs.typing && fromJSON('["scale"]') || fromJSON('["small","scale"]') }}
     env:
       GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
       EVIDENCE: ${{ github.workspace }}/scale-evidence
       FIXTURE: ${{ github.workspace }}/verify-ssh
       TIMING_SEED: ${{ matrix.seed }}
       APP_REF: ${{ inputs.app_ref }}
+      TYPING_ASSERT_ISOLATED: ${{ inputs.assert_isolated }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       VERIFY_FEATURE: ${{ matrix.seed == 'scale' && 'long-chat.md' || '' }}
     steps:
@@ -86,13 +95,19 @@ jobs:
           script: |
             adb install -r -g "$VERIFY_APK"
             adb install -r "$VERIFY_TEST_APK"
-            python3 tools/scale-timing/measure.py --seed "$TIMING_SEED" --ref "$TIMING_REF" \
-              --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
-              --fixture "$FIXTURE" --expected-version "$EXPECTED_VERSION"
+            if [ "${{ inputs.typing }}" = true ]; then
+              python3 tools/scale-timing/typing.py 2>&1 | tee "$EVIDENCE/typing-table.md"
+            else
+              python3 tools/scale-timing/measure.py --seed "$TIMING_SEED" --ref "$TIMING_REF" \
+                --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
+                --fixture "$FIXTURE" --expected-version "$EXPECTED_VERSION"
+            fi
       - name: Publish this seed's timing table
         if: always()
         run: |
-          if [ -s "$EVIDENCE/timing/timing.json" ]; then
+          if [ -s "$EVIDENCE/typing-table.md" ]; then
+            cat "$EVIDENCE/typing-table.md" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -s "$EVIDENCE/timing/timing.json" ]; then
             python3 tools/scale-timing/report.py --root "$EVIDENCE" --out "$EVIDENCE/timing-table.md" | tee -a "$GITHUB_STEP_SUMMARY"
           else
             echo 'No timing measurement was produced. The emulator artifact holds the diagnostics.' >> "$GITHUB_STEP_SUMMARY"
@@ -110,7 +125,7 @@ jobs:
   table:
     name: timing table
     needs: measure
-    if: always() && needs.measure.result != 'cancelled'
+    if: always() && needs.measure.result != 'cancelled' && !inputs.typing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
