@@ -9,6 +9,7 @@ const verifier = require('../.github/scripts/pstack-verifier/verifier.cjs');
 
 const root = path.join(__dirname, '..');
 const sha = 'a'.repeat(40);
+const COVERED = { unmapped: [] };
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const tool = path.join(root, '.github/scripts/pstack-verifier/coverage.cjs');
 const productDiff = (file, text) => `diff --git a/app/src/main/${file} b/app/src/main/${file}\n--- a/app/src/main/${file}\n+++ b/app/src/main/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`;
@@ -39,7 +40,7 @@ if (args.includes('Accept: application/vnd.github.diff')) {
 }
 
 for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reuse-delete'], [373, 'ai.switch'], [377, 'ai.usage'], [378, 'skills.pills'], [379, 'chat-table.expand'], [381, 'claude.clear-ranking']]) {
-  test(`real PR #${pr} reports its coverage gap as a note while its journeys pass`, () => {
+  test(`real PR #${pr} fails a pass while a changed product file went unexercised`, () => {
     const fixture = JSON.parse(read(`tools/fixtures/feature-coverage/pr-${pr}.json`));
     const diff = read(`tools/fixtures/feature-coverage/pr-${pr}.diff`);
     const features = [...fixture.verifierBody.matchAll(/^- `([^`]+)` parent: .+, head: passed$/gm)].map(match => match[1]);
@@ -50,26 +51,33 @@ for (const [pr, outcome] of [[380, 'chat-search.open'], [376, 'snippets.save-reu
     const plan = gate.planChange(diff, []);
     assert.ok(plan.outcomes.includes(outcome));
     const conclusions = Object.fromEntries(features.map(feature => [feature, 'success']));
-    const args = { features, conclusions };
-    assert.equal(verifier.applyRules(args).verdict, 'PASS');
+    const unmapped = gate.uncoveredProductFiles(diff, features);
+    const args = { features, conclusions, coverage: { unmapped } };
+    const expected = unmapped.length ? 'FAIL' : 'PASS';
+    assert.equal(verifier.applyRules(args).verdict, expected);
     const featureProof = gate.featureErrors({ plan, conclusions, sha: fixture.headSha });
     const ruled = verifier.applyRules({ ...args, featureProof });
-    assert.equal(ruled.verdict, 'PASS');
+    assert.equal(ruled.verdict, expected);
     assert.match(ruled.notes.join('\n'), new RegExp(`FEATURE_NOT_EXERCISED: ${outcome}`));
+    for (const file of unmapped) assert.ok(ruled.notes.join('\n').includes(file), file);
   });
 }
 
-test('PR #376 unreachable Snippets row is reported as a note when both unrelated journeys pass', () => {
+test('PR #376 unreachable Snippets row fails a pass while its changed store went unexercised', () => {
   const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-376.json'));
   assert.match(fixture.unreachableBody, /^pstack-verifier: FAIL/);
   const features = [...fixture.unreachableBody.matchAll(/^- `([^`]+)` parent: .+, head: passed$/gm)].map(match => match[1]);
   assert.deepEqual(new Set(features), new Set(['native-skills.md', 'session-reader.md']));
   const conclusions = Object.fromEntries(features.map(feature => [feature, 'success']));
-  const plan = gate.planChange(read('tools/fixtures/feature-coverage/pr-376.diff'), []);
+  const diff = read('tools/fixtures/feature-coverage/pr-376.diff');
+  const plan = gate.planChange(diff, []);
   const featureProof = gate.featureErrors({ plan, conclusions, sha });
-  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features, conclusions, featureProof });
-  assert.equal(ruled.verdict, 'PASS');
+  const unmapped = gate.uncoveredProductFiles(diff, features);
+  assert.deepEqual(unmapped, ['app/src/main/java/dev/multiprompt/companion/data/SnippetStore.kt']);
+  const ruled = verifier.applyRules({ coverage: { unmapped }, modelVerdict: 'PASS', features, conclusions, featureProof });
+  assert.equal(ruled.verdict, 'FAIL');
   assert.match(ruled.notes.join('\n'), /FEATURE_NOT_EXERCISED: snippets\.save-reuse-delete/);
+  assert.match(ruled.notes.join('\n'), /data\/SnippetStore\.kt/);
   assert.match(featureProof.errors.join(' '), /snippets.save-reuse-delete/);
 });
 
@@ -114,7 +122,7 @@ test('native-skills smoke does not cover /clear and name-first ranking', () => {
   assert.ok(plan.outcomes.includes('claude.clear-ranking'));
   const featureProof = gate.featureErrors({ plan, conclusions: { 'native-skills.md': 'success' }, sha });
   assert.match(featureProof.errors.join('\n'), /FEATURE_NOT_EXERCISED: claude.clear-ranking/);
-  const ruled = verifier.applyRules({ features: ['native-skills.md'], conclusions: { 'native-skills.md': 'success' }, smoke: true, featureProof });
+  const ruled = verifier.applyRules({ coverage: COVERED, features: ['native-skills.md'], conclusions: { 'native-skills.md': 'success' }, smoke: true, featureProof });
   assert.equal(ruled.verdict, 'PASS+NOTES');
   assert.match(ruled.notes.join('\n'), /FEATURE_NOT_EXERCISED: claude.clear-ranking/);
 });
@@ -142,7 +150,7 @@ test('matching successful proof requires action, resulting UI, independent recei
     const proof = gate.featureErrors(args);
     assert.deepEqual(proof.errors, []);
     assert.equal(proof.accepted[0].sha, sha);
-    assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, featureProof: proof }).verdict, 'PASS');
+    assert.equal(verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, featureProof: proof }).verdict, 'PASS');
   });
 });
 
@@ -232,7 +240,7 @@ test('missing, fabricated, stale, cross-journey and unretained proof is reported
     mutate(args, directory);
     const featureProof = gate.featureErrors(args);
     assert.equal(featureProof.errors.length, 1, mutate.toString());
-    const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, featureProof });
+    const ruled = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['session-reader.md'], conclusions: args.conclusions, featureProof });
     assert.equal(ruled.verdict, args.conclusions['session-reader.md'] === 'success' ? 'PASS' : 'FAIL', mutate.toString());
     assert.ok(ruled.notes.includes(featureProof.errors[0]), mutate.toString());
   });
@@ -369,7 +377,7 @@ test('the real picker maps the PR #425 shared-reader files by rule and survives 
     assert.deepEqual(JSON.parse(values.match(/^changed_outcomes=(.+)$/m)[1]), ['codex.transcript', 'reader.host-restart']);
     assert.deepEqual(JSON.parse(values.match(/^features=(.+)$/m)[1]), ['chat-codex.md', 'host-restart.md']);
     assert.match(run.stderr, /the model also answered unmapped; the 2 code-mapped outcome\(s\) stand/);
-    assert.doesNotMatch(values, /unmapped/);
+    assert.doesNotMatch(values, /changed_outcomes=\[[^\n]*"unmapped"/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -505,7 +513,7 @@ test('signed, dedicated and manual recipes stay visible without entering the deb
   }
 });
 
-test('the real judge command reports a past search change coverage gap while its journeys pass', () => {
+test('the real judge command fails a past search change whose product file no journey exercised', () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'feature-judge-'));
   try {
     const fixture = JSON.parse(read('tools/fixtures/feature-coverage/pr-380.json'));
@@ -531,6 +539,8 @@ test('the real judge command reports a past search change coverage gap while its
         RUN_URL: 'https://github.com/example/repo/actions/runs/1',
         FEATURES: '["session-reader.md"]',
         CHANGED_OUTCOMES: '[]',
+        COVERAGE_RECORDED: 'yes',
+        UNMAPPED: JSON.stringify(['app/src/main/java/dev/multiprompt/companion/ui/ChatFind.kt']),
         FIXTURE_DIFF: path.join(root, 'tools/fixtures/feature-coverage/pr-380.diff'),
         COVERAGE_REPORT: report,
         VERIFIER_DRY: '1',
@@ -538,14 +548,18 @@ test('the real judge command reports a past search change coverage gap while its
     };
     const args = [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'];
     const result = spawnSync(process.execPath, args, options);
-    assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /pstack-verifier: PASS @/);
+    assert.equal(result.status, 1, result.stderr);
+    assert.match(result.stdout, /pstack-verifier: FAIL @/);
+    assert.match(result.stdout, /1 changed product file no planned journey exercises: app\/src\/main\/java\/dev\/multiprompt\/companion\/ui\/ChatFind\.kt/);
     assert.match(result.stdout, /FEATURE_NOT_EXERCISED: required journey chat-search\.md was not scheduled/);
     const recorded = JSON.parse(fs.readFileSync(report, 'utf8'));
     assert.equal(recorded.sha, fixture.headSha);
     assert.deepEqual(recorded.accepted, []);
     assert.ok(recorded.plan.outcomes.includes('chat-search.open'));
     assert.match(result.stdout, /Head journey results decide this check/);
+    const noRecord = spawnSync(process.execPath, args, { ...options, env: { ...options.env, COVERAGE_RECORDED: '' } });
+    assert.equal(noRecord.status, 1, noRecord.stderr);
+    assert.match(noRecord.stdout, /No coverage record/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 

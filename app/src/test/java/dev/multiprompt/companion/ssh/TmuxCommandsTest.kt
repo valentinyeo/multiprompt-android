@@ -156,6 +156,20 @@ class TmuxCommandsTest {
     }
 
     @Test
+    fun nativeChatCapturesOnlyTheVisiblePaneAndStillQuotesItsTarget() {
+        val hostile = "a'; touch /bad; '"
+        val command = TmuxCommands.stream(hostile, visibleOnly = true)
+        assertTrue(command.contains("tmux capture-pane -p -J -t ${TmuxParser.shellQuote("=$hostile:")}"))
+        assertFalse(command.contains("-S -5000"))
+        assertTrue(command.contains(TmuxCommands.ETA_PREFIX))
+        assertTrue(command.contains(TmuxCommands.SNAPSHOT_PREFIX))
+        assertTrue(command.contains("sleep 1"))
+        assertFalse(command.replace(TmuxParser.shellQuote("=$hostile:"), "")
+            .replace(TmuxParser.shellQuote("=$hostile"), "")
+            .replace(TmuxParser.shellQuote(hostile), "").contains("touch /bad"))
+    }
+
+    @Test
     fun streamPacksTheSnapshotWhenGzipAndBase64ExistAndKeepsHexOtherwise() {
         val command = TmuxCommands.stream("work")
 

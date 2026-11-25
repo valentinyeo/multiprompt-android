@@ -115,11 +115,15 @@
         "workflow": "verify.yml",
         "inputs": {},
         "prerequisites": [],
-        "driver": true
+        "driver": true,
+        "scripts": [
+          "tools/pane-stream/drive.sh"
+        ]
       },
       "outcomes": [
         "codex.transcript",
-        "reader.lifecycle"
+        "reader.lifecycle",
+        "reader.pane-budget"
       ],
       "evidence": {
         "reader-ui.json": 6000,
@@ -129,7 +133,7 @@
         "claude-hidden-before.json": 128,
         "claude-hidden-after.json": 128,
         "reader-second-close-receipt.txt": 512,
-        "codex-receipt.txt": 256
+        "pane-stream-result.json": 3500
       }
     },
     "chat-queued.md": {
@@ -2326,6 +2330,32 @@
         "sideEffect": {
           "file": "group-renamed-receipts.txt",
           "quote": "\"group\": \"Renamed\""
+        }
+      }
+    },
+    "reader.pane-budget": {
+      "description": "Native chat captures only the visible pane while still updating a streamed reply. Terminal detail keeps scrollback, and the independent terminal fallback renders two new streaming markers in the production terminal accessibility view and screenshots before completion. Retains pane-stream-result.json, XML, screenshots, actual SSH capture scopes and the independent prompt receipt.",
+      "journey": "chat-codex.md",
+      "sideEffect": true,
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/SessionReaderConnection\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/ssh/(TmuxCommands|SshRepository)\\.kt$"
+      ],
+      "match": [
+        "paneGate|visibleOnly|observe\\(pane\\s*="
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "fill 'Message claude-control' STREAM_531"
+        },
+        "result": {
+          "file": "pane-stream-proof.txt",
+          "quote": "PANE_STREAM_CHAT_AND_TERMINAL_LIVE"
+        },
+        "sideEffect": {
+          "file": "pane-stream-receipt.txt",
+          "quote": "VERIFY_RECEIVED:STREAM_531"
         }
       }
     }
