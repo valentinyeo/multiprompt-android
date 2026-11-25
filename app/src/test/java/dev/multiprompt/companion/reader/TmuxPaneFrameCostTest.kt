@@ -204,8 +204,8 @@ class TmuxPaneFrameCostTest {
             )
         }
         appendLine()
-        appendLine("- identical frames: $identicalEmits of $FRAMES emitted a new ReaderState and recomposed (`lastUpdatedAtMillis`, `SessionReaderConnection.kt:621`); changed frames: $changedEmits of $FRAMES.")
-        appendLine("- the phone decodes and re-parses every frame it receives; the server is what skips an unchanged pane (`TmuxCommands.kt:415`).")
+        appendLine("- identical frames: $identicalEmits of $FRAMES emitted a new ReaderState and recomposed (`lastUpdatedAtMillis`, `SessionReaderConnection.kt:622`); changed frames: $changedEmits of $FRAMES.")
+        appendLine("- the phone decodes and re-parses every frame it receives; the server is what skips an unchanged pane (`TmuxCommands.kt:417`).")
         appendLine("- the pane view is not the only reader: `reader.isWorking` parses `screenOutput` on Main even when the chat shows the structured history (`MultipromptApp.kt:3127`, `WorkingDots.kt:27`).")
     }
 
@@ -288,8 +288,8 @@ class TmuxPaneFrameCostTest {
             Triple(LEFT_ALIGN, "Dispatchers.IO", "SshRepository.kt:259"),
             Triple(COMPOSER_TRIM, "Dispatchers.IO", "TmuxText.kt:274"),
             Triple(FRAME_DETAILS, "Dispatchers.IO", "SshRepository.kt:264-277"),
-            Triple(MERGE, "Dispatchers.IO", "SessionReaderConnection.kt:604-609"),
-            Triple(STATE_EMIT, "Dispatchers.IO", "SessionReaderConnection.kt:610-631"),
+            Triple(MERGE, "Dispatchers.IO", "SessionReaderConnection.kt:604-605"),
+            Triple(STATE_EMIT, "Dispatchers.IO", "SessionReaderConnection.kt:615-629"),
             Triple(UI_WORKING_READ, "Main", "WorkingDots.kt:27"),
         )
 
