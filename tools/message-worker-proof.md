@@ -29,7 +29,7 @@ The first half of the fix gates every spawn on a read-only check for queued, sen
 
 `tools/message-worker.test.py`, registered in `tools/check.sh source`, drives the request handler with real isolated SQLite stores and counts `subprocess.Popen` calls. Its historical control runs the idle-poll and submit tests against the asset at 3412dfdbe8567e46f1651826b91819461f0f77f4. It requires exactly the idle assertion to fail with 12 launches for 12 polls, while submit passes.
 
-The head tests cover empty polls, submit, retry, all five request operations and all five work states, cancelled rows with another chat's work, missing stores/folders, missing tables, read-only connection mode, the handed lock descriptor and its use by the child, and a real flock/FIFO wake without another spawn. Tests and phone verification run on GitHub only.
+The head tests cover empty polls, submit, retry, all five request operations and every work state, and pin the phone to the desktop gate where a sent row without a deadline is finished work that starts no helper, cancelled rows with another chat's work, missing stores/folders, missing tables, read-only connection mode, the handed lock descriptor and its use by the child, and a real flock/FIFO wake without another spawn. Tests and phone verification run on GitHub only.
 
 ## Desktop alignment
 

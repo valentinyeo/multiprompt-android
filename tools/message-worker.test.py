@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from contextlib import closing
 from unittest.mock import MagicMock, call, patch
@@ -119,7 +120,7 @@ class MessageWorkerRequestTest(unittest.TestCase):
 
     def test_all_five_requests_spawn_for_each_work_state(self):
         message = self.submit()
-        for state in ('queued', 'sent', 'failed', 'accepted', 'started'):
+        for state in ('queued', 'failed', 'accepted', 'started'):
             for op in ('snapshot', 'submit', 'retry', 'events', 'status'):
                 with self.subTest(state=state, op=op):
                     with closing(reader.message_store_db(self.base['tmux'])) as db, db:
@@ -136,6 +137,23 @@ class MessageWorkerRequestTest(unittest.TestCase):
                     self.spawn.reset_mock()
                     self.request(op, **values)
                     self.assertEqual(self.spawn.call_count, 1)
+
+    def test_a_sent_message_spawns_only_while_its_deadline_is_live(self):
+        message = self.submit()
+
+        def sent(deadline):
+            with closing(reader.message_store_db(self.base['tmux'])) as db, db:
+                db.execute('UPDATE shared_messages SET state=?,deadline=? WHERE id=?', ('sent', deadline, message['id']))
+
+        sent(None)
+        self.spawn.reset_mock()
+        self.request('snapshot')
+        self.assertEqual(self.spawn.call_count, 0, 'SENT_WITHOUT_DEADLINE_SPAWN')
+
+        sent(time.time() + 15)
+        self.spawn.reset_mock()
+        self.request('snapshot')
+        self.assertEqual(self.spawn.call_count, 1, 'SENT_WITH_DEADLINE_SPAWN')
 
     def test_cancelled_chat_does_not_spawn_for_another_chats_work(self):
         message = self.submit()
