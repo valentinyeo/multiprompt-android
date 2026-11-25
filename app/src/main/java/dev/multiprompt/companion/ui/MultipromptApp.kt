@@ -293,7 +293,7 @@ import dev.multiprompt.companion.terminal.TerminalKeys
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
-    androidx.compose.runtime.SideEffect { TypingProbe.composed("MultipromptApp") }
+    if (BuildConfig.DEBUG) androidx.compose.runtime.SideEffect { TypingProbe.composed("MultipromptApp") }
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
@@ -3129,7 +3129,7 @@ internal fun ReaderScreen(
     onTogglePin: (() -> Unit)? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
-    androidx.compose.runtime.SideEffect { TypingProbe.composed("ReaderScreen") }
+    if (BuildConfig.DEBUG) androidx.compose.runtime.SideEffect { TypingProbe.composed("ReaderScreen") }
     val reader by connection.state.collectAsState()
     val piModels by connection.piModels.collectAsState()
     val displayName = stringResource(R.string.app_name)
@@ -3159,11 +3159,18 @@ internal fun ReaderScreen(
     var pinnedPage by remember(session.hostId, session.name) { mutableStateOf(draftStore.pinnedPage(session)) }
     var pinPageOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
     var pageOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
-    var promptField by remember(connection) {
+    val promptField = remember(connection) {
         mutableStateOf(TextFieldValue(draftStore.composerDraft(session)))
     }
-    LaunchedEffect(connection, session.hostId, session.name, promptField.text) {
-        TypingProbe.measure("draftSave") { draftStore.setComposerDraft(session, promptField.text) }
+    var editingMessageId by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
+    LaunchedEffect(connection, session.hostId, session.name) {
+        snapshotFlow { promptField.value.text }.collect { text ->
+            TypingProbe.measure("draftSave") { draftStore.setComposerDraft(session, text) }
+            if (text.isBlank()) editingMessageId = null
+        }
+    }
+    DisposableEffect(connection, session.hostId, session.name) {
+        onDispose { draftStore.setComposerDraft(session, promptField.value.text) }
     }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     val replyGate = remember(connection, session.hostId, session.name) { ReplySwipeGate() }
@@ -3172,23 +3179,13 @@ internal fun ReaderScreen(
         replyTo = text
         promptFocusRequester.requestFocus()
     }
-    val prompt = promptField.text
     val pillSkills = remember(reader.nativeSkills, session.agent) {
         if (session.agent == AgentKind.CLAUDE) NativeSkills.catalogue(reader.nativeSkills) else reader.nativeSkills
     }
-    val skillQuery = if (session.agent == AgentKind.CLAUDE && promptField.selection.collapsed) {
-        NativeSkills.query(prompt, promptField.selection.start)
-    } else null
     val setPrompt: (String) -> Unit = { value ->
-        promptField = TextFieldValue(value, selection = TextRange(value.length))
+        promptField.value = TextFieldValue(value, selection = TextRange(value.length))
     }
-    var editingMessageId by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
-    LaunchedEffect(promptField.text) { if (promptField.text.isBlank()) editingMessageId = null }
     var mentionPicks by remember(connection) { mutableStateOf(emptyList<MentionChat>()) }
-    val mentionQuery = if (mentionChats.isNotEmpty() && skillQuery == null && promptField.selection.collapsed) {
-        ChatMention.query(prompt, promptField.selection.start)
-    } else null
-    val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
     var dictationBefore by remember(connection) { mutableStateOf(DictationDraft.captured("")) }
     var dictationCanceled by remember(connection) { mutableStateOf(false) }
     val dictationSubmissionStarted = remember(connection) { AtomicBoolean(false) }
@@ -3500,7 +3497,7 @@ internal fun ReaderScreen(
         }
     }
     val startDictation = {
-        dictationBefore = DictationDraft.captured(prompt)
+        dictationBefore = DictationDraft.captured(promptField.value.text)
         dictationCanceled = false
         dictationSubmissionStarted.set(false)
         microphoneError = null
@@ -3524,7 +3521,7 @@ internal fun ReaderScreen(
     LaunchedEffect(acceptedQueuedPrompts, queuedDraft) {
         val (id, draft) = queuedDraft ?: return@LaunchedEffect
         if (id !in acceptedQueuedPrompts) return@LaunchedEffect
-        if (promptField.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
+        if (promptField.value.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
             setPrompt("")
             mentionPicks = emptyList()
             imageAttachments = emptyList()
@@ -3543,7 +3540,7 @@ internal fun ReaderScreen(
         if (reader.failedActions > 0) {
             pendingPromptAction = null
             sentDraft?.let { draft ->
-                setPrompt(draft.restoredPrompt(prompt))
+                setPrompt(draft.restoredPrompt(promptField.value.text))
                 imageAttachments = draft.restoredImages(imageAttachments)
                 replyTo = replyTo ?: draft.replyTo
             }
@@ -3570,9 +3567,6 @@ internal fun ReaderScreen(
     val loadSkills = { connection.loadSkills(context.assets.open("native_skills.py").use { it.readBytes() }, session.workingDirectory) }
     LaunchedEffect(connection) {
         if (session.agent == AgentKind.CLAUDE) loadSkills()
-    }
-    LaunchedEffect(connection, skillQuery != null) {
-        if (skillQuery != null) loadSkills()
     }
     val routeSlashCommand: (String) -> Boolean = { draftText ->
         val route = if (replyTo != null || imageAttachments.isNotEmpty()) {
@@ -3636,7 +3630,7 @@ internal fun ReaderScreen(
                             sentDraft = draft
                             pendingPromptAction = actionCount
                         }
-                        if (promptField.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
+                        if (promptField.value.text == draft.prompt && imageAttachments == draft.images && replyTo == draft.replyTo) {
                             setPrompt("")
                             mentionPicks = emptyList()
                             imageAttachments = emptyList()
@@ -3677,9 +3671,9 @@ internal fun ReaderScreen(
                     dictation.stop()
                 }
             } else {
-                val renameTo = dev.multiprompt.companion.model.RenameCommand.parse(prompt)
+                val renameTo = dev.multiprompt.companion.model.RenameCommand.parse(promptField.value.text)
                 if (renameTo == null) {
-                    sendDraft(prompt)
+                    sendDraft(promptField.value.text)
                 } else {
                     val error = onRename(renameTo)
                     if (error == null) setPrompt("")
@@ -4350,6 +4344,17 @@ internal fun ReaderScreen(
             )
         },
         bottomBar = {
+            val prompt = promptField.value.text
+            val skillQuery = if (session.agent == AgentKind.CLAUDE && promptField.value.selection.collapsed) {
+                NativeSkills.query(prompt, promptField.value.selection.start)
+            } else null
+            val mentionQuery = if (mentionChats.isNotEmpty() && skillQuery == null && promptField.value.selection.collapsed) {
+                ChatMention.query(prompt, promptField.value.selection.start)
+            } else null
+            val mentionOptions = mentionQuery?.let { ChatMention.options(mentionChats, it.text) }.orEmpty()
+            LaunchedEffect(connection, skillQuery != null) {
+                if (skillQuery != null) loadSkills()
+            }
             FloatingBottomBar(
                 Modifier.imePadding()
                     .background(MaterialTheme.colorScheme.background)
@@ -4368,8 +4373,8 @@ internal fun ReaderScreen(
                         error = reader.skillsError,
                         onRetry = loadSkills,
                         onSelect = { skill ->
-                            val inserted = NativeSkills.insert(prompt, skill.name, promptField.selection.start)
-                            promptField = TextFieldValue(inserted.text, selection = TextRange(inserted.cursor.coerceIn(0, inserted.text.length)))
+                            val inserted = NativeSkills.insert(prompt, skill.name, promptField.value.selection.start)
+                            promptField.value = TextFieldValue(inserted.text, selection = TextRange(inserted.cursor.coerceIn(0, inserted.text.length)))
                             promptFocusRequester.requestFocus()
                         },
                     )
@@ -4379,8 +4384,8 @@ internal fun ReaderScreen(
                         chats = mentionOptions,
                         lookFor = { chat -> draftStore.botLook(chat.hostId, chat.session) },
                         onSelect = { chat ->
-                            val (value, cursor) = ChatMention.pick(prompt, mentionQuery, promptField.selection.start, chat)
-                            promptField = TextFieldValue(value, selection = TextRange(cursor))
+                            val (value, cursor) = ChatMention.pick(prompt, mentionQuery, promptField.value.selection.start, chat)
+                            promptField.value = TextFieldValue(value, selection = TextRange(cursor))
                             mentionPicks = mentionPicks + chat
                             promptFocusRequester.requestFocus()
                         },
@@ -4653,7 +4658,7 @@ internal fun ReaderScreen(
                                             icon = Icons.Outlined.AutoAwesome,
                                             onClick = {
                                                 attachMenuExpanded = false
-                                                promptField = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
+                                                promptField.value = TextFieldValue(NativeSkills.open(prompt), selection = TextRange(1))
                                                 promptFocusRequester.requestFocus()
                                             },
                                         )
@@ -4720,12 +4725,12 @@ internal fun ReaderScreen(
                         val skillText = remember(skillSpans, pillsDrawn, kitColors.text) {
                             if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans, kitColors.text)
                         }
-                        androidx.compose.runtime.SideEffect { TypingProbe.composed("Composer") }
+                        if (BuildConfig.DEBUG) androidx.compose.runtime.SideEffect { TypingProbe.composed("Composer") }
                         BasicTextField(
-                            value = promptField,
+                            value = promptField.value,
                             onValueChange = {
-                                if (it.text != promptField.text) TypingProbe.edited()
-                                promptField = it
+                                if (BuildConfig.DEBUG && it.text != promptField.value.text) TypingProbe.edited()
+                                promptField.value = it
                             },
                             modifier = Modifier.weight(1f).heightIn(min = Kit.ControlInnerSize).focusRequester(promptFocusRequester)
                                 .drawWithContent {
@@ -4863,7 +4868,7 @@ internal fun ReaderScreen(
                 replyGate = replyGate,
                 onReply = chooseReply,
                 onEditPending = { message ->
-                    if (promptField.text.isNotBlank()) {
+                    if (promptField.value.text.isNotBlank()) {
                         android.widget.Toast.makeText(context, "Send or clear your draft first", android.widget.Toast.LENGTH_SHORT).show()
                     } else {
                         setPrompt(dev.multiprompt.companion.reader.ChatMention.visible(message.text))

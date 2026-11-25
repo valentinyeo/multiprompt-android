@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.os.Looper
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.ViewRootForTest
 import androidx.compose.ui.semantics.SemanticsActions
@@ -19,6 +20,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextInputSelection
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextLayoutResult
 import dev.multiprompt.companion.model.AgentKind
 import dev.multiprompt.companion.reader.ChatHistoryCache
@@ -42,6 +46,7 @@ import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import org.junit.After
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -61,6 +66,7 @@ class ComposerLongDraftTest {
     @get:Rule val compose = createComposeRule(effectContext = UnconfinedTestDispatcher(scheduler))
     private lateinit var f: SessionActivityFixture
     private lateinit var connection: SessionReaderConnection
+    private val showingReader = mutableStateOf(true)
 
     private val skill = "/review-native"
     private val longDraft = "Checking when it resets. We need instructions for this, " +
@@ -87,13 +93,14 @@ class ComposerLongDraftTest {
     }
 
     @After fun cleanup() {
+        TypingProbe.compositions = null
         connection.close()
         f.close()
     }
 
     private fun render() {
         compose.setContent {
-            ReaderScreen(
+            if (showingReader.value) ReaderScreen(
                 connection = connection, dictation = f.app.deepgramDictation,
                 screencast = f.app.screencastUploader,
                 signedIn = true, onSignIn = {}, onSignOut = {},
@@ -264,6 +271,40 @@ class ComposerLongDraftTest {
         println("COMPOSER_TEXTS bar=$barTexts editable=$editable")
         assertTrue("the composer row shows no hint beside the draft: $barTexts", barTexts.isEmpty())
         assertTrue("the composer field holds the whole draft: $editable", editable.any { it == longDraft })
+    }
+
+    @Test fun leavingAfterAMiddleEditRestoresTheWholeDraft() {
+        render()
+        val field = compose.onNode(hasSetTextAction())
+        field.performTextInput("abcdefghij")
+        field.performTextInputSelection(TextRange(5))
+        field.performTextInput("MID")
+        compose.runOnIdle { showingReader.value = false }
+        compose.waitForIdle()
+        compose.runOnIdle { showingReader.value = true }
+        field.assertTextEquals("abcdeMIDfghij")
+    }
+
+    @Test fun typingAndMiddleEditsDoNotRecomposeTheReaderOrMessageList() {
+        val counts = mutableMapOf<String, Int>()
+        TypingProbe.compositions = { name -> counts[name] = (counts[name] ?: 0) + 1 }
+        render()
+        compose.waitForIdle()
+        assertTrue("the probe must see the real reader", (counts["ReaderScreen"] ?: 0) > 0)
+        assertTrue("the probe must see the real message list", (counts["ChatHistoryList"] ?: 0) > 0)
+        counts.clear()
+
+        val field = compose.onNode(hasSetTextAction())
+        "abcdefghij".forEach { field.performTextInput(it.toString()) }
+        field.performTextInputSelection(TextRange(5))
+        "MID".forEach { field.performTextInput(it.toString()) }
+        field.assertTextEquals("abcdeMIDfghij")
+        compose.waitForIdle()
+
+        assertEquals("typing must stay inside the composer", 0, counts["ReaderScreen"] ?: 0)
+        assertEquals("typing must not invalidate chat projection", 0, counts["ChatHistoryView"] ?: 0)
+        assertEquals("typing must not recompose messages", 0, counts["ChatHistoryList"] ?: 0)
+        assertTrue("the composer must actually update", (counts["Composer"] ?: 0) >= 13)
     }
 
     @Test fun aDraftThatFitsStillDrawsTheSkillPill() {
