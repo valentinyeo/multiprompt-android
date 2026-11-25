@@ -186,9 +186,13 @@ def step(name, out, work):
 
 
 def open_chat(chat, timeout):
+    started = time.monotonic()
     mpa('tap', 'desc', 'Robot ' + chat['session'], timeout=timeout + 120)
+    tapped = time.monotonic()
     mpa('read', '--wait-text', chat['marker'], '--timeout', str(timeout), timeout=timeout + 120)
-    return dict(session=chat['session'], marker=chat['marker'], bytes=chat['bytes'], rows=chat.get('rows'))
+    ready = time.monotonic()
+    return dict(session=chat['session'], marker=chat['marker'], bytes=chat['bytes'], rows=chat.get('rows'),
+                tap_ms=round((tapped - started) * 1000, 1), marker_ms=round((ready - tapped) * 1000, 1))
 
 
 def measure(targets):
@@ -237,12 +241,21 @@ def measure(targets):
     def switches():
         results = []
         for chat in targets['chats'][:SWITCHES]:
+            started = time.monotonic()
             mpa('key', 'back', timeout=120)
+            backed = time.monotonic()
             wait_inbox(INBOX_TIMEOUT)
+            listed = time.monotonic()
             try:
-                results.append(dict(open_chat(chat, CHAT_TIMEOUT), opened=True))
+                opened = open_chat(chat, CHAT_TIMEOUT)
+                results.append(dict(opened, opened=True, back_ms=round((backed - started) * 1000, 1),
+                                    inbox_ms=round((listed - backed) * 1000, 1),
+                                    switch_ms=round((time.monotonic() - started) * 1000, 1)))
             except MeasurementError as failure:
-                results.append(dict(session=chat['session'], opened=False, error=str(failure)))
+                results.append(dict(session=chat['session'], opened=False, error=str(failure),
+                                    back_ms=round((backed - started) * 1000, 1),
+                                    inbox_ms=round((listed - backed) * 1000, 1),
+                                    switch_ms=round((time.monotonic() - started) * 1000, 1)))
         if not any(item['opened'] for item in results):
             raise MeasurementError('NO_CHAT_OPENED: none of the five switch targets opened')
         return dict(attempted=len(results), opened=sum(1 for item in results if item['opened']), chats=results)

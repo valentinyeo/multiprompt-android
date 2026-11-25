@@ -97,7 +97,9 @@ def calls_in_window(events, started, ended, stream=None):
 def call_totals(calls):
     sizes = [call.get('bytes', 0) for call in calls]
     times = [call.get('ms', 0.0) for call in calls]
-    return dict(calls=len(calls), bytes=sum(sizes), median_bytes=median(sizes), max_bytes=max(sizes, default=0),
+    total = sum(sizes)
+    return dict(calls=len(calls), bytes=total, mean_bytes=round(total / len(calls)) if calls else 0,
+                median_bytes=median(sizes), max_bytes=max(sizes, default=0),
                 median_ms=median(times), max_ms=max(times, default=0.0))
 
 

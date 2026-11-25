@@ -57,8 +57,8 @@ def number(value):
 
 
 def detail_table(timings):
-    lines = ['| ref | seed | step | wall ms | cpu ms | janky % | frames | history calls | bytes per history call (median) | history ms (median) | sync calls | sync bytes (median) |',
-             '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |']
+    lines = ['| ref | seed | step | wall ms | cpu ms | janky % | frames | history calls | history bytes | bytes per history call | history ms (median) | sync calls | sync bytes | bytes per sync call |',
+             '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |']
     for timing in sorted(timings, key=lambda item: (label(item)[0], label(item)[1])):
         ref, seed = label(timing)
         largest = (timing.get('targets') or {}).get('largest') or {}
@@ -66,14 +66,32 @@ def detail_table(timings):
             gfx = step.get('gfx') or {}
             history = step.get('history') or {}
             sync = step.get('sync') or {}
-            lines.append('| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (
+            lines.append('| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (
                 ref, seed, step['name'], millis(step.get('wall_ms', 0)), millis(step.get('cpu_ms', 0)),
                 '%.0f' % gfx.get('janky_percent', 0), number(gfx.get('frames', 0)),
-                number(history.get('calls', 0)), number(history.get('median_bytes', 0)),
-                millis(history.get('median_ms', 0)), number(sync.get('calls', 0)), number(sync.get('median_bytes', 0))))
+                number(history.get('calls', 0)), number(history.get('bytes', 0)), number(history.get('mean_bytes', 0)),
+                millis(history.get('median_ms', 0)), number(sync.get('calls', 0)), number(sync.get('bytes', 0)),
+                number(sync.get('mean_bytes', 0))))
         if largest:
-            lines.append('| %s | %s | largest chat | %s bytes, %s rows, marker %s | | | | | | | | |' % (
-                ref, seed, number(largest.get('bytes', 0)), number(largest.get('rows', 0)), largest.get('marker', '')))
+            cells = [ref, seed, 'largest chat', '%s bytes, %s rows, marker %s' % (
+                number(largest.get('bytes', 0)), number(largest.get('rows', 0)), largest.get('marker', ''))]
+            lines.append('| ' + ' | '.join(cells + [''] * 10) + ' |')
+    return lines
+
+
+def switch_table(timings):
+    lines = ['| ref | seed | chat | transcript bytes | back ms | inbox ms | tap ms | marker ms | whole switch ms |',
+             '| --- | --- | --- | --- | --- | --- | --- | --- | --- |']
+    for timing in sorted(timings, key=lambda item: (label(item)[0], label(item)[1])):
+        ref, seed = label(timing)
+        for step in timing.get('steps', []):
+            if step.get('name') != 'switch-five':
+                continue
+            for chat in (step.get('detail') or {}).get('chats') or []:
+                lines.append('| %s | %s | %s | %s | %s | %s | %s | %s | %s |' % (
+                    ref, seed, chat.get('session', ''), number(chat.get('bytes', 0)),
+                    millis(chat.get('back_ms', 0)), millis(chat.get('inbox_ms', 0)), millis(chat.get('tap_ms', 0)),
+                    millis(chat.get('marker_ms', 0)), millis(chat.get('switch_ms', 0))))
     return lines
 
 
@@ -104,6 +122,8 @@ def render(timings):
     lines.extend(comparison_table(timings))
     lines.extend(['', '## Every step with its reader traffic', ''])
     lines.extend(detail_table(timings))
+    lines.extend(['', '## Where one switch goes', ''])
+    lines.extend(switch_table(timings))
     lines.extend(['', 'History calls are the reader channel (`--serve`) requests the phone made inside the step window,'
                        ' counted by the fixture host relay from its own protocol log. Sync calls are the tmux listing'
                        ' commands made inside the same window.'])

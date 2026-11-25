@@ -61,7 +61,14 @@ class RenderTest(unittest.TestCase):
         self.assertIn('10000 / 5500', text)
         self.assertIn('cold launch to Inbox', text)
         self.assertIn('54000000 bytes, 30000 rows', text)
-        self.assertIn('| main | scale | launch-inbox | 10000 | 5500 | 50 | 40 | 2 | 900 | 40 | 1 | 4500 |', text)
+        self.assertIn('| main | scale | launch-inbox | 10000 | 5500 | 50 | 40 | 2 | 1800 | 900 | 40 | 1 | 4500 | 4500 |', text)
+
+    def test_switch_table_names_the_action_that_ate_the_time(self):
+        switched = dict(STEP, name='switch-five', detail=dict(chats=[
+            dict(session='live-scale-01', bytes=54_532_789, opened=True, back_ms=900.0, inbox_ms=61_000.0,
+                 tap_ms=1_200.0, marker_ms=2_400.0, switch_ms=65_500.0)]))
+        text = report.render([report.enrich(dict(timing(), steps=[switched]), relay_lines())])
+        self.assertIn('| head | scale | live-scale-01 | 54532789 | 900 | 61000 | 1200 | 2400 | 65500 |', text)
 
     def test_render_names_measurements_that_lost_their_reader_log(self):
         kept = report.enrich(timing(seed='small', ref='head'), relay_lines())
