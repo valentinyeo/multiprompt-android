@@ -1,7 +1,7 @@
 tap_desc 'Session actions'
 tap_text Display
 tap_text 'Show terminal details'
-wait_for_text 'Terminal detail'
+wait_for_text 'Terminal intentionally contains no chat replies.'
 shot pane-scrollback
 sleep 3
 sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pane-scrollback-requests.jsonl"
