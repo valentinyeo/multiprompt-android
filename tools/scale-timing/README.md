@@ -10,7 +10,7 @@ Later rounds dispatch this same frozen harness revision, changing only `app_ref`
 The measured revision is built in its own worktree; the driver and fixtures stay at the dispatch revision.
 Never change the workload, repeat count, durations, seeds, metric definitions or emulator configuration during
 an optimization round. A changed harness fingerprint requires a new baseline, not a comparison with the old one.
-`mubo-555-v2` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
+`mubo-555-v3` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
 driver, emulator/build actions and workflow.
 
 ## Runner entry point
@@ -59,6 +59,15 @@ Every metric has `median`, `min`, `max`; there are no timestamps, PIDs or run ID
 - **Platform warnings** separately counts the narrow allowlist of Android platform E lines logged under the app PID:
   `FrameTracker` `force finish cuj, time out: J<IME_INSETS_(SHOW|HIDE)_ANIMATION::...@<package>>`. Every other app-PID E
   line still counts in **Errors**.
+- **SSH logins/min** counts the fixture sshd's own `Accepted publickey` lines for `verifyssh` whose timestamp falls
+  in the measured window, divided by the window, so a login is measured instead of inferred from the relay or from
+  app code. The fixture already logs at `LogLevel VERBOSE` to `$FIXTURE/sshd.log`; `tools/scale-timing/logins.py`
+  reads that file and keeps only the user, the log's own timestamp and the key fingerprint of each counted line.
+  Those retained lines sit in the trial records of `samples.json`, and `tools/scale-timing/logins.test.py` proves
+  lines outside the window, lines for other users and several logins in one trial. sshd writes the accept before
+  the relay records the channel open, so a login that straddles a window edge is counted in the earlier window.
+  A run whose relay opened channels but captured no login at all fails with `BENCHMARK_SSH_LOGINS_UNMEASURED`
+  rather than publishing a fast zero, and an unreadable auth log fails the trial with `BENCHMARK_AUTH_LOG_UNREADABLE`.
 - **Driver time stays separate** in each trial's `driver` and `wall_ms`. CPU never includes the `mpa`, adb,
   UI-automation or fixture processes. Do not subtract driver wall time from app CPU: they overlap, with different units.
   Wall time includes UI dumps and is not published as app latency. Idle/stream windows avoid UI dumps entirely.

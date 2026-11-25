@@ -10,13 +10,15 @@ import subprocess
 import sys
 import time
 
+import logins
 import measure
 import parsers
 from runtime import DRIVER, MeasurementError, adb, mpa
 
 SCENARIOS = ('cold_start', 'chat_switch', 'idle_inbox', 'typing_long_chat', 'streaming_reply')
 METRICS = ('app_cpu_ms', 'main_thread_ms', 'frames_over_16_ms_secondary',
-           'list_sessions_per_minute', 'bytes_per_minute', 'errors', 'platform_warnings')
+           'list_sessions_per_minute', 'bytes_per_minute', 'errors', 'platform_warnings',
+           'ssh_logins_per_minute')
 ERROR_FIELDS = ('crashes', 'anrs', 'failed_steps', 'app_logcat_e', 'relay_failures')
 PLATFORM_WARNING_PATTERNS = (
     ('FrameTracker', r'^force finish cuj, time out: J<IME_INSETS_(?:SHOW|HIDE)_ANIMATION::\d+@\d+@{package}>\Z'),
@@ -24,7 +26,7 @@ PLATFORM_WARNING_PATTERNS = (
 REPEATS = 5
 SECONDS = 20
 DRAFT = 'Frozen benchmark types this everyday message.'
-VERSION = 'mubo-555-v2'
+VERSION = 'mubo-555-v3'
 DIRECTORY = Path(__file__).resolve().parent
 
 
@@ -86,6 +88,17 @@ def errors(log, package, pids, failed=False):
                 app_logcat_e=app_e, platform_warnings=platform_warnings)
 
 
+def auth_text(fixture):
+    path = Path(fixture) / 'sshd.log'
+    try:
+        result = subprocess.run(['sudo', 'cat', str(path)], capture_output=True, text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as error:
+        raise MeasurementError('BENCHMARK_AUTH_LOG_UNREADABLE: ' + str(error))
+    if result.returncode != 0:
+        raise MeasurementError('BENCHMARK_AUTH_LOG_UNREADABLE: ' + result.stderr.strip()[-200:])
+    return result.stdout
+
+
 def traffic(events, started, ended):
     chosen = [event for event in events if started <= event.get('t', 0) <= ended]
     listings = sum(event.get('event') == 'open' and event.get('list_sessions') is True for event in chosen)
@@ -122,8 +135,9 @@ def compare(baseline, candidate):
 
 def table(result):
     lines = [f"### {result['seed']} · {result['app_sha']}", '',
-             '| Scenario | App CPU ms | Main ms | >16 ms frames (secondary) | listSessions/min | bytes/min | Errors | Platform warnings |',
-             '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |']
+             '| Scenario | App CPU ms | Main ms | >16 ms frames (secondary) | listSessions/min | bytes/min | '
+             'Errors | Platform warnings | SSH logins/min |',
+             '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |']
     for scenario in SCENARIOS:
         values = result['scenarios'][scenario]
         cells = [f"{values[metric]['median']:g} [{values[metric]['min']:g}, {values[metric]['max']:g}]" for metric in METRICS]
@@ -202,7 +216,14 @@ def sample(scenario, repetition, work, args, out):
     (out / 'relay.jsonl').write_text(relay_log)
     if not relay_log.strip():
         failed = failed or 'BENCHMARK_RELAY_MISSING'
-    relay = traffic(parsers.relay_events(relay_log), started, ended)
+    events = parsers.relay_events(relay_log)
+    relay = traffic(events, started, ended)
+    opens = sum(1 for event in events if event.get('event') == 'open' and started <= event.get('t', 0) <= ended)
+    try:
+        logins_measured = logins.measure(auth_text(args.fixture), started, ended)
+    except (MeasurementError, ValueError) as error:
+        failed = failed or str(error)
+        logins_measured = dict(logins=0, per_minute=None, retained=[])
     if scenario == 'cold_start' and (relay['list_sessions'] == 0 or relay['bytes'] == 0):
         failed = failed or 'BENCHMARK_COLD_START_NO_LIST'
     if scenario == 'streaming_reply' and not failed:
@@ -218,12 +239,13 @@ def sample(scenario, repetition, work, args, out):
                    list_sessions_per_minute=relay['list_sessions_per_minute'],
                    bytes_per_minute=relay['bytes_per_minute'],
                    errors=sum(counts[key] for key in ERROR_FIELDS),
-                   platform_warnings=counts['platform_warnings'])
+                   platform_warnings=counts['platform_warnings'],
+                   ssh_logins_per_minute=logins_measured['per_minute'])
     record = dict(scenario=scenario, repetition=repetition, valid=not failed,
                   metrics=metrics, error_counts=counts, failure=failed,
                   started_unix=started, ended_unix=ended, cpu_before=before, cpu_after=after,
                   wall_ms=round((ended - started) * 1000, 3), driver=driver,
-                  work=detail, traffic=relay)
+                  work=detail, traffic=relay, relay_opens=opens, logins=logins_measured)
     (out / f'{repetition}-{scenario}.json').write_text(json.dumps(record, indent=2) + '\n')
     print(json.dumps(record), flush=True)
     if failed:
@@ -303,6 +325,8 @@ def run(args):
         subprocess.run(['sudo', '-u', 'verifyssh', sys.executable, '/home/verifyssh/frozen-stream.py',
                         '--transcript', largest['transcript'], '--restore'], check=True, timeout=30)
     measure.copy_relay(out)
+    if sum(record['logins']['logins'] for record in records) == 0 and sum(record['relay_opens'] for record in records):
+        raise MeasurementError('BENCHMARK_SSH_LOGINS_UNMEASURED')
     result = aggregate(records, args.app_sha, args.seed, fingerprint())
     (out / 'results.json').write_text(json.dumps(result, indent=2) + '\n')
     (out / 'samples.json').write_text(json.dumps(records, indent=2) + '\n')
