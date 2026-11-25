@@ -188,8 +188,8 @@ def driver_table(timings):
 
 
 def idle_table(timings):
-    lines = ['| ref | seed | idle ms | app cpu ms | cpu per %d ms | listSessions opens | history opens |' % REFRESH_PERIOD_MS,
-             '| --- | --- | --- | --- | --- | --- | --- |']
+    lines = ['| ref | seed | idle ms | app cpu ms | cpu per %d ms | listSessions opens | history opens | app cpu ms/min | listSessions/min |' % REFRESH_PERIOD_MS,
+             '| --- | --- | --- | --- | --- | --- | --- | --- | --- |']
     for timing in sorted(timings, key=lambda item: (label(item)[0], label(item)[1])):
         ref, seed = label(timing)
         for step in timing.get('steps', []):
@@ -198,9 +198,12 @@ def idle_table(timings):
             wall = step.get('wall_ms', 0)
             cpu = step.get('cpu_ms', 0)
             ticks = wall / REFRESH_PERIOD_MS if wall else 0
-            lines.append('| %s | %s | %s | %s | %s | %s | %s |' % (
+            per_minute = 60_000 / wall if wall else 0
+            opens = (step.get('sync') or {}).get('opens', 0)
+            lines.append('| %s | %s | %s | %s | %s | %s | %s | %.1f | %.1f |' % (
                 ref, seed, millis(wall), millis(cpu), millis(cpu / ticks if ticks else 0),
-                number((step.get('sync') or {}).get('opens', 0)), number((step.get('history') or {}).get('opens', 0))))
+                number(opens), number((step.get('history') or {}).get('opens', 0)),
+                cpu * per_minute, opens * per_minute))
     return lines if len(lines) > 2 else []
 
 

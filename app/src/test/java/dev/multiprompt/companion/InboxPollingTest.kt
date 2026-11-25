@@ -54,6 +54,7 @@ class InboxPollingTest {
         model.historyWarmer = { _, _ -> }
         state.value = AppUiState(hosts = listOf(host))
         foreground.value = true
+        model.setInboxVisible(true)
         advance(0)
     }
 
@@ -111,6 +112,49 @@ class InboxPollingTest {
         }
         advance(1_999); assertEquals(before + 1, calls)
         advance(1); assertEquals(before + 2, calls)
+    }
+
+    @Test fun aTapWithoutARefreshAlsoRestartsTheTwoSecondInterval() {
+        firstPoll(); advance(2_000); advance(4_000); advance(8_000)
+        val before = calls
+        model.onUserInteraction()
+        advance(1_999); assertEquals(before, calls)
+        advance(1); assertEquals(before + 1, calls)
+    }
+
+    @Test fun aNewReplyAtMaximumBackoffArrivesWithinTenSeconds() {
+        firstPoll(); advance(2_000); advance(4_000); advance(8_000)
+        sessions = sessions.map { it.copy(lastActivityEpochSeconds = 2, preview = "New reply") }
+        advance(9_999)
+        assertNotEquals("New reply", model.state.value.sessions.single().preview)
+        advance(1)
+        assertEquals("New reply", model.state.value.sessions.single().preview)
+        val before = calls
+        advance(2_000); assertEquals(before + 1, calls)
+    }
+
+    @Test fun realResumeRefreshesImmediatelyAndRestartsFast() {
+        firstPoll(); advance(2_000); advance(4_000); advance(8_000)
+        model.onPause()
+        advance(30_000)
+        val before = calls
+        compose.runOnIdle { model.onResume() }
+        advance(0)
+        compose.waitUntil(5_000) {
+            shadowOf(Looper.getMainLooper()).idle()
+            calls == before + 1 && !model.state.value.refreshing
+        }
+        advance(1_999); assertEquals(before + 1, calls)
+        advance(1); assertEquals(before + 2, calls)
+    }
+
+    @Test fun noPollingWhileSettingsHideTheInbox() {
+        firstPoll()
+        model.setInboxVisible(false)
+        advance(30_000); assertEquals(1, calls)
+        model.setInboxVisible(true)
+        advance(1_999); assertEquals(1, calls)
+        advance(1); assertEquals(2, calls)
     }
 
     @Test fun noPollingWhenBackgroundedEvenAfterTheOldBackgroundInterval() {

@@ -556,12 +556,18 @@
         "prerequisites": [],
         "driver": true,
         "scripts": [
-          "tools/session-gestures/drive.py"
+          "tools/session-gestures/drive.py",
+          ".claude/skills/verify-multiprompt-android/scripts/inbox-poll-drive.sh"
         ]
       },
       "outcomes": [
         "inbox.summaries"
-      ]
+      ],
+      "evidence": {
+        "inbox-message-latency.txt": 40,
+        "inbox-poll-windows.json": 500,
+        "inbox-new-message-host.txt": 300
+      }
     },
     "sessions.md": {
       "name": "Sessions",
@@ -1537,7 +1543,8 @@
       "journey": "session-summaries.md",
       "sideEffect": false,
       "match": [
-        "SessionPreview"
+        "SessionPreview",
+        "setInboxVisible|sessionRefreshIntervalMs|onUserInteraction|onInboxVisibilityChanged"
       ]
     },
     "inbox.search": {

@@ -122,7 +122,7 @@ class BreakdownTest(unittest.TestCase):
         idle = dict(STEP, name='idle-inbox', wall_ms=21000.0, cpu_ms=4200.0, detail=dict(seconds=20))
         text = report.render([report.enrich(dict(timing(), steps=[idle]), relay_lines())])
         self.assertIn('## An idle Inbox', text)
-        self.assertIn('| head | scale | 21000 | 4200 | 400 | 1 | 0 |', text)
+        self.assertIn('| head | scale | 21000 | 4200 | 400 | 1 | 0 | 12000.0 | 2.9 |', text)
 
     def test_a_timing_without_breakdowns_renders_no_breakdown_sections(self):
         text = report.render([report.enrich(timing(), relay_lines())])
