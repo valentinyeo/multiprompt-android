@@ -1,0 +1,169 @@
+{
+  "schema": "mubo-555-v1",
+  "harness": "a35f522aadcb1a1f6c880a96fcec798fa2a3022c52028c9d8e1f1a3f14f0febc",
+  "app_sha": "5ed79144693c2a93813a9b774fc0dd0f6f4a9f08",
+  "seed": "scale",
+  "repeats": 5,
+  "scenarios": {
+    "cold_start": {
+      "app_cpu_ms": {
+        "median": 7390.0,
+        "min": 6590.0,
+        "max": 8970.0
+      },
+      "main_thread_ms": {
+        "median": 2240.0,
+        "min": 2080.0,
+        "max": 2780.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 3,
+        "min": 2,
+        "max": 3
+      },
+      "list_sessions_per_minute": {
+        "median": 9.88,
+        "min": 9.163,
+        "max": 10.044
+      },
+      "bytes_per_minute": {
+        "median": 17005752.695,
+        "min": 6953937.543,
+        "max": 18382957.49
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "chat_switch": {
+      "app_cpu_ms": {
+        "median": 1790.0,
+        "min": 1500.0,
+        "max": 1970.0
+      },
+      "main_thread_ms": {
+        "median": 280.0,
+        "min": 260.0,
+        "max": 340.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 5,
+        "min": 4,
+        "max": 8
+      },
+      "list_sessions_per_minute": {
+        "median": 12.234,
+        "min": 11.647,
+        "max": 12.545
+      },
+      "bytes_per_minute": {
+        "median": 289301.949,
+        "min": 274810.749,
+        "max": 3117009.921
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "idle_inbox": {
+      "app_cpu_ms": {
+        "median": 1170.0,
+        "min": 1140.0,
+        "max": 1360.0
+      },
+      "main_thread_ms": {
+        "median": 30.0,
+        "min": 30.0,
+        "max": 40.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "list_sessions_per_minute": {
+        "median": 9.0,
+        "min": 9.0,
+        "max": 9.0
+      },
+      "bytes_per_minute": {
+        "median": 205325.033,
+        "min": 204968.73,
+        "max": 205325.158
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "typing_long_chat": {
+      "app_cpu_ms": {
+        "median": 8720.0,
+        "min": 7770.0,
+        "max": 9910.0
+      },
+      "main_thread_ms": {
+        "median": 1000.0,
+        "min": 1000.0,
+        "max": 1130.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 129,
+        "min": 124,
+        "max": 146
+      },
+      "list_sessions_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "bytes_per_minute": {
+        "median": 10387.088,
+        "min": 9913.531,
+        "max": 10636.928
+      },
+      "errors": {
+        "median": 1,
+        "min": 1,
+        "max": 1
+      }
+    },
+    "streaming_reply": {
+      "app_cpu_ms": {
+        "median": 2920.0,
+        "min": 2660.0,
+        "max": 3220.0
+      },
+      "main_thread_ms": {
+        "median": 430.0,
+        "min": 340.0,
+        "max": 520.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 73,
+        "min": 70,
+        "max": 74
+      },
+      "list_sessions_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "bytes_per_minute": {
+        "median": 85671.332,
+        "min": 78810.128,
+        "max": 87286.662
+      },
+      "errors": {
+        "median": 1,
+        "min": 1,
+        "max": 2
+      }
+    }
+  }
+}

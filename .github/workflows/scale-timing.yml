@@ -8,13 +8,18 @@ on:
         type: string
         required: false
         default: ''
-      typing:
-        description: Measure single-key typing and middle edits on the largest scale chat
-        type: boolean
-        default: false
+      mode:
+        description: Frozen five-scenario benchmark, or the older diagnostic breakdown
+        type: choice
+        options: [frozen, diagnostic]
+        default: frozen
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: scale-timing-${{ github.ref }}-${{ inputs.app_ref || 'head' }}
@@ -24,18 +29,19 @@ jobs:
   measure:
     name: timing ${{ matrix.seed }} ${{ inputs.app_ref || 'head' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 55
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       max-parallel: 2
       matrix:
-        seed: ${{ inputs.typing && fromJSON('["scale"]') || fromJSON('["small","scale"]') }}
+        seed: [small, scale]
     env:
       GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
       EVIDENCE: ${{ github.workspace }}/scale-evidence
       FIXTURE: ${{ github.workspace }}/verify-ssh
       TIMING_SEED: ${{ matrix.seed }}
       APP_REF: ${{ inputs.app_ref }}
+      TIMING_MODE: ${{ inputs.mode || 'frozen' }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       VERIFY_FEATURE: ${{ matrix.seed == 'scale' && 'long-chat.md' || '' }}
     steps:
@@ -65,7 +71,6 @@ jobs:
       - name: Build the debug APK from the measured revision
         timeout-minutes: 35
         run: |
-          set -euo pipefail
           tools/ci/gradle-retry.sh -p "$APP_SOURCE" --no-daemon -Dorg.gradle.jvmargs=-Xmx3g \
             -PversionName="0.1.2-verify.$GITHUB_RUN_NUMBER" assembleDebug assembleDebugAndroidTest 2>&1 | tee "$EVIDENCE/build.txt"
           printf 'VERIFY_APK=%s\n' "$APP_SOURCE/app/build/outputs/apk/debug/app-debug.apk" >> "$GITHUB_ENV"
@@ -82,7 +87,10 @@ jobs:
         if: matrix.seed != 'scale'
         run: sudo python3 tools/scale-timing/hostseed.py relay --relay tools/scale-timing/relay.py
       - name: Pick the timing targets from the seeded host
-        run: sudo python3 tools/scale-timing/targets.py --seed "$TIMING_SEED" --out "$EVIDENCE/timing-targets.json"
+        run: |
+          sudo python3 tools/scale-timing/targets.py --seed "$TIMING_SEED" --out "$EVIDENCE/timing-targets.json"
+          sudo install -m 755 tools/scale-timing/stream.py /home/verifyssh/frozen-stream.py
+          { uptime; nproc; uname -a; git rev-parse HEAD; } > "$EVIDENCE/benchmark-host.txt"
       - name: Install, sign in and time the phone
         id: timing
         uses: ./.github/actions/android-proof
@@ -91,9 +99,11 @@ jobs:
           script: |
             adb install -r -g "$VERIFY_APK"
             adb install -r "$VERIFY_TEST_APK"
-            if [ "${{ inputs.typing }}" = true ]; then
-              trap '.claude/skills/verify-multiprompt-android/scripts/mpa cleanup --fixture "$FIXTURE"' EXIT
-              python3 tools/scale-timing/measure-typing.py 2>&1 | tee "$EVIDENCE/typing-table.md"
+            if [ "$TIMING_MODE" = frozen ]; then
+              timeout 3000 python3 tools/scale-timing/frozen.py run --seed "$TIMING_SEED" \
+                --app-sha "$(cat "$EVIDENCE/app-source-sha.txt")" \
+                --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
+                --fixture "$FIXTURE" --expected-version "$EXPECTED_VERSION"
             else
               python3 tools/scale-timing/measure.py --seed "$TIMING_SEED" --ref "$TIMING_REF" \
                 --targets "$EVIDENCE/timing-targets.json" --out "$EVIDENCE/timing" --evidence "$EVIDENCE" \
@@ -102,8 +112,8 @@ jobs:
       - name: Publish this seed's timing table
         if: always()
         run: |
-          if [ -s "$EVIDENCE/typing-table.md" ]; then
-            cat "$EVIDENCE/typing-table.md" >> "$GITHUB_STEP_SUMMARY"
+          if [ -s "$EVIDENCE/timing/results.json" ]; then
+            python3 tools/scale-timing/frozen.py report --root "$EVIDENCE" --out "$EVIDENCE/timing-table.md" | tee -a "$GITHUB_STEP_SUMMARY"
           elif [ -s "$EVIDENCE/timing/timing.json" ]; then
             python3 tools/scale-timing/report.py --root "$EVIDENCE" --out "$EVIDENCE/timing-table.md" | tee -a "$GITHUB_STEP_SUMMARY"
           else
@@ -122,7 +132,7 @@ jobs:
   table:
     name: timing table
     needs: measure
-    if: always() && needs.measure.result != 'cancelled' && !inputs.typing
+    if: always() && needs.measure.result != 'cancelled'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -135,7 +145,14 @@ jobs:
           pattern: timing-*-*
           path: measurements
       - name: Render the timing table
-        run: python3 tools/scale-timing/report.py --root measurements --out measurements/report.md | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          TIMING_MODE: ${{ inputs.mode || 'frozen' }}
+        run: |
+          if [ "$TIMING_MODE" = frozen ]; then
+            python3 tools/scale-timing/frozen.py report --root measurements --out measurements/report.md | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            python3 tools/scale-timing/report.py --root measurements --out measurements/report.md | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Retain the table
         uses: actions/upload-artifact@v4
         with:

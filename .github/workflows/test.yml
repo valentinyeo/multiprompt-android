@@ -123,6 +123,14 @@ jobs:
         env:
           GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh unit
+      - name: Pane frame cost summary
+        if: always()
+        run: |
+          report=app/build/mubo-453-frame/frame-cost.md
+          if [ -f "$report" ]; then
+            cat "$report"
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Per snapshot cost report
         if: always()
         run: |

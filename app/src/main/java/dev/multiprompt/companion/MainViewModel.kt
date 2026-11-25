@@ -1761,11 +1761,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val snapshot = _state.value
                 val workingKeys = buildSet {
                     warmReaders.forEach { (key, reader) ->
-                        if (reader.state.value.isWorking(reader.agent)) add(key)
+                        if (reader.state.value.isWorking()) add(key)
                     }
                     val openReader = snapshot.reader
                     val openSession = snapshot.readerSession
-                    if (openReader != null && openSession != null && openReader.state.value.isWorking(openSession.agent)) {
+                    if (openReader != null && openSession != null && openReader.state.value.isWorking()) {
                         add(SessionReadStore.key(openSession.hostId, openSession.name))
                     }
                 }
