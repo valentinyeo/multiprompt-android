@@ -1,0 +1,4 @@
+@mp	1	history	ok	mubo-135	0	200	9	0	claude	mubo-135
+{"role":"assistant","id":"reply-row","reply_id":"hax-msg-mubo-135","text":"I am back. The drain counted 7 tickets in flight and 8 still to do.\npstack: Orchestrate playbook, Prove It Works","offset":0,"end":100}
+{"role":"assistant","id":"status-row","reply_id":"hax-msg-mubo-136","text":"Pulling the KPI counts by hand now.","offset":100,"end":200}
+@@MP_END@@

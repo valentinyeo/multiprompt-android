@@ -40,10 +40,17 @@ for entry in \
     place "src/$path" "app/src/main/assets/$path"
 done
 for entry in \
-    'multibot-feedback-test.py d1881053e8377aed1cbabc5acbf309429ef761f507f41ed0c7646c9cb299af88'; do
+    'tools/multibot-feedback-test.py d1881053e8377aed1cbabc5acbf309429ef761f507f41ed0c7646c9cb299af88' \
+    'tools/chat-history-reader-test.py 5cf39892182f51499338c5cce4f6150dc1923651607f344c813d05395ece419a' \
+    'tools/fixtures/MUBO-135/hax-reply-ids.jsonl 97ce377f262c2abc4222bd4ddfed4bf5da69aa6061df314e131b632a04c81a82' \
+    'tools/fixtures/MUBO-135/hax-reply.jsonl 3e6d7642a01e0447fcf0834bf0037a379fb8a92f96c25e45886c366580ae19fa' \
+    'tools/fixtures/MUBO-135/history-wire.txt 32dd4163473a319a81acf3323d2a62809c2d17c6c69932c48b999649259fadfe' \
+    'tools/fixtures/MUBO-135/live-events.json e719dd9afde2790d7f74e63bb1e3127bbfdb62eda39f5fb9f620cbaa8816b97c' \
+    'tools/fixtures/MUBO-293/slash-command-reply.jsonl 6819cbe8e7dfcf22bf46f4cc065dbaefd051060ffb5cca758d9ad0491ffd864c' \
+    'tools/fixtures/MUBO-293/unknown-slash-command.jsonl 587cf778b1c1eaa29845d4944d53474745ae1b12ce66b000d01fb66989606925'; do
     read -r path hash <<< "$entry"
-    fetch "tools/$path" "$hash"
-    place "tools/$path" "tools/vendor/chat-reader/tools/$path"
+    fetch "$path" "$hash"
+    place "$path" "tools/vendor/chat-reader/$path"
 done
 python3 -B tools/chat-reader-bundle.py --revision "$revision" "$mode"
-printf 'Reader, connectors and vendored tests match canonical revision and SHA256\n'
+printf 'Reader, connectors, vendored tests and their fixtures match canonical revision and SHA256\n'
