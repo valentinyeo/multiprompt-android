@@ -25,7 +25,7 @@ class SnapshotCostSplitTest {
         val mode = if (growing) "growing" else "identical"
         val cache = ChatHistoryCache(temporary.newFolder("cache-$size-$mode"))
         val base = LongChatSnapshot.built(0L, targetBytes).size
-        assertTrue("the $size snapshot must land close to its target", kotlin.math.abs(base - targetBytes) <= targetBytes / 20)
+        assertTrue("the $size snapshot must land close to its target", kotlin.math.abs(base - targetBytes) <= targetBytes / 50)
         val frame = Timed(SNAPSHOTS)
         val parse = Timed(SNAPSHOTS)
         val merge = Timed(SNAPSHOTS)

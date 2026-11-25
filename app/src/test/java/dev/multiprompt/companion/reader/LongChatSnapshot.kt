@@ -13,6 +13,7 @@ internal object LongChatSnapshot {
     private const val MTIME = 1_700_800_000_000L
     private const val START = 1_700_000_000L
     private val NEWLINE = byteArrayOf(10)
+    private val budgets = HashMap<Int, Int>()
 
     val identity = ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "", SITE, SID)
 
@@ -20,23 +21,40 @@ internal object LongChatSnapshot {
 
     fun newline(): ByteArray = NEWLINE
 
-    fun built(id: Long, targetBytes: Int, extraMessages: Int = 0): Built {
+    fun built(id: Long, targetBytes: Int, extraMessages: Int = 0): Built =
+        build(id, budgetFor(id, targetBytes), extraMessages)
+
+    @Synchronized
+    private fun budgetFor(id: Long, targetBytes: Int): Int = budgets.getOrPut(targetBytes) { calibrate(id, targetBytes) }
+
+    private fun calibrate(id: Long, targetBytes: Int): Int {
+        var budget = targetBytes
+        repeat(12) {
+            val size = build(id, budget, 0).size
+            if (kotlin.math.abs(size - targetBytes) <= targetBytes / 200) return budget
+            budget = (budget.toDouble() * targetBytes / size).toInt().coerceAtLeast(1024)
+        }
+        return budget
+    }
+
+    private fun build(id: Long, targetBytes: Int, extraMessages: Int): Built {
         val rows = ArrayList<String>()
         var offset = 0L
         var used = header(id, 0L).toByteArray(Charsets.UTF_8).size + TranscriptProtocol.END.length + 2
         var index = 0
         while (used < targetBytes) {
-            val line = row(offset, index)
+            val line = row(offset, index, role(index))
             rows.add(line)
             used += line.toByteArray(Charsets.UTF_8).size + 1
-            offset = offset + text(index).toByteArray(Charsets.UTF_8).size
+            offset = offset + body(index, role(index)).toByteArray(Charsets.UTF_8).size
             index++
         }
         val baseMessages = index
-        repeat(extraMessages) {
-            val line = row(offset, index)
+        repeat(extraMessages) { extra ->
+            val role = if (extra % 2 == 0) "user" else "assistant"
+            val line = row(offset, index, role)
             rows.add(line)
-            offset = offset + text(index).toByteArray(Charsets.UTF_8).size
+            offset = offset + body(index, role).toByteArray(Charsets.UTF_8).size
             index++
         }
         rows.add(status(offset))
@@ -57,7 +75,7 @@ internal object LongChatSnapshot {
 
     private fun stamp(index: Int): String = Instant.ofEpochSecond(START + index * 60L).toString()
 
-    private fun text(index: Int): String = when (role(index)) {
+    private fun body(index: Int, role: String): String = when (role) {
         "user" -> "Step $index: read the newest snapshot and report where the phone spends its time."
         "tool" -> toolText()
         else -> buildString {
@@ -71,20 +89,20 @@ internal object LongChatSnapshot {
     private fun toolText(): String = "Bash git status --short\nworking tree clean\n".repeat(3) +
         "Read app/src/main/java/dev/multiprompt/companion/reader/ChatHistory.kt\n"
 
-    private fun row(offset: Long, index: Int): String {
-        val body = text(index)
+    private fun row(offset: Long, index: Int, role: String): String {
+        val text = body(index, role)
         val row = JSONObject()
-            .put("role", role(index))
-            .put("text", body)
+            .put("role", role)
+            .put("text", text)
             .put("offset", offset)
-            .put("end", offset + body.toByteArray(Charsets.UTF_8).size)
+            .put("end", offset + text.toByteArray(Charsets.UTF_8).size)
             .put("timestamp", stamp(index))
         if (index % 11 == 4) {
             row.put("id", "").put("read_id", "event:$PROBE").put("segment", index.toString())
         } else {
             row.put("id", "message-$index")
         }
-        if (role(index) == "user" && index % 26 == 0) row.put("queued", true)
+        if (role == "user" && index % 26 == 0) row.put("queued", true)
         return row.toString()
     }
 
