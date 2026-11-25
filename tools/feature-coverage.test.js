@@ -457,6 +457,17 @@ test('the ratchet tracks exact IDs, not the number of missing journeys', () => {
   assert.deepEqual(gate.ratchetErrors(gate.baseline, {}), []);
 });
 
+test('a journey drive budget must be a whole number of minutes within an hour', () => {
+  for (const driveMinutes of [0, 4, 61, 1.5, '35', null]) {
+    const changed = structuredClone(gate.registry);
+    changed.journeys['native-skills.md'].runner.driveMinutes = driveMinutes;
+    assert.match(gate.validateRegistry(changed).join('\n'), /Journey native-skills\.md driveMinutes must be a whole number of minutes from 5 to 60/, String(driveMinutes));
+  }
+  const changed = structuredClone(gate.registry);
+  changed.journeys['native-skills.md'].runner.driveMinutes = 35;
+  assert.deepEqual(gate.validateRegistry(changed), []);
+});
+
 test('priority evidence paths and per-file limits fit the journey budget', () => {
   for (const evidence of ['receipts.txt', ['proof.txt'], { '../secret.txt': 1500 }, { '/secret.txt': 1500 }, { 'proof.png': 1500 },
     { 'proof.json': 0 }, { 'proof.json': 6001 }, { 'proof.json': 1.5 }, { 'proof.json': '1500' },

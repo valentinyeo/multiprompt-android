@@ -210,7 +210,7 @@ jobs:
   verify:
     name: ${{ inputs.expect_shell_missing && 'original shell control' || inputs.expect_native_missing && 'original native-skill control' || 'verify' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 50 || inputs.side == 'parent' && 50 || inputs.break_it && 55 || 35 }}
+    timeout-minutes: ${{ inputs.side == 'parent' && 75 || (inputs.feature == 'native-skills.md' || inputs.driver_feature == 'native-skills.md') && 50 || (inputs.feature == 'reader-controls.md' || inputs.driver_feature == 'reader-controls.md') && 50 || inputs.break_it && 55 || 35 }}
     env:
       GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
       GRADLE_BUILD_ACTION_CACHE_KEY_PREFIX: robolectric-warm-v1 # gitleaks:allow
@@ -519,7 +519,7 @@ jobs:
       - name: Install, doctor and drive the real app
         if: steps.parent-cache.outputs.hit != 'true'
         id: native-ui
-        timeout-minutes: ${{ inputs.feature == 'reader-controls.md' && 40 || inputs.side == 'parent' && 20 || inputs.break_it && 55 || 35 }}
+        timeout-minutes: ${{ (inputs.feature == 'native-skills.md' || inputs.driver_feature == 'native-skills.md') && 35 || (inputs.feature == 'reader-controls.md' || inputs.driver_feature == 'reader-controls.md') && 40 || inputs.side == 'parent' && 35 || inputs.break_it && 55 || 35 }}
         continue-on-error: ${{ inputs.side == 'parent' || github.event_name == 'workflow_dispatch' && (github.event.inputs.expect_native_missing == 'true' || github.event.inputs.expect_shell_missing == 'true' || github.event.inputs.expect_settings_missing == 'true' || github.event.inputs.expect_shared_missing == 'true') }}
         uses: ./.github/actions/android-proof
         with:
