@@ -76,7 +76,25 @@ def poll(predicate, timeout, what):
 
 
 def wait_inbox(timeout):
-    return poll(has_robot, timeout, 'INBOX_NOT_SHOWN')
+    deadline = time.monotonic() + timeout
+    pressed = False
+    while time.monotonic() < deadline:
+        try:
+            payload = screen()
+        except MeasurementError:
+            time.sleep(1)
+            continue
+        if has_robot(payload):
+            return payload
+        if not pressed and on_screen(payload, 'All'):
+            pressed = True
+            try:
+                mpa('tap', 'text', 'All', timeout=180)
+            except MeasurementError:
+                pass
+            continue
+        time.sleep(1)
+    raise MeasurementError('INBOX_NOT_SHOWN: still not on screen after %ss' % timeout)
 
 
 def clk_tck():
@@ -124,25 +142,20 @@ def sign_in(fixture, evidence, host_fingerprint, expected_version):
         wait_text('Inbox', 180, 'debug sign in')
     seed_host(fixture, evidence)
     mpa('launch', '--force-stop', timeout=240)
-    deadline = time.monotonic() + 300
-    while time.monotonic() < deadline:
-        payload = screen()
-        if has_robot(payload):
-            (Path(evidence) / 'signed-in.txt').write_text('host was already trusted\n')
-            return 'already trusted'
-        if on_screen(payload, 'Use without account (debug)'):
-            mpa('tap', 'text', 'Use without account (debug)', timeout=240)
-            continue
-        if on_screen(payload, 'Trust Verify?'):
-            break
-        time.sleep(1)
-    else:
-        raise MeasurementError('TRUST_SHEET_MISSING: the host key sheet never appeared')
-    payload = screen()
+    payload = poll(lambda page: has_robot(page) or on_screen(page, 'Trust Verify?') or on_screen(page, 'Use without account (debug)'),
+                   300, 'TRUST_SHEET_MISSING')
+    if on_screen(payload, 'Use without account (debug)'):
+        mpa('tap', 'text', 'Use without account (debug)', timeout=240)
+        payload = poll(lambda page: has_robot(page) or on_screen(page, 'Trust Verify?'), 300, 'TRUST_SHEET_MISSING')
+    if has_robot(payload):
+        (Path(evidence) / 'signed-in.txt').write_text('host was already trusted\n')
+        return 'already trusted'
     if host_fingerprint and host_fingerprint not in ' '.join(texts(payload)):
         raise MeasurementError('HOST_FINGERPRINT_MISMATCH: the sheet does not show ' + host_fingerprint)
     mpa('tap', 'text', 'Trust and connect', timeout=300)
     wait_inbox(300)
+
+
     (Path(evidence) / 'signed-in.txt').write_text('signed in and trusted ' + host_fingerprint + '\n')
     return 'signed in'
 
@@ -175,7 +188,7 @@ def measure(targets):
     def launch():
         adb('shell', 'am', 'force-stop', PACKAGE)
         started = adb('shell', 'am', 'start', '-W', '-n', f'{PACKAGE}/dev.multiprompt.companion.MainActivity')
-        payload = poll(lambda page: on_screen(page, 'Use without account (debug)') or has_robot(page),
+        payload = poll(lambda page: on_screen(page, 'Use without account (debug)') or has_robot(page) or on_screen(page, 'All'),
                        INBOX_TIMEOUT, 'LAUNCH_SCREEN_MISSING')
         if on_screen(payload, 'Use without account (debug)'):
             mpa('tap', 'text', 'Use without account (debug)', timeout=240)
