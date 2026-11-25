@@ -10,34 +10,19 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import parsers
+import probe
+from runtime import DRIVER, MeasurementError, adb, elapsed_ms, mpa
 
-ROOT = Path(__file__).resolve().parents[2]
-MPA = ROOT / '.claude/skills/verify-multiprompt-android/scripts/mpa'
 HOST_LOG = '/home/verifyssh/scale-relay.jsonl'
-ADB = os.environ.get('ADB') or 'adb'
 INBOX_TIMEOUT = 180
 CHAT_TIMEOUT = 240
 LARGEST_TIMEOUT = 600
 FLINGS = 10
 SWITCHES = 5
-
-
-class MeasurementError(Exception):
-    pass
-
-
-def adb(*args, timeout=180, check=True):
-    result = subprocess.run([ADB, *map(str, args)], capture_output=True, text=True, timeout=timeout)
-    if check and result.returncode != 0:
-        raise MeasurementError(f'adb {" ".join(map(str, args))} exited {result.returncode}: {result.stdout.strip()[-400:]}{result.stderr.strip()[-400:]}')
-    return result
-
-
-def mpa(*args, timeout=300, check=True):
-    result = subprocess.run([str(MPA), *args], capture_output=True, text=True, timeout=timeout)
-    if check and result.returncode != 0:
-        raise MeasurementError(f'mpa {" ".join(args)} exited {result.returncode}: {result.stdout.strip()[-600:]}{result.stderr.strip()[-600:]}')
-    return result
+IDLE_SECONDS = 20
+NOOP_LABEL = 'All'
+STAGES = (('process', 'process start'), ('application', 'Application init'), ('view_model', 'view model built'),
+          ('displayed', 'first frame'), ('fully_drawn', 'fully drawn'), ('inbox', 'Inbox state ready'))
 
 
 def screen():
@@ -87,10 +72,10 @@ def wait_inbox(timeout):
             continue
         if has_robot(payload):
             return payload
-        if not pressed and on_screen(payload, 'All'):
+        if not pressed and on_screen(payload, NOOP_LABEL):
             pressed = True
             try:
-                mpa('tap', 'text', 'All', timeout=180)
+                mpa('tap', 'text', NOOP_LABEL, timeout=180)
             except MeasurementError:
                 pass
             continue
@@ -128,6 +113,102 @@ def gfx_totals():
     return parsers.parse_gfxinfo(adb('shell', 'dumpsys', 'gfxinfo', PACKAGE, check=False).stdout)
 
 
+def device_offset():
+    raw = adb('shell', 'date', '+%s.%N', check=False, timeout=60).stdout.strip()
+    try:
+        return float(raw) - time.time()
+    except ValueError:
+        return 0.0
+
+
+def relay_text():
+    try:
+        result = subprocess.run(['sudo', 'cat', HOST_LOG], capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return ''
+    return result.stdout if result.returncode == 0 else ''
+
+
+def probe_threads():
+    try:
+        return probe.thread_sample(PACKAGE)
+    except (MeasurementError, subprocess.SubprocessError):
+        return {}
+
+
+def phase(phases, name, started, ended, before, after):
+    wall = elapsed_ms(started, ended)
+    driver = DRIVER.summary(DRIVER.between(started, ended))['total_ms']
+    deltas = parsers.thread_deltas(before, after, CLK_TCK)
+    phases.append(dict(name=name, wall_ms=wall, driver_ms=driver, wait_ms=round(wall - driver, 1),
+                       cpu_ms=parsers.thread_total(deltas), threads=deltas[:6]))
+
+
+def step(name, out, work):
+    gfx_reset()
+    DRIVER.reset()
+    before_threads = probe_threads()
+    before_wall = time.time()
+    before = app_ticks()
+    result = work(before_wall)
+    ended = time.time()
+    after = app_ticks()
+    after_threads = probe_threads()
+    mpa('screenshot', f'{SEED}-{name}', timeout=240)
+    ticks = cpu_delta(before, after)
+    record = dict(name=name, started_unix=before_wall, ended_unix=ended,
+                  wall_ms=elapsed_ms(before_wall, ended),
+                  cpu_ticks=ticks, cpu_ms=round(ticks * 1000 / CLK_TCK, 1),
+                  pids=after['pids'], gfx=gfx_totals(), driver=DRIVER.summary(),
+                  threads=parsers.thread_deltas(before_threads, after_threads, CLK_TCK)[:8],
+                  detail=result)
+    (Path(out) / f'{name}.json').write_text(json.dumps(record, indent=2) + '\n')
+    return record
+
+
+def launch_stages(log, offset, started_unix, inbox_at, events):
+    marks = parsers.parse_launch_log(log, PACKAGE)
+    points = [(title, marks[key] - offset) for key, title in STAGES if key in marks]
+    requests = parsers.relay_open_times(events, stream='tmux', since=started_unix)
+    if requests:
+        points.append(('first listSessions request', requests[0]))
+        replies = [event['t'] for event in events
+                   if event.get('event') == 'call' and event.get('stream') == 'tmux'
+                   and isinstance(event.get('t'), (int, float)) and event['t'] >= requests[0]]
+        if replies:
+            points.append(('first listSessions reply', min(replies)))
+    points.append(('Inbox rows on screen', inbox_at))
+    points.sort(key=lambda item: item[1])
+    stages = []
+    previous = started_unix
+    for title, moment in points:
+        if moment < previous:
+            continue
+        stages.append(dict(name=title, at_ms=elapsed_ms(started_unix, moment),
+                           stage_ms=elapsed_ms(previous, moment),
+                           driver_ms=DRIVER.summary(DRIVER.between(previous, moment))['total_ms']))
+        previous = moment
+    stages.append(dict(name='step end', at_ms=elapsed_ms(started_unix, time.time()),
+                       stage_ms=elapsed_ms(previous, time.time()),
+                       driver_ms=DRIVER.summary(DRIVER.between(previous, time.time()))['total_ms']))
+    return dict(marks={key: round(value, 3) if isinstance(value, float) else value for key, value in marks.items()},
+                stages=stages)
+
+
+def open_chat(chat, timeout, phases):
+    started = time.time()
+    before = probe_threads()
+    mpa('tap', 'desc', 'Robot ' + chat['session'], timeout=timeout + 120)
+    tapped = time.time()
+    after = probe_threads()
+    phase(phases, 'tap the Inbox row', started, tapped, before, after)
+    mpa('read', '--wait-text', chat['marker'], '--timeout', str(timeout), timeout=timeout + 120)
+    ready = time.time()
+    phase(phases, 'wait for the newest row', tapped, ready, after, probe_threads())
+    return dict(session=chat['session'], marker=chat['marker'], bytes=chat['bytes'], rows=chat.get('rows'),
+                tap_ms=elapsed_ms(started, tapped), marker_ms=elapsed_ms(tapped, ready))
+
+
 def seed_host(fixture, evidence):
     key = base64.b64encode((Path(fixture) / 'user-key').read_bytes()).decode()
     instrument = (f'{PACKAGE}.test/androidx.test.runner.AndroidJUnitRunner')
@@ -162,67 +243,49 @@ def sign_in(fixture, evidence, host_fingerprint, expected_version):
         raise MeasurementError('HOST_FINGERPRINT_MISMATCH: the sheet does not show ' + host_fingerprint)
     mpa('tap', 'text', 'Trust and connect', timeout=300)
     wait_inbox(300)
-
-
     (Path(evidence) / 'signed-in.txt').write_text('signed in and trusted ' + host_fingerprint + '\n')
     return 'signed in'
 
 
-def step(name, out, work):
-    gfx_reset()
-    before_wall = time.time()
-    before = app_ticks()
-    result = work()
-    ended = time.time()
-    after = app_ticks()
-    mpa('screenshot', f'{SEED}-{name}', timeout=240)
-    ticks = cpu_delta(before, after)
-    record = dict(name=name, started_unix=before_wall, ended_unix=ended,
-                  wall_ms=round((ended - before_wall) * 1000, 1),
-                  cpu_ticks=ticks, cpu_ms=round(ticks * 1000 / CLK_TCK, 1),
-                  pids=after['pids'], gfx=gfx_totals(), detail=result)
-    (Path(out) / f'{name}.json').write_text(json.dumps(record, indent=2) + '\n')
-    return record
-
-
-def open_chat(chat, timeout):
-    started = time.monotonic()
-    mpa('tap', 'desc', 'Robot ' + chat['session'], timeout=timeout + 120)
-    tapped = time.monotonic()
-    mpa('read', '--wait-text', chat['marker'], '--timeout', str(timeout), timeout=timeout + 120)
-    ready = time.monotonic()
-    return dict(session=chat['session'], marker=chat['marker'], bytes=chat['bytes'], rows=chat.get('rows'),
-                tap_ms=round((tapped - started) * 1000, 1), marker_ms=round((ready - tapped) * 1000, 1))
-
-
 def measure(targets):
     steps = []
-    def launch():
+    probe.install_sampler()
+
+    def launch(started_unix):
         adb('shell', 'am', 'force-stop', PACKAGE)
+        adb('logcat', '-c', check=False)
+        offset = device_offset()
         started = adb('shell', 'am', 'start', '-W', '-n', f'{PACKAGE}/dev.multiprompt.companion.MainActivity')
-        payload = poll(lambda page: on_screen(page, 'Use without account (debug)') or has_robot(page) or on_screen(page, 'All'),
+        payload = poll(lambda page: on_screen(page, 'Use without account (debug)') or has_robot(page) or on_screen(page, NOOP_LABEL),
                        INBOX_TIMEOUT, 'LAUNCH_SCREEN_MISSING')
         if on_screen(payload, 'Use without account (debug)'):
             mpa('tap', 'text', 'Use without account (debug)', timeout=240)
         wait_inbox(INBOX_TIMEOUT)
-        return dict(inbox='shown', am_start=started.stdout.strip())
+        inbox_at = time.time()
+        log = adb('logcat', '-v', 'epoch', '-d', timeout=180, check=False).stdout
+        (Path(OUT) / 'launch-logcat.txt').write_text(log)
+        trace = launch_stages(log, offset, started_unix, inbox_at, parsers.relay_events(relay_text()))
+        return dict(inbox='shown', am_start=started.stdout.strip(), clock_offset_s=round(offset, 3), **trace)
     steps.append(step('launch-inbox', OUT, launch))
+
     largest = targets['largest']
     opened = {}
-    def open_largest():
+
+    def open_largest(started_unix):
         try:
-            opened['chat'] = open_chat(largest, LARGEST_TIMEOUT)
-            return dict(opened['chat'], opened=True)
+            opened['chat'] = open_chat(largest, LARGEST_TIMEOUT, opened.setdefault('phases', []))
+            return dict(opened['chat'], opened=True, phases=opened['phases'])
         except MeasurementError as failure:
             opened['error'] = str(failure)
             return dict(session=largest['session'], bytes=largest['bytes'], rows=largest.get('rows'), opened=False,
-                        error=str(failure))
+                        phases=opened.get('phases', []), error=str(failure))
     steps.append(step('open-largest', OUT, open_largest))
-    def flings():
+
+    def flings(started_unix):
         if 'chat' not in opened:
             for chat in targets['chats'][1:]:
                 try:
-                    opened['chat'] = open_chat(chat, CHAT_TIMEOUT)
+                    opened['chat'] = open_chat(chat, CHAT_TIMEOUT, opened.setdefault('phases', []))
                     break
                 except MeasurementError:
                     continue
@@ -238,29 +301,51 @@ def measure(targets):
             adb('shell', 'input', 'swipe', *points, 300)
         return dict(flings=FLINGS, session=opened['chat']['session'], bounds=bounds, points=points)
     steps.append(step('ten-flings', OUT, flings))
-    def switches():
+
+    def switches(started_unix):
         results = []
         for chat in targets['chats'][:SWITCHES]:
-            started = time.monotonic()
+            started = time.time()
+            before = probe_threads()
             mpa('key', 'back', timeout=120)
-            backed = time.monotonic()
+            backed = time.time()
+            after = probe_threads()
+            phases = []
+            phase(phases, 'back to the Inbox', started, backed, before, after)
             wait_inbox(INBOX_TIMEOUT)
-            listed = time.monotonic()
+            listed = time.time()
+            after_inbox = probe_threads()
+            phase(phases, 'wait for the Inbox rows', backed, listed, after, after_inbox)
+            base = dict(back_ms=elapsed_ms(started, backed), inbox_ms=elapsed_ms(backed, listed),
+                        phases=phases, opened=False)
             try:
-                opened = open_chat(chat, CHAT_TIMEOUT)
-                results.append(dict(opened, opened=True, back_ms=round((backed - started) * 1000, 1),
-                                    inbox_ms=round((listed - backed) * 1000, 1),
-                                    switch_ms=round((time.monotonic() - started) * 1000, 1)))
+                result = open_chat(chat, CHAT_TIMEOUT, phases)
+                results.append(dict(result, **dict(base, opened=True, phases=phases,
+                                                   switch_ms=elapsed_ms(started, time.time()))))
             except MeasurementError as failure:
-                results.append(dict(session=chat['session'], opened=False, error=str(failure),
-                                    back_ms=round((backed - started) * 1000, 1),
-                                    inbox_ms=round((listed - backed) * 1000, 1),
-                                    switch_ms=round((time.monotonic() - started) * 1000, 1)))
+                results.append(dict(base, session=chat['session'], bytes=chat['bytes'], error=str(failure),
+                                    switch_ms=elapsed_ms(started, time.time())))
         if not any(item['opened'] for item in results):
             raise MeasurementError('NO_CHAT_OPENED: none of the five switch targets opened')
         return dict(attempted=len(results), opened=sum(1 for item in results if item['opened']), chats=results)
     steps.append(step('switch-five', OUT, switches))
+
     mpa('key', 'back', timeout=120, check=False)
+
+    def driver_alone(started_unix):
+        wait_inbox(INBOX_TIMEOUT)
+        try:
+            return probe.driver_probe(NOOP_LABEL)
+        except MeasurementError as failure:
+            return dict(error=str(failure))
+    steps.append(step('driver-alone', OUT, driver_alone))
+
+    def idle(started_unix):
+        wait_inbox(INBOX_TIMEOUT)
+        time.sleep(IDLE_SECONDS)
+        return dict(seconds=IDLE_SECONDS)
+    steps.append(step('idle-inbox', OUT, idle))
+
     return steps
 
 

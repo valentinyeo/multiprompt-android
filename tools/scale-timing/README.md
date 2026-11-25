@@ -47,6 +47,25 @@ One dispatch runs both seeds as parallel jobs, then a third job downloads both m
 table into the run summary. `timing-<seed>-<ref>` holds the measurement, the screenshots and the relay log;
 `timing-table` holds the rendered table and `timings.json`.
 
+## Where the milliseconds go
+
+A step's wall clock answers none of "is this the app" on its own, because this harness's own `adb` and `mpa`
+calls are inside it. `tools/scale-timing/runtime.py` keeps every `adb` and `mpa` call with its own start and
+end, so each row can be split into `driver ms` (the harness) and `wait ms` (the app and the emulator drawing).
+A resolved `mpa tap` costs two `uiautomator dump` calls and one input event; the `driver-alone` step times a raw
+dump, a single `mpa read`, an input tap on the same point and a resolved tap on the same point, so the shared
+`driver ms` can be checked arithmetically instead of assumed.
+
+App CPU is the app process's own time from `/proc/<pid>/stat`, sectioned by [sampler.sh](sampler.sh) reading
+`/proc/<pid>/task/*/stat` per thread, so the table can name the thread that spent it. The `idle-inbox` step sits
+on the Inbox for 20 s with no harness action, which is what the app costs while the owner only reads the list.
+
+Cold launch is split by logcat marks: `Start proc`, the app's own `MpaStartup` debug markers at the end of
+`Application.onCreate`, after the ViewModel is built and when the first session list is applied, then `Displayed`
+and `Fully drawn`, the fixture relay's first listSessions request and reply, and the first moment the harness sees
+Inbox rows. The markers are debug-only lines with no behaviour change. `at ms` counts from the start of the step
+and `driver ms` is the harness calls inside each stage.
+
 ## What the numbers mean
 
 - Wall clock per step includes the driver's own UI dumps (`uiautomator dump` costs one to three seconds on

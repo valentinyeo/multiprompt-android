@@ -262,6 +262,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val prefetchedActivity = mutableMapOf<String, Long>()
     private val prefetchedHostAt = mutableMapOf<String, Long>()
     private var prefetchRunning = false
+    private var inboxReadyMarked = false
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
@@ -346,6 +347,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         uploadCrashReport()
         updates.check()
         if (_state.value.hosts.isNotEmpty()) refresh()
+        if (BuildConfig.DEBUG) Log.i(MultipromptApplication.STARTUP_TAG, "view-model-ready")
         viewModelScope.launch {
             var backgroundTicks = 0
             while (true) {
@@ -887,6 +889,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 sessionCache.save(result.hostId, result.sessions)
             }
             _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
+            markInboxReady()
             openPendingNotificationSession()
             pendingNotificationKey = null
             syncReplyNotifications()
@@ -896,6 +899,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 refresh()
             }
         }
+    }
+
+    private fun markInboxReady() {
+        if (inboxReadyMarked || _state.value.sessions.isEmpty()) return
+        inboxReadyMarked = true
+        if (BuildConfig.DEBUG) Log.i(MultipromptApplication.STARTUP_TAG, "inbox-ready")
     }
 
     private fun prefetchRecentHistories() {
