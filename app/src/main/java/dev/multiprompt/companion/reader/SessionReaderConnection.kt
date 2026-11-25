@@ -490,14 +490,24 @@ class SessionReaderConnection(
         if (confirmation.shouldPress(visible)) requests.trySend(Request.Action(TmuxAction.ENTER))
     }
 
-    private suspend fun confirmModelSwitchWhilePaneHidden(client: SshClient) {
-        if (paneGate.active.value) return
+    private suspend fun confirmModelSwitchWhilePaneHidden(client: SshClient, command: String) {
+        if (paneGate.active.value || !confirmation.pending.value) return
+        val family = modelFamilyFromCommand(command)
+        val effort = command.trim().takeIf { it.startsWith("/effort ") }?.substringAfter(" ")?.trim()?.lowercase()
         val deadline = System.currentTimeMillis() + MODEL_CONFIRM_STEP_MS * MODEL_CONFIRM_READS
-        while (confirmation.pending.value && System.currentTimeMillis() < deadline) {
+        while (System.currentTimeMillis() < deadline) {
             delay(MODEL_CONFIRM_STEP_MS)
             val screen = runCatching { repository.captureSession(client, tmuxSessionName) }.getOrNull() ?: return
             if (confirmation.shouldPress(TmuxText.isModelSwitchConfirmation(screen))) {
                 repository.performAction(client, tmuxSessionName, TmuxAction.ENTER)
+                continue
+            }
+            val details = TmuxText.runtimeDetails(screen)
+            val applied = if (family != null) HostSettings.family(details.model) == family
+                else effort != null && details.effort == effort
+            if (applied) {
+                confirmation.complete()
+                _state.update { it.copy(runtimeDetails = details, pendingModelFamily = null, modelSwitchFailure = null) }
                 return
             }
         }
@@ -693,7 +703,7 @@ class SessionReaderConnection(
                     when (request) {
                         is Request.RuntimeCommand -> {
                             repository.sendPrompt(client, tmuxSessionName, request.text)
-                            confirmModelSwitchWhilePaneHidden(client)
+                            confirmModelSwitchWhilePaneHidden(client, request.text)
                         }
                         is Request.Prompt -> repository.sendPrompt(
                             client,

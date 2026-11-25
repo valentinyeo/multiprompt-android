@@ -26,6 +26,10 @@ internal class ModelSwitchConfirmation(
         _pending.value = true
     }
 
+    fun complete() {
+        _pending.value = false
+    }
+
     fun expire(): Boolean {
         if (!_pending.value || now() <= deadline) return false
         _pending.value = false

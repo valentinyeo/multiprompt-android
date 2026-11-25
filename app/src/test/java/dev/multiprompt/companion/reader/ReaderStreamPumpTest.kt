@@ -12,6 +12,7 @@ import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -378,6 +379,19 @@ class ReaderStreamPumpTest {
         assertEquals(1, hostB.connects)
         assertEquals(1, hostA.snapshots)
         assertEquals(1, hostB.snapshots)
+    }
+
+    @Test
+    fun anObservedModelCommandResultCannotExpireOrPressEnterLater() = runTest {
+        val confirmation = ModelSwitchConfirmation({ currentTime }, 25_000L)
+        confirmation.begin()
+        confirmation.complete()
+        advanceTimeBy(25_001L)
+        assertFalse(confirmation.pending.value)
+        assertFalse(confirmation.expire())
+        assertFalse(confirmation.shouldPress(true))
+        confirmation.begin()
+        assertTrue(confirmation.shouldPress(true))
     }
 
     @Test

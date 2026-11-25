@@ -3,10 +3,11 @@ mpa="$scripts/mpa"
 sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-before.jsonl"
 "$mpa" read --wait-text pi-fast
 "$mpa" read --wait-text pi-deep
-"$mpa" screenshot pi-model-choices
-"$mpa" proof --name pi-model-choices --require-text pi-fast --require-text pi-deep --forbid-text PI_PANE_ONLY_545
+scroll_to_newest
 "$mpa" read --select visible --value pi-fast --extra enabled
 "$mpa" read --select visible --value pi-deep --extra enabled
+"$mpa" screenshot pi-model-choices
+"$mpa" proof --name pi-model-choices --require-text pi-fast --require-text pi-deep --forbid-text PI_PANE_ONLY_545 --forbid-desc 'Jump to newest'
 sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-after.jsonl"
 sudo cat /home/verifyssh/ai-switch-models.json > "$EVIDENCE/pi-models-served.json"
 python3 - "$EVIDENCE" > "$EVIDENCE/pi-model-host.json" <<'PYMODEL'
