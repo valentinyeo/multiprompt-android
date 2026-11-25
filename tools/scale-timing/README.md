@@ -10,7 +10,8 @@ Later rounds dispatch this same frozen harness revision, changing only `app_ref`
 The measured revision is built in its own worktree; the driver and fixtures stay at the dispatch revision.
 Never change the workload, repeat count, durations, seeds, metric definitions or emulator configuration during
 an optimization round. A changed harness fingerprint requires a new baseline, not a comparison with the old one.
-`mubo-555-v1` identifies this schema. `harness` hashes the timing scripts, scale fixture and workflow.
+`mubo-555-v1` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
+driver, emulator/build actions and workflow.
 
 ## Runner entry point
 
@@ -33,7 +34,7 @@ alternating seeds. Repeat the dispatch at the same app SHA to check runner-to-ru
 | `cold_start` | Force-stop, remove only the debug app's transcript disk cache, start MainActivity, require Inbox robot rows. Host profile and trust remain intact. |
 | `chat_switch` | Start in the largest chat, go back to Inbox, open the second-largest chat, require its newest marker. |
 | `idle_inbox` | Confirm Inbox outside the window, then leave it untouched for 20 seconds. |
-| `typing_long_chat` | Open the largest chat outside the window; clear, type the same 44-character draft through `mpa fill`, require exact readback. Never send. |
+| `typing_long_chat` | Open the largest chat outside the window; clear, type the same fixed draft through `mpa fill`, require exact readback. Never send. |
 | `streaming_reply` | Clear the draft outside the window; append 40 assistant rows to the open largest chat at 2 Hz for 20 seconds. Require the host receipt, nonzero in-window traffic and the final marker on the phone. Truncate only those appended fixture rows after each repetition. |
 
 Each repetition starts a fresh process and removes the transcript cache. Preparation, screenshots, stream

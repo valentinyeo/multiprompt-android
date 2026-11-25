@@ -112,11 +112,17 @@ def table(result):
 
 def fingerprint():
     digest = hashlib.sha256()
-    paths = sorted(path for path in DIRECTORY.glob('*') if path.suffix in ('.py', '.sh') and '.test.' not in path.name)
-    paths += [DIRECTORY.parent / 'scale-chat/fixture.py',
-              DIRECTORY.parents[1] / '.github/workflows/scale-timing.yml']
-    for path in paths:
-        digest.update(path.name.encode() + b'\0' + path.read_bytes())
+    root = DIRECTORY.parents[1]
+    folders = ('tools/scale-timing', 'tools/scale-chat', 'tools/long-chat', 'tools/chat-shapes', 'tools/real-chat',
+               '.claude/skills/verify-multiprompt-android/scripts', '.github/actions/android-proof',
+               '.github/actions/gradle-ci')
+    paths = [path for folder in folders for path in (root / folder).rglob('*')
+             if path.is_file() and (path.suffix in ('.py', '.sh', '.yml') or path.name == 'mpa')
+             and '.test.' not in path.name and '.evidence' not in path.parts]
+    paths += [root / '.github/workflows/scale-timing.yml', root / 'tools/verify-seed.py',
+              root / 'tools/ci/gradle-retry.sh']
+    for path in sorted(paths):
+        digest.update(str(path.relative_to(root)).encode() + b'\0' + path.read_bytes())
     return digest.hexdigest()
 
 
@@ -128,7 +134,10 @@ def snapshot(package, absent=False):
         raise MeasurementError('BENCHMARK_PID_MISSING_OR_AMBIGUOUS: ' + repr(pids))
     pid = pids[0]
     raw = adb('shell', f'cat /proc/{pid}/stat; cat /proc/{pid}/task/{pid}/stat').stdout.splitlines()
-    if len(raw) != 2 or any(')' not in line for line in raw):
+    if len(raw) != 2 or any(')' not in line or line.split()[0] != pid
+                            or len(line[line.rfind(')') + 1:].split()) < 13
+                            or not all(value.isdigit() for value in line[line.rfind(')') + 1:].split()[11:13])
+                            for line in raw):
         raise MeasurementError('BENCHMARK_CPU_UNREADABLE')
     return dict(pid=pid, app=parsers.parse_proc_stat(raw[0])['total'], main=parsers.parse_proc_stat(raw[1])['total'])
 
@@ -168,7 +177,13 @@ def sample(scenario, repetition, work, args, out):
     except MeasurementError as error:
         failed = failed or str(error)
         frames = None
-    relay = traffic(parsers.relay_events(measure.relay_text()), started, ended)
+    relay_log = measure.relay_text()
+    (out / 'relay.jsonl').write_text(relay_log)
+    if not relay_log.strip():
+        failed = failed or 'BENCHMARK_RELAY_MISSING'
+    relay = traffic(parsers.relay_events(relay_log), started, ended)
+    if scenario == 'cold_start' and (relay['list_sessions'] == 0 or relay['bytes'] == 0):
+        failed = failed or 'BENCHMARK_COLD_START_NO_LIST'
     if scenario == 'streaming_reply' and not failed:
         try:
             measure.wait_text(detail['marker'], 60, 'stream output reached phone')
@@ -209,6 +224,11 @@ def run(args):
 
     def launch():
         adb('shell', 'am', 'start', '-W', '-n', f'{args.package}/dev.multiprompt.companion.MainActivity')
+        page = measure.poll(lambda page: measure.on_screen(page, 'Use without account (debug)')
+                            or measure.has_robot(page) or measure.on_screen(page, measure.NOOP_LABEL),
+                            180, 'BENCHMARK_LAUNCH_SCREEN_MISSING')
+        if measure.on_screen(page, 'Use without account (debug)'):
+            mpa('tap', 'text', 'Use without account (debug)')
         measure.wait_inbox(180)
         return dict(inbox='shown')
 

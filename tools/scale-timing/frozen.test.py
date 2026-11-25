@@ -1,3 +1,4 @@
+import argparse
 import copy
 import json
 from pathlib import Path
@@ -122,6 +123,16 @@ class ParsingTest(unittest.TestCase):
         self.assertEqual(frozen.errors(log, PACKAGE, [], failed=True),
                          dict(crashes=1, anrs=1, failed_steps=1, app_logcat_e=2))
 
+    def test_fingerprint_covers_real_harness_inputs(self):
+        self.assertRegex(frozen.fingerprint(), r'^[0-9a-f]{64}$')
+
+    def test_truncated_cpu_stats_are_not_a_fast_zero(self):
+        responses = [subprocess.CompletedProcess([], 0, '123\n'),
+                     subprocess.CompletedProcess([], 0, '123 (main) S 1\n123 (main) S 1\n')]
+        with patch.object(frozen, 'adb', side_effect=responses):
+            with self.assertRaisesRegex(MeasurementError, 'CPU_UNREADABLE'):
+                frozen.snapshot(PACKAGE)
+
     def test_snapshot_reads_process_and_main_not_driver_or_other_threads(self):
         raw = '123 (main) S 1 1 1 0 -1 0 0 0 0 0 55 12 0 0\n123 (main) S 1 1 1 0 -1 0 0 0 0 0 20 3 0 0\n'
         responses = [subprocess.CompletedProcess([], 0, '123\n'), subprocess.CompletedProcess([], 0, raw)]
@@ -134,6 +145,39 @@ class ParsingTest(unittest.TestCase):
             self.assertEqual(frozen.snapshot(PACKAGE, absent=True), dict(pid=None, app=0, main=0))
             with self.assertRaisesRegex(MeasurementError, 'PID_MISSING'):
                 frozen.snapshot(PACKAGE)
+
+
+class RunTest(unittest.TestCase):
+    def test_each_cold_start_reenters_the_debug_gate_and_requires_inbox(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            chat = dict(session='largest', marker='latest', bytes=100, transcript='unused')
+            (root / 'targets.json').write_text(json.dumps(dict(chats=[chat, chat])))
+            (root / 'host-fingerprint.txt').write_text('fingerprint')
+            args = argparse.Namespace(out=str(root / 'out'), targets=str(root / 'targets.json'),
+                                      package=PACKAGE, evidence=str(root), fixture=str(root),
+                                      expected_version='version', app_sha='sha', seed='small')
+
+            def sample(scenario, repetition, work, *_):
+                if scenario == 'cold_start':
+                    self.assertEqual(work(), dict(inbox='shown'))
+                return dict(scenario=scenario, valid=True, metrics={metric: 0 for metric in frozen.METRICS})
+
+            with patch.dict(frozen.os.environ, GITHUB_ACTIONS='true'), \
+                    patch.object(frozen, 'sample', side_effect=sample), \
+                    patch.object(frozen, 'adb'), patch.object(frozen, 'mpa') as mpa, \
+                    patch.object(frozen.subprocess, 'run'), \
+                    patch.object(frozen.measure, 'sign_in'), patch.object(frozen.measure, 'copy_relay'), \
+                    patch.object(frozen.measure, 'clk_tck', return_value=100), \
+                    patch.object(frozen.measure.probe, 'install_sampler'), \
+                    patch.object(frozen.measure, 'open_chat'), \
+                    patch.object(frozen.measure, 'poll', return_value=dict(texts=['Use without account (debug)'])), \
+                    patch.object(frozen.measure, 'wait_inbox') as inbox:
+                frozen.run(args)
+            self.assertEqual(sum(call.args == ('tap', 'text', 'Use without account (debug)')
+                                 for call in mpa.call_args_list), 5)
+            self.assertEqual(inbox.call_count, 10)
+            self.assertEqual(json.loads((root / 'out/results.json').read_text())['repeats'], 5)
 
 
 class StreamTest(unittest.TestCase):
