@@ -5,12 +5,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 internal class ModelSwitchConfirmation(
@@ -43,7 +41,7 @@ internal class ModelSwitchConfirmation(
 }
 
 internal class ReaderStreamPump<C : Any>(
-    private val wanted: Flow<Boolean>,
+    private val wanted: StateFlow<Boolean>,
     private val connect: suspend () -> C,
     private val stream: suspend (C, () -> Unit) -> Unit,
     private val release: suspend (C) -> Unit,
@@ -54,22 +52,30 @@ internal class ReaderStreamPump<C : Any>(
     private val reuseFirstBytesMillis: Long,
     private val reconnectWait: suspend (Long) -> Unit = { delay(it) },
 ) {
+    var streamStarts = 0
+        private set
+
+    var connects = 0
+        private set
+
     suspend fun pump() {
         var warm: C? = null
-        wanted.distinctUntilChanged().collectLatest { visible ->
-            if (!visible) return@collectLatest
-            while (true) {
-                var reused = warm != null
+        wanted.collectLatest {
+            if (!wanted.value) return@collectLatest
+            while (wanted.value) {
+                val wasWarm = warm != null
+                var answered = false
                 try {
                     val client = warm ?: run {
                         onConnecting()
+                        connects += 1
                         connect().also {
                             warm = it
                             onClient(it)
                         }
                     }
                     coroutineScope {
-                        val watchdog = if (reused) {
+                        val watchdog = if (wasWarm) {
                             launch {
                                 delay(reuseFirstBytesMillis)
                                 throw StaleWarmClient()
@@ -77,20 +83,23 @@ internal class ReaderStreamPump<C : Any>(
                         } else {
                             null
                         }
+                        streamStarts += 1
                         stream(client) {
-                            reused = false
+                            answered = true
                             watchdog?.cancel()
                         }
                     }
                 } catch (throwable: Throwable) {
                     if (throwable is CancellationException) currentCoroutineContext().ensureActive()
-                    if (!reused) onFailure(throwable)
+                    if (answered || !wasWarm) onFailure(throwable)
                 }
-                val dropped = warm
-                warm = null
-                onClient(null)
-                dropped?.let { release(it) }
-                if (!reused) reconnectWait(reconnectDelayMillis)
+                if (!answered) {
+                    val dropped = warm
+                    warm = null
+                    onClient(null)
+                    dropped?.let { release(it) }
+                }
+                if (answered || !wasWarm) reconnectWait(reconnectDelayMillis)
             }
         }
     }

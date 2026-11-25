@@ -183,6 +183,7 @@ class ChatHistoryConnectionTest {
         @Volatile var online = true
         @Volatile var hangSnapshot = false
         @Volatile var rejectEngine = false
+        @Volatile var replyHeaderId: Long? = null
         @Volatile var dropFirstSubmit = false
         val retries = java.util.concurrent.CopyOnWriteArrayList<String>()
         val submissions = java.util.concurrent.CopyOnWriteArrayList<String>()
@@ -206,7 +207,7 @@ class ChatHistoryConnectionTest {
                 else listOf(row("user", "question", 0, 10)) + if (answered) listOf(row("assistant", "answer", 10, 20)) else emptyList()
             val end = if (cleared) 10 else if (answered) 20 else 10
             val source = if (cleared) 2L else 1L
-            val header = listOf("@mp", id, "history", "ok", "sid1", 0, end, source, 0, wireAgent, "tmux", source * 1_000_000_000_000L, "a".repeat(64), "tail", 0).joinToString("\t")
+            val header = listOf("@mp", replyHeaderId ?: id, "history", "ok", "sid1", 0, end, source, 0, wireAgent, "tmux", source * 1_000_000_000_000L, "a".repeat(64), "tail", 0).joinToString("\t")
             return JSONObject().put("id", id).put("wire", (listOf(header) + rows + TranscriptProtocol.END).joinToString("\n") + "\n").toString()
         }
 
@@ -592,6 +593,32 @@ class ChatHistoryConnectionTest {
             val settled = fake.polls.get()
             delay(3_000L)
             assertEquals("hidden $agent chat kept polling", settled, fake.polls.get())
+        }
+    }
+
+    @Test
+    fun anUnchangedSnapshotIsSkippedWithoutParsingWhileAChangedOneStillLands() = runBlocking {
+        val fake = FakeHost()
+        ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(),
+            connectedExchange = { fake.connect(it) }, pollGate = ChatPollGate()).use { chat ->
+            chat.pollGate.acquire()
+            chat.start()
+            val loaded = withTimeout(10_000L) { chat.state.first { it.ready } }
+            assertEquals(listOf("question"), loaded.history.rows.map { it.text })
+            fake.replyHeaderId = 7_654_321L
+            val before = fake.polls.get()
+            withTimeout(10_000L) { while (fake.polls.get() < before + 5) delay(10L) }
+            delay(1_000L)
+            assertNull("a repeated snapshot was parsed again", chat.state.value.connectionError)
+            assertFalse(chat.state.value.retrying)
+            assertEquals(listOf("question"), chat.state.value.history.rows.map { it.text })
+            val afterRepeats = fake.polls.get()
+            assertTrue("the repeated snapshot stopped polling", afterRepeats > before)
+            fake.replyHeaderId = null
+            fake.answered = true
+            withTimeout(10_000L) { chat.state.first { state -> state.history.rows.any { it.text == "answer" } } }
+            assertEquals(listOf("question", "answer"), chat.state.value.history.rows.map { it.text })
         }
     }
 

@@ -1,0 +1,1 @@
+Android: an open chat stops reconnecting over and over

@@ -225,7 +225,7 @@ class SessionReaderConnection(
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
-        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate, pollGate = pollGate)
+        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate, sharedClient = { streamClient }, pollGate = pollGate)
             .also {
                 historyIdentity = identity
                 historyConnection = it
