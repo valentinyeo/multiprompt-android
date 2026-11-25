@@ -33,7 +33,7 @@ class SnapshotCostSplitTest {
         val project = Timed(SNAPSHOTS)
         val guard = Timed(SNAPSHOTS)
         val reuse = Timed(SNAPSHOTS)
-        val fingerprint = SnapshotFingerprint()
+        val fingerprint = ChatHistoryProtocol.SnapshotFingerprint()
         val projected = ArrayList<Int>()
         var history = ChatHistory()
         var lastSize = 0
@@ -132,7 +132,7 @@ class SnapshotCostSplitTest {
         val PROJECT = Stage("project", "Dispatchers.IO when measured here, Main in the app",
             "ChatHistory.projectMessages ChatHistory.kt:67 called in composition at ChatHistoryList.kt:122")
         val GUARD = Stage("guard", "Dispatchers.IO",
-            "SnapshotFingerprint.same SnapshotFingerprint.kt:6 before ChatHistoryProtocol.parse at ChatHistoryConnection.kt:381")
+            "ChatHistoryProtocol.SnapshotFingerprint.same ChatHistoryProtocol.kt:239 before ChatHistoryProtocol.parse at ChatHistoryConnection.kt:381")
         val REPEAT = Stage("repeat", "Dispatchers.IO",
             "ChatHistoryProtocol.repeated ChatHistoryProtocol.kt:118, the page that changes nothing")
     }

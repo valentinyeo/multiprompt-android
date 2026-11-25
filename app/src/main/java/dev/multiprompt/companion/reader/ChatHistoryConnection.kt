@@ -363,7 +363,7 @@ class ChatHistoryConnection(
                             var wasOlder = false
                             val checked = mutableSetOf<String>()
                             var engine: Pair<Long, String>? = null
-                            val snapshots = SnapshotFingerprint()
+                            val snapshots = ChatHistoryProtocol.SnapshotFingerprint()
                             poll@ while (isActive) {
                                 if (!selected) {
                                     wake.receive()

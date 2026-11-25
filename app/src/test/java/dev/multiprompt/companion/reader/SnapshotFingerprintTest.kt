@@ -7,7 +7,7 @@ import org.junit.Test
 class SnapshotFingerprintTest {
     @Test
     fun aRepeatedSnapshotIsTheSameOnlyAfterTheFirstReply() {
-        val fingerprint = SnapshotFingerprint()
+        val fingerprint = ChatHistoryProtocol.SnapshotFingerprint()
         assertFalse(fingerprint.same(LongChatSnapshot.built(1, SIZE).reply))
         assertTrue(fingerprint.same(LongChatSnapshot.built(2, SIZE).reply))
         assertTrue(fingerprint.same(LongChatSnapshot.built(97, SIZE).reply))
@@ -15,7 +15,7 @@ class SnapshotFingerprintTest {
 
     @Test
     fun oneNewMessageIsAChange() {
-        val fingerprint = SnapshotFingerprint()
+        val fingerprint = ChatHistoryProtocol.SnapshotFingerprint()
         val base = LongChatSnapshot.built(1, SIZE)
         assertFalse(fingerprint.same(base.reply))
         assertTrue(fingerprint.same(LongChatSnapshot.built(2, SIZE).reply))
@@ -24,7 +24,7 @@ class SnapshotFingerprintTest {
 
     @Test
     fun aChangedStatusRowIsAChange() {
-        val fingerprint = SnapshotFingerprint()
+        val fingerprint = ChatHistoryProtocol.SnapshotFingerprint()
         val base = LongChatSnapshot.built(1, SIZE).reply
         assertFalse(fingerprint.same(base))
         assertTrue(fingerprint.same(LongChatSnapshot.built(2, SIZE).reply))
@@ -33,7 +33,7 @@ class SnapshotFingerprintTest {
 
     @Test
     fun aChangedProbeIsAChange() {
-        val fingerprint = SnapshotFingerprint()
+        val fingerprint = ChatHistoryProtocol.SnapshotFingerprint()
         val base = LongChatSnapshot.built(1, SIZE).reply
         assertFalse(fingerprint.same(base))
         val other = "b".repeat(64)
@@ -43,7 +43,7 @@ class SnapshotFingerprintTest {
 
     @Test
     fun aChangedOffsetIsAChange() {
-        val fingerprint = SnapshotFingerprint()
+        val fingerprint = ChatHistoryProtocol.SnapshotFingerprint()
         val base = LongChatSnapshot.built(1, SIZE).reply
         assertFalse(fingerprint.same(base))
         assertFalse(fingerprint.same(base.replace("\\\"offset\\\":0,", "\\\"offset\\\":2,")))
