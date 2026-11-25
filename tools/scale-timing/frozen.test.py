@@ -85,6 +85,17 @@ class StatisticsTest(unittest.TestCase):
         self.assertIn('30 [10, 50]', text)
         self.assertIn('frames (secondary)', text)
 
+    def test_report_without_results_cannot_pass_through_tee(self):
+        workflow = Path(frozen.__file__).resolve().parents[2] / '.github/workflows/scale-timing.yml'
+        self.assertIn('defaults:\n  run:\n    shell: bash\n', workflow.read_text())
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run(['bash', '-e', '-o', 'pipefail', '-c',
+                                     '"$1" "$2" report --root "$3" --out "$3/report.md" | tee "$3/summary"',
+                                     'benchmark-report', sys.executable, frozen.__file__, directory],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('BENCHMARK_RESULTS_MISSING', result.stderr)
+
     def test_compare_script_entry_point(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'results.json'

@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: scale-timing-${{ github.ref }}-${{ inputs.app_ref || 'head' }}
   cancel-in-progress: false

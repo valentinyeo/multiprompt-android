@@ -143,7 +143,7 @@ def snapshot(package, absent=False):
 
 
 def sample(scenario, repetition, work, args, out):
-    adb('logcat', '-c')
+    adb('logcat', '-b', 'all', '-c')
     adb('shell', 'dumpsys', 'gfxinfo', args.package, 'reset')
     before = snapshot(args.package, absent=scenario == 'cold_start')
     DRIVER.reset()
