@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import atexit
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ import re
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 
 import logins
@@ -25,6 +27,7 @@ PLATFORM_WARNING_PATTERNS = (
 )
 REPEATS = 5
 SECONDS = 20
+WATCH_STARTUP = 0.5
 DRAFT = 'Frozen benchmark types this everyday message.'
 VERSION = 'mubo-555-v3'
 DIRECTORY = Path(__file__).resolve().parent
@@ -88,15 +91,38 @@ def errors(log, package, pids, failed=False):
                 app_logcat_e=app_e, platform_warnings=platform_warnings)
 
 
-def auth_text(fixture):
-    path = Path(fixture) / 'sshd.log'
+def auth_text(path):
     try:
-        result = subprocess.run(['sudo', 'cat', str(path)], capture_output=True, text=True, timeout=120)
-    except (OSError, subprocess.SubprocessError) as error:
+        return Path(path).read_text()
+    except OSError as error:
         raise MeasurementError('BENCHMARK_AUTH_LOG_UNREADABLE: ' + str(error))
-    if result.returncode != 0:
-        raise MeasurementError('BENCHMARK_AUTH_LOG_UNREADABLE: ' + result.stderr.strip()[-200:])
-    return result.stdout
+
+
+def stop_watch(process):
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
+def watch_auth_log(fixture, directory):
+    """Timestamp the fixture sshd's own log lines as sshd writes them.
+
+    sshd logs `Accepted publickey` without a timestamp, so only the moment the line
+    appears can place a login inside a measured window.
+    """
+    stamped = Path(directory) / 'auth.log'
+    process = subprocess.Popen([sys.executable, '-B', str(DIRECTORY / 'authwatch.py'),
+                                '--log', str(Path(fixture) / 'sshd.log'), '--out', str(stamped)],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    atexit.register(stop_watch, process)
+    time.sleep(WATCH_STARTUP)
+    if process.poll() is not None:
+        raise MeasurementError('BENCHMARK_AUTH_LOG_UNREADABLE: ' + (process.stderr.read() or '').strip()[-200:])
+    return str(stamped)
 
 
 def traffic(events, started, ended):
@@ -220,7 +246,7 @@ def sample(scenario, repetition, work, args, out):
     relay = traffic(events, started, ended)
     opens = sum(1 for event in events if event.get('event') == 'open' and started <= event.get('t', 0) <= ended)
     try:
-        logins_measured = logins.measure(auth_text(args.fixture), started, ended)
+        logins_measured = logins.measure(auth_text(args.auth_log), started, ended)
     except (MeasurementError, ValueError) as error:
         failed = failed or str(error)
         logins_measured = dict(logins=0, per_minute=None, retained=[])
@@ -263,6 +289,7 @@ def run(args):
     measure.PACKAGE = args.package
     measure.CLK_TCK = args.clk_tck
     measure.probe.install_sampler()
+    args.auth_log = watch_auth_log(args.fixture, tempfile.mkdtemp(prefix='scale-auth-log-'))
     fingerprint_path = Path(args.evidence) / 'host-fingerprint.txt'
     measure.sign_in(args.fixture, args.evidence, fingerprint_path.read_text().strip(), args.expected_version)
     largest, switch = targets['chats'][:2]

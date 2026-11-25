@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import authwatch
 import logins
 
 
@@ -45,6 +46,15 @@ class WindowTest(unittest.TestCase):
                           'Accepted publickey for verifyssh from 127.0.0.1 port 2 ssh2: ED25519 SHA256:abc',
                           'Jun  5 12:00:01 runner sshd[1]: Connection closed by authenticating user verifyssh')) + '\n'
         self.assertEqual(logins.measure(text, 1780000000.0, 1780000100.0)['logins'], 0)
+
+    def test_raw_sshd_lines_without_a_timestamp_are_not_guessed_into_a_window(self):
+        raw = 'Accepted publickey for verifyssh from 127.0.0.1 port 2 ssh2: ED25519 SHA256:abc'
+        self.assertEqual(logins.measure(raw + '\n', 1780000000.0, 1780000100.0)['logins'], 0)
+        stamped = authwatch.stamp(1780000050.0) + ' ' + raw + '\n'
+        found = logins.measure(stamped, 1780000000.0, 1780000100.0)
+        self.assertEqual(found['logins'], 1)
+        self.assertEqual(found['retained'], [dict(user='verifyssh', time=authwatch.stamp(1780000050.0),
+                                                 fingerprint='SHA256:abc')])
 
     def test_empty_window_is_a_failure_not_a_zero(self):
         with self.assertRaisesRegex(ValueError, 'BENCHMARK_EMPTY_WINDOW'):

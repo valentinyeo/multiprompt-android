@@ -59,15 +59,19 @@ Every metric has `median`, `min`, `max`; there are no timestamps, PIDs or run ID
 - **Platform warnings** separately counts the narrow allowlist of Android platform E lines logged under the app PID:
   `FrameTracker` `force finish cuj, time out: J<IME_INSETS_(SHOW|HIDE)_ANIMATION::...@<package>>`. Every other app-PID E
   line still counts in **Errors**.
-- **SSH logins/min** counts the fixture sshd's own `Accepted publickey` lines for `verifyssh` whose timestamp falls
-  in the measured window, divided by the window, so a login is measured instead of inferred from the relay or from
-  app code. The fixture already logs at `LogLevel VERBOSE` to `$FIXTURE/sshd.log`; `tools/scale-timing/logins.py`
-  reads that file and keeps only the user, the log's own timestamp and the key fingerprint of each counted line.
-  Those retained lines sit in the trial records of `samples.json`, and `tools/scale-timing/logins.test.py` proves
-  lines outside the window, lines for other users and several logins in one trial. sshd writes the accept before
-  the relay records the channel open, so a login that straddles a window edge is counted in the earlier window.
+- **SSH logins/min** counts the fixture sshd's own `Accepted publickey` lines for `verifyssh` that appeared in the
+  measured window, divided by the window, so a login is measured instead of inferred from the relay or from app code.
+  The fixture sshd logs at `LogLevel VERBOSE` but writes those lines without a timestamp, so
+  `tools/scale-timing/authwatch.py` follows `$FIXTURE/sshd.log` and stamps every new line with the UTC time it
+  appeared (within one 0.1 s poll). The workflow makes that log readable, and `frozen.py` keeps the stamped copy in a
+  temporary directory that is not published. `tools/scale-timing/logins.py` counts the stamped lines inside the
+  window and keeps only the user, the time and the key fingerprint of each counted line in the trial records of
+  `samples.json`; `logins.test.py` and `authwatch.test.py` prove lines outside the window, lines for other users,
+  several logins in one trial, a raw untimestamped sshd line and a line written in two pieces. sshd writes the accept
+  before the relay records the channel open, so a login that straddles a window edge is counted in the earlier window.
   A run whose relay opened channels but captured no login at all fails with `BENCHMARK_SSH_LOGINS_UNMEASURED`
-  rather than publishing a fast zero, and an unreadable auth log fails the trial with `BENCHMARK_AUTH_LOG_UNREADABLE`.
+  rather than publishing a fast zero, and an unreadable auth log fails the trial with `BENCHMARK_AUTH_LOG_UNREADABLE`,
+  while the workflow preflight fails in seconds when the log is missing or unreadable.
 - **Driver time stays separate** in each trial's `driver` and `wall_ms`. CPU never includes the `mpa`, adb,
   UI-automation or fixture processes. Do not subtract driver wall time from app CPU: they overlap, with different units.
   Wall time includes UI dumps and is not published as app latency. Idle/stream windows avoid UI dumps entirely.

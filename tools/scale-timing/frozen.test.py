@@ -176,11 +176,12 @@ class ParsingTest(unittest.TestCase):
         for log, expected_errors, expected_warnings in ((retained, 0, 2), (mixed, 1, 2)):
             with tempfile.TemporaryDirectory() as directory:
                 out = Path(directory)
-                args = argparse.Namespace(package=PACKAGE, clk_tck=100, fixture=directory)
-                Path(directory, 'sshd.log').write_text(
-                    stamp(99.0) + ' runner sshd[1]: Accepted publickey for verifyssh from 127.0.0.1 port 1 ssh2: ED25519 SHA256:outside\n'
-                    + stamp(102.0) + ' runner sshd[1]: Accepted publickey for verifyssh from 127.0.0.1 port 2 ssh2: ED25519 SHA256:inside\n'
-                    + stamp(103.0) + ' runner sshd[1]: Accepted publickey for root from 127.0.0.1 port 3 ssh2: ED25519 SHA256:other\n')
+                args = argparse.Namespace(package=PACKAGE, clk_tck=100, fixture=directory,
+                                          auth_log=str(Path(directory, 'auth.log')))
+                Path(directory, 'auth.log').write_text(
+                    stamp(99.0) + ' Accepted publickey for verifyssh from 127.0.0.1 port 1 ssh2: ED25519 SHA256:outside\n'
+                    + stamp(102.0) + ' Accepted publickey for verifyssh from 127.0.0.1 port 2 ssh2: ED25519 SHA256:inside\n'
+                    + stamp(103.0) + ' Accepted publickey for root from 127.0.0.1 port 3 ssh2: ED25519 SHA256:other\n')
                 responses = [
                     subprocess.CompletedProcess([], 0, ''),
                     subprocess.CompletedProcess([], 0, ''),
@@ -190,7 +191,7 @@ class ParsingTest(unittest.TestCase):
                 snaps = [dict(pid='2742', app=10, main=5), dict(pid='2742', app=25, main=9)]
                 with patch.object(frozen, 'adb', side_effect=responses), \
                         patch.object(frozen, 'snapshot', side_effect=snaps), \
-                        patch.object(frozen, 'auth_text', side_effect=lambda fixture: Path(fixture, 'sshd.log').read_text()), \
+                        patch.object(frozen, 'auth_text', side_effect=lambda path: Path(path).read_text()), \
                         patch.object(frozen.time, 'time', side_effect=[100.0, 105.0]), \
                         patch.object(frozen.measure, 'relay_text', return_value='{"event":"call","bytes":10,"t":102.0}\n'):
                     record = frozen.sample('typing_long_chat', 1, lambda: dict(characters=45, verified=True), args, out)
@@ -253,6 +254,7 @@ class RunTest(unittest.TestCase):
                 patch.object(frozen, 'sample', side_effect=sample), \
                 patch.object(frozen, 'adb'), patch.object(frozen, 'mpa') as mpa, \
                 patch.object(frozen.subprocess, 'run'), \
+                patch.object(frozen, 'watch_auth_log', return_value='unused/auth.log'), \
                 patch.object(frozen.measure, 'sign_in'), patch.object(frozen.measure, 'copy_relay'), \
                 patch.object(frozen.measure, 'clk_tck', return_value=100), \
                 patch.object(frozen.measure.probe, 'install_sampler'), \
