@@ -122,7 +122,8 @@ def main():
     label = stream_label(command)
     recorder = Recorder(open_log(), label)
     started = time.monotonic()
-    recorder.write(dict(event='open', stream=label, command=command[:120], t=round(time.time(), 3)))
+    recorder.write(dict(event='open', stream=label, list_sessions='__MP_TMUX_BEGIN__' in command,
+                        command=command[:120], t=round(time.time(), 3)))
     child = subprocess.Popen(['/bin/bash', '-c', command], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     output = threading.Thread(target=forward_output, args=(child, recorder), daemon=True)
     feeding = threading.Thread(target=forward_input, args=(child, recorder), daemon=True)
