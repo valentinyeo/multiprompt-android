@@ -36,7 +36,9 @@ class InboxPollingTest {
     private lateinit var foreground: MutableStateFlow<Boolean>
     private val host = HostProfile("host", "VPS", "example.com", username = "user")
     private var sessions = listOf(TmuxSession(host.id, "chat", 1, 0, 1))
+    private var checks = 0
     private var calls = 0
+    private var checksum = "1000 500"
     private var collecting: Job? = null
 
     @Before fun setup() {
@@ -50,6 +52,7 @@ class InboxPollingTest {
         state = ReflectionHelpers.getField(model, "_state")
         foreground = ReflectionHelpers.getField(model, "foreground")
         model.sessionLister = { calls++; SshRepository.HostSessions(sessions.map { it.copy() }) }
+        model.sessionSignaturer = { checks++; checksum }
         model.historyPrefetcher = { _, _ -> }
         model.historyWarmer = { _, _ -> }
         state.value = AppUiState(hosts = listOf(host))
@@ -74,97 +77,123 @@ class InboxPollingTest {
             shadowOf(Looper.getMainLooper()).idle()
             calls > 0 && !model.state.value.refreshing
         }
+        assertEquals(1, checks)
         assertEquals(1, calls)
     }
 
-    @Test fun unchangedListsBackOffToEightSecondsLeavingTwoSecondsForDelivery() {
+    @Test fun unchangedChecksumsBackOffToEightSecondsLeavingTwoSecondsForDelivery() {
         firstPoll()
-        advance(1_999); assertEquals(1, calls)
-        advance(1); assertEquals(2, calls)
-        advance(3_999); assertEquals(2, calls)
-        advance(1); assertEquals(3, calls)
-        advance(7_999); assertEquals(3, calls)
-        advance(1); assertEquals(4, calls)
+        advance(1_999); assertEquals(1, checks)
+        advance(1); assertEquals(2, checks)
+        advance(3_999); assertEquals(2, checks)
+        advance(1); assertEquals(3, checks)
+        advance(7_999); assertEquals(3, checks)
+        advance(1); assertEquals(4, checks)
         repeat(3) {
-            advance(7_999); assertEquals(4 + it, calls)
-            advance(1); assertEquals(5 + it, calls)
+            advance(7_999); assertEquals(4 + it, checks)
+            advance(1); assertEquals(5 + it, checks)
         }
     }
 
-    @Test fun changedListResetsTheNextIntervalToTwoSeconds() {
+    @Test fun anIdleInboxListsOnceAndOnlyChecksumsAfterWards() {
         firstPoll()
         advance(2_000)
+        advance(4_000)
+        repeat(6) { advance(8_000) }
+        assertEquals(1, calls)
+        assertEquals(9, checks)
+    }
+
+    @Test fun aChangedChecksumListsAtTheNextCheck() {
+        firstPoll()
+        advance(2_000)
+        assertEquals(2, checks)
+        assertEquals(1, calls)
+        checksum = "1001 512"
         sessions = sessions.map { it.copy(lastActivityEpochSeconds = 2, preview = "New reply") }
-        advance(4_000); assertEquals(3, calls)
+        advance(4_000)
+        assertEquals(3, checks)
+        assertEquals(2, calls)
         assertEquals("New reply", model.state.value.sessions.single().preview)
-        advance(1_999); assertEquals(3, calls)
-        advance(1); assertEquals(4, calls)
+        advance(1_999); assertEquals(3, checks)
+        advance(1); assertEquals(4, checks)
     }
 
     @Test fun userRefreshResetsBackoff() {
         firstPoll(); advance(2_000); advance(4_000); advance(8_000)
-        val before = calls
+        val listings = calls
+        val reads = checks
         compose.runOnIdle { model.refresh() }
         advance(0)
         compose.waitUntil(5_000) {
             shadowOf(Looper.getMainLooper()).idle()
-            calls == before + 1 && !model.state.value.refreshing
+            calls == listings + 1 && !model.state.value.refreshing
         }
-        advance(1_999); assertEquals(before + 1, calls)
-        advance(1); assertEquals(before + 2, calls)
+        advance(1_999); assertEquals(reads, checks); assertEquals(listings + 1, calls)
+        advance(1); assertEquals(reads + 1, checks); assertEquals(listings + 2, calls)
     }
 
     @Test fun aTapWithoutARefreshAlsoRestartsTheTwoSecondInterval() {
         firstPoll(); advance(2_000); advance(4_000); advance(8_000)
-        val before = calls
+        val listings = calls
+        val reads = checks
         model.onUserInteraction()
-        advance(1_999); assertEquals(before, calls)
-        advance(1); assertEquals(before + 1, calls)
+        advance(1_999); assertEquals(reads, checks)
+        advance(1); assertEquals(reads + 1, checks)
+        assertEquals(listings + 1, calls)
     }
 
     @Test fun aNewReplyAtMaximumBackoffArrivesWithinTenSeconds() {
         firstPoll(); advance(2_000); advance(4_000); advance(8_000)
+        checksum = "1001 512"
         sessions = sessions.map { it.copy(lastActivityEpochSeconds = 2, preview = "New reply") }
         advance(7_999)
         assertNotEquals("New reply", model.state.value.sessions.single().preview)
         advance(1)
         assertEquals("New reply", model.state.value.sessions.single().preview)
-        val before = calls
-        advance(2_000); assertEquals(before + 1, calls)
+        val reads = checks
+        advance(2_000); assertEquals(reads + 1, checks)
     }
 
     @Test fun realResumeRefreshesImmediatelyAndRestartsFast() {
         firstPoll(); advance(2_000); advance(4_000); advance(8_000)
         model.onPause()
+        val paused = checks
         advance(30_000)
-        val before = calls
+        assertEquals(paused, checks)
+        val listings = calls
+        val reads = checks
         compose.runOnIdle { model.onResume() }
         advance(0)
         compose.waitUntil(5_000) {
             shadowOf(Looper.getMainLooper()).idle()
-            calls == before + 1 && !model.state.value.refreshing
+            calls == listings + 1 && !model.state.value.refreshing
         }
-        advance(1_999); assertEquals(before + 1, calls)
-        advance(1); assertEquals(before + 2, calls)
+        advance(1_999); assertEquals(reads, checks)
+        advance(1); assertEquals(reads + 1, checks)
     }
 
     @Test fun noPollingWhileSettingsHideTheInbox() {
         firstPoll()
         model.setInboxVisible(false)
-        advance(30_000); assertEquals(1, calls)
+        advance(30_000)
+        assertEquals(1, checks)
+        assertEquals(1, calls)
         model.setInboxVisible(true)
-        advance(1_999); assertEquals(1, calls)
-        advance(1); assertEquals(2, calls)
+        advance(1_999); assertEquals(1, checks)
+        advance(1); assertEquals(2, checks)
+        assertEquals(2, calls)
     }
 
     @Test fun noPollingWhenBackgroundedEvenAfterTheOldBackgroundInterval() {
         firstPoll()
         foreground.value = false
         advance(120_000)
+        assertEquals(1, checks)
         assertEquals(1, calls)
         foreground.value = true
-        advance(1_999); assertEquals(1, calls)
-        advance(1); assertEquals(2, calls)
+        advance(1_999); assertEquals(1, checks)
+        advance(1); assertEquals(2, checks)
     }
 
     @Test fun noPollingBehindOtherScreensAndReturningRestartsFast() {
@@ -177,12 +206,12 @@ class InboxPollingTest {
             state.value.copy(editorVisible = true),
         )) {
             state.value = hidden
-            val before = calls
-            advance(30_000); assertEquals(before, calls)
+            val reads = checks
+            advance(30_000); assertEquals(reads, checks)
             state.value = hidden.copy(section = AppSection.SESSIONS, readerSession = null,
                 terminalSession = null, roomId = null, editorVisible = false)
-            advance(1_999); assertEquals(before, calls)
-            advance(1); assertEquals(before + 1, calls)
+            advance(1_999); assertEquals(reads, checks)
+            advance(1); assertEquals(reads + 1, checks)
         }
     }
 
@@ -193,7 +222,8 @@ class InboxPollingTest {
         advance(0)
         val before = emitted.size
         advance(2_000)
-        assertEquals(2, calls)
+        assertEquals(2, checks)
+        assertEquals(1, calls)
         assertEquals(before, emitted.size)
     }
 }

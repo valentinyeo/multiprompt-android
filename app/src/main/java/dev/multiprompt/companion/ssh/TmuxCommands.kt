@@ -346,7 +346,18 @@ object TmuxCommands {
     fun attach(sessionName: String): String =
         "exec tmux attach-session -f ignore-size -t ${sessionTarget(sessionName)}"
 
-    internal fun sessionRows(format: String): String {
+    internal fun sessionRows(format: String): String = sessionLoop(format) { destination ->
+        "printf '${TmuxParser.PREVIEW_PREFIX}'; ${paneTail(destination)} | od -An -v -tx1 | tr -d ' \\n'; printf '\\n'; "
+    }
+
+    internal fun sessionKeyRows(format: String): String = sessionLoop(format) { destination ->
+        "${paneTail(destination)}; printf '\\n'; "
+    }
+
+    private fun paneTail(destination: String): String =
+        "tmux capture-pane -p -J -S -12 -t $destination 2>/dev/null | tail -c 4096"
+
+    private fun sessionLoop(format: String, paneRow: (String) -> String): String {
         val destination = "\"${exactName("\$mp_session")}:\""
         return "tmux list-sessions -F '#{session_name}' | while IFS= read -r mp_session; do " +
             "mp_row=\$(tmux display-message -p -t $destination -F ${TmuxParser.shellQuote(format)}) || continue; " +
@@ -354,10 +365,8 @@ object TmuxCommands {
             "mp_name=\${mp_row%%${TmuxParser.FIELD_SEPARATOR}*}; " +
             "[ \"\$mp_name\" = \"\$mp_session\" ] || continue; " +
             "printf '%s\\n' \"\$mp_row\"; " +
-            "printf '${TmuxParser.PREVIEW_PREFIX}'; " +
-            "tmux capture-pane -p -J -S -12 -t $destination 2>/dev/null | " +
-            "tail -c 4096 | od -An -v -tx1 | tr -d ' \\n'; " +
-            "printf '\\n'; done; "
+            paneRow(destination) +
+            "done; "
     }
 
     internal fun hostedRows(): String =

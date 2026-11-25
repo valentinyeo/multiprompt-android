@@ -1553,6 +1553,10 @@
         "SessionPreview",
         "setInboxVisible|sessionRefreshIntervalMs|onUserInteraction|onInboxVisibilityChanged",
         "warmRecentHistories|prefetchRecentHistories|PREFETCH_SESSIONS"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/ssh/TmuxParser\\.kt$",
+        "^app/src/main/java/dev/multiprompt/companion/model/InboxPollGate\\.kt$"
       ]
     },
     "inbox.search": {

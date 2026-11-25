@@ -10,8 +10,10 @@ object TmuxParser {
     const val PREVIEW_PREFIX: String = "__MP_TMUX_PREVIEW__"
     private val SESSION_ID = Regex("[A-Za-z0-9_-]{1,80}")
 
-    fun command(): String {
-        val format = listOf(
+    private val CHECKSUM_LINE = Regex("[0-9]{1,20} [0-9]{1,20}")
+
+    private fun rowFormat(): String =
+        listOf(
             "#{session_name}",
             "#{session_windows}",
             "#{session_attached}",
@@ -26,6 +28,9 @@ object TmuxParser {
             "#{window_activity}",
             "#{pane_title}",
         ).joinToString(FIELD_SEPARATOR)
+
+    fun command(): String {
+        val format = rowFormat()
         return "printf '${START_MARKER}\\n'; " +
             "if command -v tmux >/dev/null 2>&1; then " +
             TmuxCommands.sessionRows(format) +
@@ -35,6 +40,28 @@ object TmuxParser {
             "printf '\\n'; " +
             "else printf '${ERROR_PREFIX}tmux_not_found\\n'; fi; " +
             "printf '${END_MARKER}\\n'"
+    }
+
+    fun signatureCommand(): String {
+        val format = rowFormat()
+        return "printf '${START_MARKER}\\n'; " +
+            "if command -v tmux >/dev/null 2>&1; then " +
+            "{ " +
+            TmuxCommands.sessionKeyRows(format) +
+            TmuxCommands.hostedRows() +
+            "printf '${TmuxCommands.ETA_PREFIX}'; " +
+            "{ ${TmuxCommands.etaRowsCommand()} ; } | od -An -v -tx1 | tr -d ' \\n'; printf '\\n'; " +
+            "} | cksum; " +
+            "else printf '${ERROR_PREFIX}tmux_not_found\\n'; fi; " +
+            "printf '${END_MARKER}\\n'"
+    }
+
+    fun parseSignature(output: String): String? {
+        val lines = output.lineSequence().map(String::trimEnd).toList()
+        val start = lines.indexOf(START_MARKER)
+        val end = lines.indexOf(END_MARKER)
+        if (start < 0 || end <= start) return null
+        return lines.subList(start + 1, end).firstOrNull { CHECKSUM_LINE.matches(it) }
     }
 
     fun hasEnvelope(output: String): Boolean =

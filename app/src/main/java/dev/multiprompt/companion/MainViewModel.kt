@@ -21,6 +21,7 @@ import dev.multiprompt.companion.model.RecentFolder
 import dev.multiprompt.companion.model.RecentFolders
 import dev.multiprompt.companion.model.RemoteDirectory
 import dev.multiprompt.companion.model.RefreshMerge
+import dev.multiprompt.companion.model.InboxPollGate
 import dev.multiprompt.companion.data.UnreadCount
 import dev.multiprompt.companion.room.roomRecipients
 import dev.multiprompt.companion.room.RoomHosts
@@ -85,6 +86,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -254,6 +256,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var sessionRefreshJob: kotlinx.coroutines.Job? = null
     private var lastSessionResults: Map<String, HostRefresh> = emptyMap()
     internal var sessionLister: suspend (HostProfile) -> SshRepository.HostSessions = { ssh.listSessions(it) }
+    internal var sessionSignaturer: suspend (HostProfile) -> String = { ssh.listSessionSignature(it) }
+    private val inboxPollGate = InboxPollGate()
     internal var notificationHistoryReader: suspend (HostProfile, TmuxSession) -> dev.multiprompt.companion.reader.ChatHistory? = { host, session ->
         ssh.readChatHistory(host, session, app.chatHistoryScript)
     }
@@ -363,13 +367,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     !state.editorVisible && state.newSession == null) to interaction
             }.distinctUntilChanged().collectLatest { (visible, _) ->
                 sessionRefreshIntervalMs = SESSION_REFRESH_INTERVAL_MS
+                inboxPollGate.forgetAll()
                 if (!visible) return@collectLatest
                 var waitMs = SESSION_REFRESH_INTERVAL_MS
                 while (true) {
                     delay(waitMs)
                     val started = SystemClock.elapsedRealtime()
+                    val interaction = inboxInteraction.value
                     sweepWarmReaders()
-                    refreshSessions(silent = true)?.join()
+                    val changed = inboxListingDue()
+                    if (changed) refreshSessions(silent = true)?.join()
+                    sessionRefreshIntervalMs = if (changed || interaction != inboxInteraction.value) {
+                        SESSION_REFRESH_INTERVAL_MS
+                    } else {
+                        (sessionRefreshIntervalMs * 2).coerceAtMost(MAX_SESSION_REFRESH_INTERVAL_MS)
+                    }
                     waitMs = (sessionRefreshIntervalMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(0L)
                 }
             }
@@ -889,11 +901,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refreshSessions(silent = false)
     }
 
+    private suspend fun inboxListingDue(): Boolean {
+        val snapshot = _state.value.hosts
+        if (snapshot.isEmpty()) return false
+        val signatures = coroutineScope {
+            snapshot.map { host ->
+                async {
+                    host.id to try {
+                        sessionSignaturer(host)
+                    } catch (failure: Exception) {
+                        if (failure is CancellationException) throw failure
+                        null
+                    }
+                }
+            }.awaitAll()
+        }
+        return signatures.any { (hostId, signature) -> inboxPollGate.wantsListing(hostId, signature) }
+    }
+
     private fun refreshSessions(silent: Boolean): kotlinx.coroutines.Job? {
         if (sessionRefreshJob?.isActive == true || _state.value.refreshing) return null
         val snapshot = _state.value.hosts
         if (snapshot.isEmpty()) return null
-        val interaction = inboxInteraction.value
         return viewModelScope.launch {
             try {
                 val cachedByHost = if (silent) emptyMap() else {
@@ -926,6 +955,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }.awaitAll()
                 val changed = results != lastSessionResults
+                results.values.forEach { if (it.error != null) inboxPollGate.forget(it.hostId) }
                 results.values.filter { it.error == null && it != lastSessionResults[it.hostId] }.forEach { result ->
                     sessionCache.save(result.hostId, result.sessions)
                 }
@@ -933,11 +963,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
                 }
                 lastSessionResults = results.toMap()
-                sessionRefreshIntervalMs = if (!silent || changed || interaction != inboxInteraction.value) {
-                    SESSION_REFRESH_INTERVAL_MS
-                } else {
-                    (sessionRefreshIntervalMs * 2).coerceAtMost(MAX_SESSION_REFRESH_INTERVAL_MS)
-                }
                 markInboxReady()
                 openPendingNotificationSession()
                 pendingNotificationKey = null
