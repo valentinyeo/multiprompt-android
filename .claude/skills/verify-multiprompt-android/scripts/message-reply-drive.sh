@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 mpa="$scripts/mpa"
+shot_pair() {
+    "$mpa" screenshot "$1" | python3 -B -c 'import json, sys; shot = json.load(sys.stdin); print(shot["xml"], shot["png"])'
+}
+"$mpa" tap text 'Mention 2953'
+"$mpa" read --select desc --value 'Session actions' --timeout 20
+read -r before_xml before_png <<< "$(shot_pair mention-bot-before)"
+"$mpa" tap desc 'Session actions'
+"$mpa" tap text 'Bot look'
+"$mpa" read --wait-text Face
+"$mpa" tap desc 'Face 3'
+"$mpa" tap desc 'Colour 4'
+"$mpa" key back
+"$mpa" read --wait-absent 'Bot look'
+read -r chosen_xml chosen_png <<< "$(shot_pair mention-bot-chosen)"
+"$mpa" key back
+"$mpa" read --wait-text Inbox
 "$mpa" tap text verify-session
 "$mpa" read --wait-text 'Message verify-session'
 "$mpa" read --wait-text REPLY_BUBBLE_418
@@ -40,8 +56,13 @@ grep -Fx 'REPLY_BODY_418' "$EVIDENCE/reply-receipts.txt"
 grep -Fx 'live-cl_mention-2953|Mention 2953' "$EVIDENCE/mention-session.txt"
 "$mpa" fill 'Message verify-session' '@Mention'
 "$mpa" read --wait-text 'Mention 2953'
-"$mpa" screenshot mention-list
-"$mpa" proof --name mention-list --require-text 'Mention 2953' --forbid-text 'live-cl_mention-2953' --note MENTION_LIST_NAMED_BY_CHAT --proof-file "$EVIDENCE/mention-proof.txt"
+read -r mention_xml mention_png <<< "$(shot_pair mention-list)"
+python3 -B tools/message-reply/bot-face.py --session live-cl_mention-2953 \
+    --before "$before_xml" "$before_png" \
+    --chosen "$chosen_xml" "$chosen_png" \
+    --mention "$mention_xml" "$mention_png" \
+    --out "$EVIDENCE/mention-bot-face.json"
+"$mpa" proof --name mention-list --require-text 'Mention 2953' --require-desc 'Robot live-cl_mention-2953' --forbid-text 'live-cl_mention-2953' --note MENTION_LIST_NAMED_BY_CHAT --proof-file "$EVIDENCE/mention-proof.txt"
 "$mpa" tap text 'Mention 2953'
 "$mpa" read --wait-text '@Mention 2953'
 "$mpa" tap desc 'Send prompt'
