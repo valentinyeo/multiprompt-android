@@ -268,6 +268,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
     private val prefetchedActivity = mutableMapOf<String, Long>()
     private val prefetchedHostAt = mutableMapOf<String, Long>()
+    private var warmRunning = false
     private var prefetchRunning = false
     private var inboxReadyMarked = false
     private var replyNotificationsBaselined = false
@@ -941,7 +942,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 openPendingNotificationSession()
                 pendingNotificationKey = null
                 syncReplyNotifications()
-                prefetchRecentHistories()
+                warmRecentHistories()
             } finally {
                 if (!silent) _state.update { it.copy(refreshing = false) }
                 sessionRefreshJob = null
@@ -959,14 +960,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (BuildConfig.DEBUG) Log.i(MultipromptApplication.STARTUP_TAG, "inbox-ready")
     }
 
-    private fun prefetchRecentHistories() {
-        if (prefetchRunning || !foreground.value) return
-        val state = _state.value
+    private fun recentPrefetchSessions(state: AppUiState): List<TmuxSession> {
         val open = warmReaders.keys + listOfNotNull(state.readerSession?.let { SessionReadStore.key(it.hostId, it.name) })
-        val recent = state.sessions
+        return state.sessions
             .filter { ChatHistoryProtocol.supports(it.agent, it.hostSessionId) && SessionReadStore.key(it.hostId, it.name) !in open }
             .sortedByDescending { maxOf(state.sessionInteractionEpochSeconds[SessionReadStore.key(it.hostId, it.name)] ?: 0L, it.lastActivityEpochSeconds) }
             .take(PREFETCH_SESSIONS)
+    }
+
+    private fun warmRecentHistories() {
+        if (warmRunning || !foreground.value) return
+        val state = _state.value
+        val recent = recentPrefetchSessions(state)
+        if (recent.isEmpty()) return
+        warmRunning = true
+        viewModelScope.launch {
+            try {
+                recent.groupBy { it.hostId }.forEach { (hostId, sessions) ->
+                    val host = state.hosts.firstOrNull { it.id == hostId } ?: return@forEach
+                    try {
+                        historyWarmer(host, sessions)
+                    } catch (failure: Exception) {
+                        if (failure is CancellationException) throw failure
+                    }
+                }
+            } finally {
+                warmRunning = false
+            }
+        }
+    }
+
+    private fun prefetchRecentHistories() {
+        if (prefetchRunning || !foreground.value) return
+        val state = _state.value
+        val recent = recentPrefetchSessions(state)
         if (recent.isEmpty()) return
         val now = System.currentTimeMillis()
         val due = recent.filter { session ->
@@ -1276,6 +1303,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 unreadSessionKeys = it.unreadSessionKeys - key,
                 unreadCounts = it.unreadCounts - key,
             )
+        }
+        if (ChatHistoryProtocol.supports(session.agent, session.hostSessionId)) {
+            prefetchRecentHistories()
         }
     }
 
@@ -2494,7 +2524,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
         const val SESSION_REFRESH_INTERVAL_MS = 2_000L
         const val MAX_SESSION_REFRESH_INTERVAL_MS = 8_000L
-        const val PREFETCH_SESSIONS = 8
+        const val PREFETCH_SESSIONS = 4
         const val PREFETCH_HOST_GAP_MS = 45_000L
     }
 }
