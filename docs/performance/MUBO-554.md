@@ -118,3 +118,112 @@ The measured head later gained one change in the diagnostic hook only: the compo
 follows a runtime `TypingProbe.enabled` flag initialised from `BuildConfig.DEBUG`, so the
 Material 3 release-flavour unit test can switch it on. In the debug APK the flag is true
 either way, so the key path measured here is the key path that ships.
+
+## Frozen benchmark against the merged baseline
+
+The frozen harness from [PR #617](https://github.com/valentinyeo/multiprompt-android/pull/617)
+(`scale-timing.yml`, mode `frozen`, schema `mubo-555-v1`) times the same work on both sides and
+records `App CPU ms`, `Main ms`, `frames over 16 ms` and the raw `dumpsys gfxinfo` histogram.
+Seed `scale`, five repeats, scenario `typing_long_chat`: open the largest chat, then type the
+fixed 45-character draft `Frozen benchmark types this everyday message.` through `mpa fill` and
+check the exact readback. Nothing is sent.
+
+Two pairs ran in the same window, each with a concurrent base control:
+
+| Pair | Head | Base | Head run | Base run |
+| --- | --- | --- | --- | --- |
+| 1 | `4c9f2c36` | `5ed79144` | [45602881727](https://github.com/valentinyeo/multiprompt-android/actions/runs/45602881727) | [45602885651](https://github.com/valentinyeo/multiprompt-android/actions/runs/45602885651) |
+| 2 | `4c9f2c36` | `5ed79144` | [45604592131](https://github.com/valentinyeo/multiprompt-android/actions/runs/45604592131) | [45604596950](https://github.com/valentinyeo/multiprompt-android/actions/runs/45604596950) |
+
+Medians of five trials, with each trial range under them:
+
+| Pair | Side | App CPU ms | Main ms | Frames over 16 ms | Wall ms |
+| --- | --- | --- | --- | --- | --- |
+| frozen baseline (`5ed79144`, #617) | base | 8720 (7770-9910) | 1000 (1000-1130) | 129 (124-146) | - |
+| 1 | head | 6170 (5560-6590) | 620 (520-710) | 121 (115-125) | 19.7 (19.4-20.3 s) |
+| 1 | base | 8160 (6750-8530) | 820 (740-930) | 131 (121-136) | 23.1 (21.9-23.9 s) |
+| 2 | head | 6970 (6270-8440) | 730 (660-940) | 126 (117-137) | 20.9 (20.1-22.6 s) |
+| 2 | base | 7750 (7110-8260) | 830 (750-950) | 127 (121-135) | 22.9 (22.2-23.8 s) |
+
+App CPU and Main CPU drop in both pairs and the direction never reverses. Pair 1 separates on
+the harness's own range rule (head max 6590 below base min 6750 for App CPU, 710 below 740 for
+Main); pair 2 overlaps by one trial (head max 8440 above base max 8260), so read pair 2's CPU
+as within noise and pair 1 as the separated result. Errors are one per trial on both sides in
+every run, the same unrelated `CellSignalStrengthLte` line, so no work was dropped to buy the
+saving.
+
+### Frame time, the metric Valentin feels
+
+`frames over 16 ms` is a count of frames in the gfxinfo histogram above 16 ms, and on this
+software-rendered emulator every frame is above it. In pair 1, head trial 1, no frame landed in
+any histogram bin at or below 31 ms, the GPU histogram puts 120 of 121 frames at its 4950 ms
+clamp, `Number Slow issue draw commands` is 120 of 121, and `Number Frame deadline missed` is
+120. So that count is the number of frames the app managed to draw in the window, and it cannot
+fall while the emulator draws 4 to 6 frames a second. It even rises when a build draws more
+frames in the same wall time.
+
+The per-frame number inside the same gfxinfo dump is the histogram percentile. Medians of five
+trials, ranges under them:
+
+| Pair | Side | Frame p50 ms | p90 ms | p95 ms | p99 ms | Slow UI frames |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | head | 150 (150-150) | 250 (200-250) | 250 (250-250) | 300 (250-300) | 83 (82-90) |
+| 1 | base | 200 (200-200) | 300 (300-300) | 300 (300-350) | 350 (350-400) | 104 (94-106) |
+| 2 | head | 150 (150-200) | 250 (200-250) | 250 (250-300) | 300 (300-350) | 96 (86-115) |
+| 2 | base | 200 (200-200) | 300 (300-300) | 300 (300-350) | 400 (350-450) | 104 (98-107) |
+
+Head p50 is 150 ms in nine of ten trials and 200 ms in one; base is 200 ms in all ten. The
+whole p50, p90 and p99 ranges separate in both pairs. p95 touches at 300 in pair 2, so treat
+p95 there as within noise. Every key press in this build costs a frame a quarter shorter than
+the base's, and the share of frames that miss the UI-thread deadline falls with it.
+
+### What still costs a frame per key
+
+Recomposition is not it any more, and this is measured with the branch's own counter
+(`TypingProbe`), which the debug APK reports per key in `typing/keys.json`:
+
+| Composable | Compositions per typed key, before `af89f77d` | After `dba212eb` |
+| --- | ---: | ---: |
+| `ReaderScreen` (whole chat screen) | 1.123 | 0.060 |
+| `MultipromptApp` | 0.103 | 0.060 |
+| Composer `BasicTextField` | 2.14 | 2.16 |
+| `ChatHistoryList` (message list) | 0.137 | 0.093 |
+
+`4c9f2c36` on top of `dba212eb` removes the composer's per-key layout-state loop, the skill-span
+scan for drafts without a slash, and the per-key draft write, so its counts are at or below the
+right-hand column. The reader's 0.060 is its two-second repoll landing inside the window; the
+list's 0.093 is the same live traffic. The JVM guard
+`ComposerLongDraftTest.typingAndMiddleEditsDoNotRecomposeTheReaderOrMessageList` puts key-driven reader and list
+compositions at zero.
+
+The remaining per-key cost is the composer's own text layout, about 2 ms of the ~13.8 ms Main
+CPU per key, and then drawing. The sampled Main trace in this build spends 36.09 ms exclusive in
+`HardwareRenderer.nSyncAndDrawFrame` and 77.86 ms inclusive in `performDraw`; the GPU histogram
+above shows the emulator failing to finish 120 of 121 frames. No app-side change moves this
+harness's frame time further, which is why the benchmark README calls the frame count secondary.
+
+### Keyboard insets
+
+The reader's message list takes its bottom padding from the Scaffold's bottom-bar padding
+(`MultipromptApp.kt`, `bottomPadding = padding.calculateBottomPadding()` into
+`ChatHistoryList`), and the bar carries `Modifier.imePadding()`. Every frame of the keyboard
+open animation therefore changes the list's content padding and remeasures the visible rows.
+That is real, and it is not per key: the app logs exactly one
+`FrameTracker ... IME_INSETS_SHOW_ANIMATION` timeout per keyboard open, 5 in 5 trials, and
+identical counts at base and head in both pairs. Rows are not moved behind the keyboard in this
+change, because that would be a visible regression while typing. Making the list keep one
+padding for the whole animation is the next candidate, and it needs its own measurement before
+any edit.
+
+## Skill pills under the same head
+
+`journey skill-pills.md / verify` failed on this head at run
+[45602903068](https://github.com/valentinyeo/multiprompt-android/actions/runs/45602903068) with
+`Pill picker missing after typing "/ "`, then `JOURNEY_ACTION_UNREACHABLE` on its own retry.
+A fresh dispatch of the same journey on `main` ([45608796642](https://github.com/valentinyeo/multiprompt-android/actions/runs/45608796642))
+fails at the same two lines, so the picker flake and the dead retry are the base's, not this
+branch's. The retry calls `fill 'Message verify-session' ...`, which resolves the field by its
+placeholder label, and the placeholder is gone once the attempt has typed anything, so a retry
+could never succeed. It now clears the focused field by class and retypes the draft before the
+second attempt, and each attempt waits for the picker row instead of reading one dump. The
+assertions are unchanged: `Please / this` in the composer and `/pill-guide-01` in the picker.
