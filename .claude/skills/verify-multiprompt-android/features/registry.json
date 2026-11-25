@@ -1531,6 +1531,9 @@
       "sideEffect": false,
       "match": [
         "observeDrafts|Session draft"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/data/SessionReadStore\\.kt$"
       ]
     },
     "inbox.favorite-dot": {
@@ -1744,7 +1747,10 @@
           "file": "skill-pills-receipts.txt",
           "quote": "VERIFY_RECEIVED:Please /review-native this"
         }
-      }
+      },
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/ui/TypingProbe\\.kt$"
+      ]
     },
     "chat-table.expand": {
       "description": "Expand, scroll and close a chat table.",
@@ -1879,7 +1885,10 @@
           "file": "reply-receipts.txt",
           "quote": "> REPLY_BUBBLE_418"
         }
-      }
+      },
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/ui/ChatHistoryList\\.kt$"
+      ]
     },
     "chat.mentions": {
       "description": "Typing @ lists another chat under the real name the chat list shows, picking it inserts that name, and the sent text carries the tmux session so the desktop routes the mention to the right chat.",
