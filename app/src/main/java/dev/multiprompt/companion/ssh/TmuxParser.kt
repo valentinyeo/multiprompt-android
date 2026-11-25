@@ -42,8 +42,6 @@ object TmuxParser {
             "printf '${END_MARKER}\\n'"
     }
 
-    // The checksum covers the pane tail as well as the rows: a chat that prints a new
-    // message changes no tmux row, so rows alone would hide a new reply from the Inbox.
     fun signatureCommand(): String {
         val format = rowFormat()
         return "printf '${START_MARKER}\\n'; " +
