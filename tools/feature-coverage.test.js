@@ -377,7 +377,7 @@ test('the real picker maps the PR #425 shared-reader files by rule and survives 
     assert.deepEqual(JSON.parse(values.match(/^changed_outcomes=(.+)$/m)[1]), ['codex.transcript', 'reader.host-restart']);
     assert.deepEqual(JSON.parse(values.match(/^features=(.+)$/m)[1]), ['chat-codex.md', 'host-restart.md']);
     assert.match(run.stderr, /the model also answered unmapped; the 2 code-mapped outcome\(s\) stand/);
-    assert.doesNotMatch(values, /unmapped/);
+    assert.doesNotMatch(values, /changed_outcomes=\[[^\n]*"unmapped"/);
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }
 });
 

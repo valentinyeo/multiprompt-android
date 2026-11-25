@@ -795,6 +795,7 @@ else console.log(JSON.stringify({ number: 1, title: 'Tidy the checks', body: 'to
       env: {
         PATH: `${directory}:${process.env.PATH}`, PICK_RESULT: 'success', REPO: 'a/b', PR_NUMBER: '1',
         HEAD_SHA: sha, RUN_ID: '1', RUN_URL: runUrl, FEATURES: '[]', CHANGED_OUTCOMES: '[]', VERIFIER_DRY: '1',
+        COVERAGE_RECORDED: 'yes', UNMAPPED: '[]',
         COVERAGE_REPORT: path.join(directory, 'coverage.json'),
       },
     });
@@ -1567,6 +1568,7 @@ else console.log(JSON.stringify({ number: 1, title: 'UI change', body: '', head:
     const baseEnv = {
       PATH: `${directory}:${process.env.PATH}`, PICK_RESULT: 'success', REPO: 'a/b', PR_NUMBER: '1',
       HEAD_SHA: sha, RUN_ID: '77', RUN_URL: runUrl, FEATURES: '["chat-search.md"]', CHANGED_OUTCOMES: '["chat-search.open"]', VERIFIER_DRY: '1',
+      COVERAGE_RECORDED: 'yes', UNMAPPED: '[]',
       COVERAGE_REPORT: path.join(directory, 'coverage.json'),
     };
     const visibleRun = spawnSync(process.execPath, [path.join(root, '.github/scripts/pstack-verifier/verifier.cjs'), 'judge'], {
