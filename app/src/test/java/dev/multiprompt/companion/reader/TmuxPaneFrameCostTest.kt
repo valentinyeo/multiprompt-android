@@ -176,17 +176,26 @@ class TmuxPaneFrameCostTest {
                 "Measured on `${Thread.currentThread().name}`.",
         )
         appendLine()
-        appendLine("| stage | thread | source | identical mean ms | identical p95 ms | changed mean ms | changed p95 ms | KiB allocated per frame |")
-        appendLine("|---|---|---|---|---|---|---|---|")
+        appendLine("| stage | thread | source | identical mean ms | identical p95 ms | changed mean ms | changed p95 ms | identical KiB allocated | changed KiB allocated |")
+        appendLine("|---|---|---|---|---|---|---|---|---|")
         for (name in identical.names()) {
             val a = identical.stage(name)
             val b = changed.stage(name)
             appendLine(
                 "| ${a.name} | ${a.thread} | `${a.source}` | ${ms(a.meanMs())} | ${ms(a.p95Ms())} | " +
-                    "${ms(b.meanMs())} | ${ms(b.p95Ms())} | ${kib(a.meanKiB())} |",
+                    "${ms(b.meanMs())} | ${ms(b.p95Ms())} | ${kib(a.meanKiB())} | ${kib(b.meanKiB())} |",
             )
         }
         appendLine()
+        val ioStages = identical.names().filter { it != UI_WORKING_READ }
+        appendLine(
+            "- totals per identical frame: ${ms(ioStages.sumOf { identical.stage(it).meanMs() })} ms IO, " +
+                "${ms(identical.stage(UI_WORKING_READ).meanMs())} ms Main, " +
+                "${kib(identical.names().sumOf { identical.stage(it).meanKiB().coerceAtLeast(0.0) })} KiB allocated; " +
+                "per changed frame: ${ms(ioStages.sumOf { changed.stage(it).meanMs() })} ms IO, " +
+                "${ms(changed.stage(UI_WORKING_READ).meanMs())} ms Main, " +
+                "${kib(changed.names().sumOf { changed.stage(it).meanKiB().coerceAtLeast(0.0) })} KiB allocated.",
+        )
         appendLine("- identical frames: $identicalEmits of $FRAMES emitted a new ReaderState; changed frames: $changedEmits of $FRAMES. `nextPaneState` returns null for an unchanged pane, so the StateFlow keeps its value and Compose recomposes no extra times.")
         appendLine("- `frame-state` is the whole `nextPaneState` (unchanged check, merge, runtime details, working read on the pane tail); it does the merge only when the pane changed.")
         appendLine("- `ui-working-read` on Main now reads the Boolean `ReaderState.working` that `PaneWorking.kt` computes on IO from the last $WORKING_TAIL_LINES pane lines (`WorkingDots.kt`, `ChatHistoryList.kt`, `MultipromptApp.kt`).")
