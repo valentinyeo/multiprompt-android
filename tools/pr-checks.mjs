@@ -34,7 +34,7 @@ export function speedJobName(text = readFileSync(new URL('../.github/workflows/s
   return name;
 }
 export const speedCheckJob = speedJobName();
-export const journeyVerifyCheck = /^journey (.+) \/ verify$/;
+export const journeyVerifyCheck = /^(?:parent )?journey (.+) \/ verify$/;
 export const nightlyWorkflow = 'android-full.yml';
 export const nightlyJobName = /^nightly (.+) \/ verify$/;
 export const nightlyJobsPerPage = 100;
@@ -146,7 +146,7 @@ export function checkStatus(pr, { redOnMain = { journeys: [], url: '' } } = {}) 
     const match = journeyVerifyCheck.exec(check.name ?? '');
     if (match && redOnMainSet.has(match[1])) {
       if (verifierGreen) {
-        toleratedRedOnMain.push(match[1]);
+        if (!toleratedRedOnMain.includes(match[1])) toleratedRedOnMain.push(match[1]);
         return false;
       }
       if (verifierPending) return false;

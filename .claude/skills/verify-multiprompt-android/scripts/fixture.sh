@@ -15,7 +15,7 @@ ssh-keygen -q -t ed25519 -N '' -C verify-ephemeral -f "$FIXTURE/host-key"
 ssh-keygen -lf "$FIXTURE/host-key.pub" -E sha256 | awk '{print $2}' > "$EVIDENCE/host-fingerprint.txt"
 sudo install -d -m 700 -o verifyssh -g verifyssh /home/verifyssh/.ssh
 sudo install -m 600 -o verifyssh -g verifyssh "$FIXTURE/user-key.pub" /home/verifyssh/.ssh/authorized_keys
-if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == settings-controls.md || "${VERIFY_FEATURE:-}" == inbox-reminders.md ]]; then
+if [[ "${VERIFY_FEATURE:-}" == session-routing.md || "${VERIFY_FEATURE:-}" == settings-controls.md || "${VERIFY_FEATURE:-}" == inbox-reminders.md || "${VERIFY_FEATURE:-}" == session-summaries.md ]]; then
     sudo install -m 755 "$(dirname "$0")/routing-canary.py" /home/verifyssh/routing-canary.py
     cat > "$FIXTURE/ssh-command" <<'COMMAND'
 #!/usr/bin/env bash

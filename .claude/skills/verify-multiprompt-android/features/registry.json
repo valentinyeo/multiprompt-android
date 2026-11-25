@@ -123,7 +123,8 @@
       "outcomes": [
         "codex.transcript",
         "reader.lifecycle",
-        "reader.pane-budget"
+        "reader.pane-budget",
+        "reader.working-flag"
       ],
       "evidence": {
         "reader-ui.json": 6000,
@@ -323,6 +324,7 @@
         "inputs": {},
         "prerequisites": [],
         "driver": true,
+        "driveMinutes": 35,
         "scripts": [
           ".claude/skills/verify-multiprompt-android/scripts/native-menu-drive.sh"
         ]
@@ -556,12 +558,18 @@
         "prerequisites": [],
         "driver": true,
         "scripts": [
-          "tools/session-gestures/drive.py"
+          "tools/session-gestures/drive.py",
+          ".claude/skills/verify-multiprompt-android/scripts/inbox-poll-drive.sh"
         ]
       },
       "outcomes": [
         "inbox.summaries"
-      ]
+      ],
+      "evidence": {
+        "inbox-message-latency.txt": 40,
+        "inbox-poll-windows.json": 500,
+        "inbox-new-message-host.txt": 300
+      }
     },
     "sessions.md": {
       "name": "Sessions",
@@ -954,6 +962,7 @@
         "inputs": {},
         "prerequisites": [],
         "driver": true,
+        "driveMinutes": 40,
         "scripts": [
           ".claude/skills/verify-multiprompt-android/scripts/control-journeys-drive.sh",
           ".claude/skills/verify-multiprompt-android/scripts/reader-menu-drive.sh"
@@ -1541,7 +1550,8 @@
       "journey": "session-summaries.md",
       "sideEffect": false,
       "match": [
-        "SessionPreview"
+        "SessionPreview",
+        "setInboxVisible|sessionRefreshIntervalMs|onUserInteraction|onInboxVisibilityChanged"
       ]
     },
     "inbox.search": {
@@ -1549,7 +1559,11 @@
       "journey": "sessions.md",
       "sideEffect": false,
       "match": [
-        "SessionSearch|SessionFinder"
+        "SessionSearch|SessionFinder",
+        "RefreshMerge|SessionCacheCodec"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/MultipromptApplication\\.kt$"
       ]
     },
     "inbox.pin-chat": {
@@ -2381,6 +2395,17 @@
           "quote": "VERIFY_RECEIVED:STREAM_531"
         }
       }
+    },
+    "reader.working-flag": {
+      "description": "Working dots read `ReaderState.working`, the Boolean the reader computes on IO from the last 200 pane lines, so the UI never parses the pane on Main. The frame skip that feeds it must never freeze a streaming chat.",
+      "journey": "chat-codex.md",
+      "sideEffect": false,
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/PaneWorking\\.kt$"
+      ],
+      "match": [
+        "isWorking\\(\\)|paneWorking\\(|WORKING_TAIL_LINES"
+      ]
     }
   }
 }

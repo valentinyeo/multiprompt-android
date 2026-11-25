@@ -5,6 +5,8 @@ const path = require('node:path');
 
 const gate = import('./pr-checks.mjs');
 const original = JSON.parse(readFileSync(path.join(__dirname, 'fixtures/pr-checks/88904b33.json'), 'utf8'));
+const pr612 = JSON.parse(readFileSync(path.join(__dirname, 'fixtures/pr-checks/612.json'), 'utf8'));
+const nightly612 = 'https://github.com/valentinyeo/multiprompt-android/actions/runs/45540371074';
 
 async function green() {
   const { requiredChecks } = await gate;
@@ -331,6 +333,34 @@ test('a journey red on main is tolerated when pstack-verifier passed', async () 
   const lines = [];
   reportToleratedRedOnMain(status, line => lines.push(line));
   assert.match(lines.join('\n'), /Red on main tolerated \(nightly https:\/\/github\.com\/example\/actions\/runs\/1\): chat-shared\.md, session-gestures\.md/);
+});
+
+test('PR 612 replay: a parent journey red on main is tolerated by the same rule as a head journey', async () => {
+  const { checkStatus, reportToleratedRedOnMain } = await gate;
+  assert.equal(pr612.statusCheckRollup.find(check => check.name === 'parent journey native-skills.md / verify').conclusion, 'FAILURE');
+  const status = checkStatus(pr612, { redOnMain: { journeys: ['native-skills.md'], url: nightly612 } });
+  assert.equal(status.ready, true);
+  assert.deepEqual(status.toleratedRedOnMain, ['native-skills.md']);
+  const lines = [];
+  reportToleratedRedOnMain(status, line => lines.push(line));
+  assert.match(lines.join('\n'), /Red on main tolerated \(nightly https:\/\/github\.com\/valentinyeo\/multiprompt-android\/actions\/runs\/45540371074\): native-skills\.md/);
+});
+
+test('PR 612 replay: a parent journey that is green on main still blocks the merge', async () => {
+  const { checkStatus } = await gate;
+  for (const journeys of [[], ['chat-codex.md', 'session-reader.md'], ['live-chat-freshness.md']]) {
+    assert.throws(() => checkStatus(pr612, { redOnMain: { journeys, url: nightly612 } }), /Checks not green: parent journey native-skills\.md \/ verify/, journeys.join(','));
+  }
+});
+
+test('PR 612 replay: a head journey failure still blocks', async () => {
+  const { checkStatus } = await gate;
+  const pr = structuredClone(pr612);
+  pr.statusCheckRollup.find(check => check.name === 'journey native-skills.md / verify').conclusion = 'FAILURE';
+  assert.throws(() => checkStatus(pr, { redOnMain: { journeys: ['chat-codex.md'], url: nightly612 } }), /Checks not green: journey native-skills\.md \/ verify/);
+  const parent = structuredClone(pr612);
+  parent.statusCheckRollup.find(check => check.name === 'parent journey chat-codex.md / verify').conclusion = 'FAILURE';
+  assert.throws(() => checkStatus(parent, { redOnMain: { journeys: ['native-skills.md'], url: nightly612 } }), /Checks not green: parent journey chat-codex\.md \/ verify/);
 });
 
 const nightlyRunUrl = 'https://github.com/valentinyeo/multiprompt-android/actions/runs/44980692049';

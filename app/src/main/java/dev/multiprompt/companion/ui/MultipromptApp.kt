@@ -607,6 +607,7 @@ private fun AppScreens(viewModel: MainViewModel) {
                     onSetMuted = { tab, value -> viewModel.editAccountLayout { it.setMuted(tab.identity, value) } },
                     onRefresh = viewModel::refresh,
                     onRefreshRooms = { viewModel.refreshRooms() },
+                    onInboxVisibilityChanged = viewModel::setInboxVisible,
                     onRestartIdleChats = viewModel::restartIdleChats,
                     onSelectSection = viewModel::select,
                     onReleaseNotes = viewModel::openReleaseNotes,
@@ -1231,6 +1232,7 @@ internal fun SessionsScreen(
     onSignIn: () -> Unit,
     onSignOut: () -> Unit,
     onRefreshRooms: () -> Unit = {},
+    onInboxVisibilityChanged: (Boolean) -> Unit = {},
     onOpen: (TmuxSession) -> Unit,
     onOpenTerminal: (TmuxSession) -> Unit,
     onArchive: (TmuxSession) -> Unit,
@@ -1319,6 +1321,11 @@ internal fun SessionsScreen(
     var deepgramKeyOpen by remember { mutableStateOf(false) }
     var crashReportVisible by remember { mutableStateOf(false) }
     var openRoom by remember { mutableStateOf<RoomSummary?>(null) }
+    val inboxVisible = settingsPage == SettingsPage.HIDDEN && openRoom == null && !state.editorVisible
+    DisposableEffect(inboxVisible) {
+        onInboxVisibilityChanged(inboxVisible)
+        onDispose { onInboxVisibilityChanged(false) }
+    }
     var selectingBots by remember { mutableStateOf(false) }
     val chosenBots = remember { mutableStateListOf<String>() }
     var moveSelectionOpen by remember { mutableStateOf(false) }
@@ -3124,7 +3131,7 @@ internal fun ReaderScreen(
     val reader by connection.state.collectAsState()
     val piModels by connection.piModels.collectAsState()
     val displayName = stringResource(R.string.app_name)
-    val working = reader.isWorking(session.agent)
+    val working = reader.isWorking()
     LaunchedEffect(connection, working) {
         android.util.Log.i("SessionWorking", "session=${session.name} visible=$working hook=${reader.hookState?.active} status=${reader.status} sending=${reader.sending}")
     }
@@ -5282,13 +5289,6 @@ private fun ReaderCollapsibleBlock(
             }
         }
     }
-}
-
-internal fun isTransientProgress(value: String): Boolean = value.lineSequence().all { line ->
-    val trimmed = line.trim()
-    trimmed.isBlank() || listOf(
-        "working", "running", "thinking", "reading", "searching", "esc to cancel",
-    ).any { trimmed.startsWith(it, ignoreCase = true) }
 }
 
 private data class FallbackPiece(val text: String, val expandKey: String?)

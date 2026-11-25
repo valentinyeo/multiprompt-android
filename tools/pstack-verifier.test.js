@@ -1162,11 +1162,33 @@ test('every step of verify.yml cannot turn the parent run red, and the head run 
   assert.doesNotMatch(jobBlock(verify, 'verify'), /^ {4}continue-on-error:/m);
   const drive = steps.find(step => /id: native-ui/.test(step));
   assert.match(drive, /continue-on-error: \$\{\{ inputs\.side == 'parent' \|\| github\.event_name == 'workflow_dispatch' && \(/);
-  assert.match(drive, /timeout-minutes: \$\{\{ inputs\.feature == 'reader-controls\.md' && 40 \|\| inputs\.side == 'parent' && 20 \|\| inputs\.break_it && 55 \|\| 35 \}\}/);
-  assert.match(jobBlock(verify, 'verify'), /^ {4}timeout-minutes: \$\{\{ inputs\.feature == 'reader-controls\.md' && 50 \|\| inputs\.side == 'parent' && 50 \|\| inputs\.break_it && 55 \|\| 35 \}\}$/m);
+  assert.ok(drive.includes("timeout-minutes: ${{ (inputs.feature == 'native-skills.md' || inputs.driver_feature == 'native-skills.md') && 35 || (inputs.feature == 'reader-controls.md' || inputs.driver_feature == 'reader-controls.md') && 40 || inputs.side == 'parent' && 35 || inputs.break_it && 55 || 35 }}"), 'the drive step budget covers the slowest registered journeys and the parent side');
+  assert.ok(jobBlock(verify, 'verify').includes("    timeout-minutes: ${{ inputs.side == 'parent' && 75 || (inputs.feature == 'native-skills.md' || inputs.driver_feature == 'native-skills.md') && 50 || (inputs.feature == 'reader-controls.md' || inputs.driver_feature == 'reader-controls.md') && 50 || inputs.break_it && 55 || 35 }}"), 'the job budget outlasts the drive step budget');
   const ids = steps.map(step => step.match(/^ {8}id: (\S+)$/m)?.[1]).filter(Boolean);
   assert.equal(new Set(ids).size, ids.length);
   assert.ok(ids.includes('native-ui'));
+});
+
+test('a registered drive budget never exceeds the time verify.yml gives that journey', () => {
+  const verify = read('.github/workflows/verify.yml');
+  const drive = stepBlocks(verify).find(step => /id: native-ui/.test(step));
+  const registry = JSON.parse(read('.claude/skills/verify-multiprompt-android/features/registry.json'));
+  const registered = Object.entries(registry.journeys)
+    .filter(([, journey]) => Number.isInteger(journey.runner.driveMinutes))
+    .sort(([left], [right]) => left.localeCompare(right));
+  assert.ok(registered.length >= 2, 'the slow journeys declare their own drive budget');
+  for (const [name, journey] of registered) assert.ok(journey.runner.driveMinutes >= 30, `${name} keeps a margin over its measured run`);
+  const budgets = registered.map(([name, journey]) => `(inputs.feature == '${name}' || inputs.driver_feature == '${name}') && ${journey.runner.driveMinutes}`);
+  assert.ok(drive.includes('timeout-minutes: ${{ ' + budgets.join(' || ') + " || inputs.side == 'parent' && 35 || inputs.break_it && 55 || 35 }}"), 'every registered drive budget reaches the drive step');
+  const job = jobBlock(verify, 'verify');
+  const parentDrive = Number(/inputs\.side == 'parent' && (\d+)/.exec(drive)?.[1]);
+  const parentJob = Number(/inputs\.side == 'parent' && (\d+)/.exec(job)?.[1]);
+  assert.ok(parentDrive >= 30, 'the parent side gets the slowest journey budget, not a shorter one');
+  assert.ok(parentJob >= parentDrive + 35, `the ${parentJob} minute parent job must outlast its ${parentDrive} minute drive plus both builds`);
+  const jobLine = /^ {4}timeout-minutes: \$\{\{ (.+) \}\}$/m.exec(job)?.[1] ?? '';
+  for (const [name] of registered) assert.ok(jobLine.includes(`(inputs.feature == '${name}' || inputs.driver_feature == '${name}')`), `${name} raises the job above its drive step too`);
+  assert.match(jobLine, /^inputs\.side == 'parent' && 75 \|\| /, 'the parent job outlasts two builds before any journey budget is applied');
+  assert.match(jobLine, /&& 55 \|\| 35$/, 'every other journey keeps 55 for break_it and 35 otherwise, so a hang cannot burn extra runner time');
 });
 
 test('a parent journey that fails records its exit code and leaves the job green', () => {

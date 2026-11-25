@@ -62,6 +62,11 @@ class MainActivity : ComponentActivity() {
         handleReplyIntent(intent)
     }
 
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        viewModel.onUserInteraction()
+    }
+
     override fun onResume() {
         super.onResume()
         viewModel.onResume()
