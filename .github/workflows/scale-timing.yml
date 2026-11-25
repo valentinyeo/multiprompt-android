@@ -12,10 +12,6 @@ on:
         description: Measure single-key typing and middle edits on the largest scale chat
         type: boolean
         default: false
-      assert_isolated:
-        description: Require typing not to recompose the message list
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -40,7 +36,6 @@ jobs:
       FIXTURE: ${{ github.workspace }}/verify-ssh
       TIMING_SEED: ${{ matrix.seed }}
       APP_REF: ${{ inputs.app_ref }}
-      TYPING_ASSERT_ISOLATED: ${{ inputs.assert_isolated }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
       VERIFY_FEATURE: ${{ matrix.seed == 'scale' && 'long-chat.md' || '' }}
     steps:

@@ -5,6 +5,12 @@ import dev.multiprompt.companion.BuildConfig
 internal object TypingProbe {
     var compositions: ((String) -> Unit)? = null
     var timings: ((String, Long) -> Unit)? = null
+    var edits = 0L
+        private set
+
+    fun edited() {
+        if (BuildConfig.DEBUG) edits++
+    }
 
     fun composed(name: String) {
         if (BuildConfig.DEBUG) compositions?.invoke(name)

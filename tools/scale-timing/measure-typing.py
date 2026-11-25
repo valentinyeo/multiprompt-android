@@ -16,10 +16,10 @@ def main():
     measure.sign_in(os.environ['FIXTURE'], evidence, fingerprint, os.environ['EXPECTED_VERSION'])
     largest = json.loads((evidence / 'timing-targets.json').read_text())['largest']
     (evidence / 'typing-decision.txt').write_text(
-        'Five trials, 60 single-character insertions followed by 10 middle insertions. '
+        'Five trials, 60 real single-character key events followed by 10 middle insertions. '
         'Main CPU and composition counts decide which work to remove first. '
         'An effect smaller than the trial range is inconclusive. FrameMetrics is secondary '
-        'on this software-rendered emulator. Allocations include the instrumentation process. '
+        'on this software-rendered emulator. Normal frame clock, no Compose test synchronization. '
         'The separate sampled method trace is excluded from timing results.\n')
     subprocess.run(['uptime'], check=True)
     subprocess.run(['nproc'], check=True)
@@ -28,7 +28,6 @@ def main():
         result = adb('shell', 'am', 'instrument', '-w', '-e', 'class',
                      'dev.multiprompt.companion.ui.TypingPerformanceTest',
                      '-e', 'typing_session', largest['session'], '-e', 'typing_marker', largest['marker'],
-                     '-e', 'assert_isolated', os.environ.get('TYPING_ASSERT_ISOLATED', 'false'),
                      f'{measure.PACKAGE}.test/androidx.test.runner.AndroidJUnitRunner',
                      timeout=1800, check=False)
         (evidence / 'typing-instrumentation.txt').write_text(result.stdout + result.stderr)

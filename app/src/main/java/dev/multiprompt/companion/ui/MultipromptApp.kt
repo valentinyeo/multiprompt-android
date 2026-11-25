@@ -4723,7 +4723,10 @@ internal fun ReaderScreen(
                         androidx.compose.runtime.SideEffect { TypingProbe.composed("Composer") }
                         BasicTextField(
                             value = promptField,
-                            onValueChange = { promptField = it },
+                            onValueChange = {
+                                if (it.text != promptField.text) TypingProbe.edited()
+                                promptField = it
+                            },
                             modifier = Modifier.weight(1f).heightIn(min = Kit.ControlInnerSize).focusRequester(promptFocusRequester)
                                 .drawWithContent {
                                     drawContent()

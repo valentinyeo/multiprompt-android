@@ -31,12 +31,15 @@ Dispatch `scale-timing.yml --ref <branch> -f typing=true` for the same 40-chat s
 The device test opens the 54 MB chat through Inbox search and waits for its newest marker.
 Five trials each insert 60 characters one at a time, move the cursor to offset 30, and insert
 10 more characters. Every trial checks the exact text. Leaving and reopening checks draft retention.
-`-f assert_isolated=true` additionally requires that typing does not recompose the message list.
+The JVM composer regression separately requires zero reader/message-list compositions for short edits,
+without the live reader updates and field-height changes counted by the scale run.
 
 `typing/keys.json` retains every key's Main-thread CPU time, process allocation delta,
 FrameMetrics durations and named composition counts. `typing-table.md` reports each trial separately.
-The CPU window includes Compose test synchronization; idle windows expose that floor. Allocation
-counts include the in-process test driver, not just the text field. These debug measurements compare
+Keys use Android input events and the activity uses its normal frame clock, not a Compose test clock.
+The Main CPU window ends on the first post-input frame callback after the changed text composes.
+Exact text is read back after every key outside that window. Idle windows expose background CPU.
+Allocation counts include the in-process input driver, not just the text field. These debug measurements compare
 the same harness and are not a signed-release or physical-phone latency claim. FrameMetrics remains
 secondary because this emulator uses software rendering. No drawn frame or fewer than 350 measured
 keys makes the measurement incomplete, not fast.
