@@ -94,7 +94,7 @@ class TypingPerformanceTest {
                 instrumentation.uiAutomation.rootInActiveWindow?.let { root ->
                     File(output, "last-draft.txt").writeText(nodes(root).firstOrNull { it.isEditable }?.text?.toString().orEmpty())
                 }
-                scenario.onActivity { _ ->
+                scenario.onActivity { activity ->
                     frame = null
                     TypingProbe.compositions = null
                     TypingProbe.layouts = null
