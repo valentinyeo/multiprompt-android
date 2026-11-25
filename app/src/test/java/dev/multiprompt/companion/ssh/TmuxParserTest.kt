@@ -305,10 +305,11 @@ class TmuxParserTest {
     }
 
     @Test
-    fun signatureCommandChecksumsTheSameRowsWithoutPanePreviews() {
+    fun signatureCommandChecksumsTheSameRowsAndPaneTailsWithoutThePreviewCopy() {
         val command = TmuxParser.signatureCommand()
         val full = TmuxParser.command()
         val format = command.substringAfter("display-message -p -t").substringAfter("-F '").substringBefore("'")
+        val tail = "tmux capture-pane -p -J -S -12"
 
         assertEquals(
             full.substringAfter("display-message -p -t").substringAfter("-F '").substringBefore("'"),
@@ -319,8 +320,10 @@ class TmuxParserTest {
         assertTrue(command.contains(TmuxParser.END_MARKER))
         assertTrue(command.contains("reader.py host list"))
         assertTrue(command.contains(TmuxCommands.ETA_PREFIX))
-        assertTrue("tmux capture-pane" !in command)
-        assertTrue("tmux capture-pane" in full)
+        assertTrue(command.contains(tail))
+        assertTrue(full.contains(tail))
+        assertTrue(TmuxParser.PREVIEW_PREFIX !in command)
+        assertTrue(TmuxParser.PREVIEW_PREFIX in full)
     }
 
     @Test
