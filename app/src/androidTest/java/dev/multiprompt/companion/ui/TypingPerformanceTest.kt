@@ -56,7 +56,7 @@ class TypingPerformanceTest {
                     setText("")
                     text.forEachIndexed { index, char ->
                         records.put(key(trial, "type", index) { instrumentation.sendStringSync(char.toString()) })
-                        assertEquals(text.take(index + 1), draft())
+                        assertDraft(text.take(index + 1))
                     }
                     val selection = Bundle().apply {
                         putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_SELECTION_START_INT, 30)
@@ -66,7 +66,7 @@ class TypingPerformanceTest {
                     val edit = "MIDediting"
                     edit.forEachIndexed { index, char ->
                         records.put(key(trial, "edit", index) { instrumentation.sendStringSync(char.toString()) })
-                        assertEquals(text.take(30) + edit.take(index + 1) + text.drop(30), draft())
+                        assertDraft(text.take(30) + edit.take(index + 1) + text.drop(30))
                     }
                     records.put(key(trial, "idle", 0) { SystemClock.sleep(100) })
                     File(output, "keys.json").writeText(records.toString(2))
@@ -75,7 +75,7 @@ class TypingPerformanceTest {
                 instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
                 click(waitNode { it.contentDescription?.toString() == "Back" })
                 click(waitNode { it.contentDescription?.toString() == "Robot $session" })
-                assertEquals(expected, draft())
+                assertDraft(expected)
                 File(output, "draft-reopened.txt").writeText(expected)
                 click(waitNode { it.isEditable })
                 Debug.startMethodTracingSampling(File(output, "typing-profile").absolutePath, 8 * 1024 * 1024, 1000)
@@ -121,7 +121,10 @@ class TypingPerformanceTest {
         instrumentation.waitForIdleSync()
     }
 
-    private fun draft(): String = waitNode { it.isEditable }.text?.toString().orEmpty()
+    private fun assertDraft(expected: String) {
+        val field = waitNode { it.isEditable && it.text?.toString().orEmpty() == expected }
+        assertEquals(expected, field.text?.toString().orEmpty())
+    }
 
     private fun key(trial: Int, phase: String, index: Int, action: () -> Unit): JSONObject {
         val done = CountDownLatch(1)

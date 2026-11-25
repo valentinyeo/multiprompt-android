@@ -51,6 +51,10 @@ def report(path):
         print(f'### {title} CPU ms\n')
         for method, microseconds in totals.most_common(30):
             print(f'{microseconds / 1000:.3f} {methods.get(method, hex(method))}')
+        print('\nApp methods\n')
+        for method, microseconds in [(method, value) for method, value in totals.most_common()
+                                     if methods.get(method, '').startswith('dev.multiprompt.')][:20]:
+            print(f'{microseconds / 1000:.3f} {methods[method]}')
 
 
 if __name__ == '__main__':
