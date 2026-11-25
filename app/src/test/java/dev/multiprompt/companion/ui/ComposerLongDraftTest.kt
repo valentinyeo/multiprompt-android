@@ -67,6 +67,7 @@ class ComposerLongDraftTest {
     private lateinit var f: SessionActivityFixture
     private lateinit var connection: SessionReaderConnection
     private val showingReader = mutableStateOf(true)
+    private val probeWasEnabled = TypingProbe.enabled
 
     private val skill = "/review-native"
     private val longDraft = "Checking when it resets. We need instructions for this, " +
@@ -75,6 +76,7 @@ class ComposerLongDraftTest {
         "long enough to scroll inside the message box."
 
     @Before fun setup() {
+        TypingProbe.enabled = true
         f = SessionActivityFixture()
         val cache = ChatHistoryCache(f.app.cacheDir.resolve("long-draft-history"))
         connection = SessionReaderConnection(
@@ -94,6 +96,7 @@ class ComposerLongDraftTest {
 
     @After fun cleanup() {
         TypingProbe.compositions = null
+        TypingProbe.enabled = probeWasEnabled
         connection.close()
         f.close()
     }

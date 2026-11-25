@@ -293,7 +293,7 @@ import dev.multiprompt.companion.terminal.TerminalKeys
 
 @Composable
 fun MultipromptApp(viewModel: MainViewModel) {
-    if (BuildConfig.DEBUG) androidx.compose.runtime.SideEffect { TypingProbe.composed("MultipromptApp") }
+    if (TypingProbe.enabled) androidx.compose.runtime.SideEffect { TypingProbe.composed("MultipromptApp") }
     val state by viewModel.state.collectAsState()
     val updateState by viewModel.updates.state.collectAsState()
     val dismissedVersion by viewModel.updates.dismissedVersion.collectAsState()
@@ -3129,7 +3129,7 @@ internal fun ReaderScreen(
     onTogglePin: (() -> Unit)? = null,
 ) = key(connection) {
     MultipromptTheme(sunlight = sunlightMode, material3 = material3, readerStyle = true) {
-    if (BuildConfig.DEBUG) androidx.compose.runtime.SideEffect { TypingProbe.composed("ReaderScreen") }
+    if (TypingProbe.enabled) androidx.compose.runtime.SideEffect { TypingProbe.composed("ReaderScreen") }
     val reader by connection.state.collectAsState()
     val piModels by connection.piModels.collectAsState()
     val displayName = stringResource(R.string.app_name)
@@ -4725,11 +4725,11 @@ internal fun ReaderScreen(
                         val skillText = remember(skillSpans, pillsDrawn, kitColors.text) {
                             if (skillSpans.isEmpty() || !pillsDrawn) VisualTransformation.None else SkillPillText(skillSpans, kitColors.text)
                         }
-                        if (BuildConfig.DEBUG) androidx.compose.runtime.SideEffect { TypingProbe.composed("Composer") }
+                        if (TypingProbe.enabled) androidx.compose.runtime.SideEffect { TypingProbe.composed("Composer") }
                         BasicTextField(
                             value = promptField.value,
                             onValueChange = {
-                                if (BuildConfig.DEBUG && it.text != promptField.value.text) TypingProbe.edited()
+                                if (TypingProbe.enabled && it.text != promptField.value.text) TypingProbe.edited()
                                 promptField.value = it
                             },
                             modifier = Modifier.weight(1f).heightIn(min = Kit.ControlInnerSize).focusRequester(promptFocusRequester)

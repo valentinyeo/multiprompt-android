@@ -3,21 +3,22 @@ package dev.multiprompt.companion.ui
 import dev.multiprompt.companion.BuildConfig
 
 internal object TypingProbe {
+    var enabled = BuildConfig.DEBUG
     var compositions: ((String) -> Unit)? = null
     var timings: ((String, Long) -> Unit)? = null
     var edits = 0L
         private set
 
     fun edited() {
-        if (BuildConfig.DEBUG) edits++
+        if (enabled) edits++
     }
 
     fun composed(name: String) {
-        if (BuildConfig.DEBUG) compositions?.invoke(name)
+        if (enabled) compositions?.invoke(name)
     }
 
     inline fun <T> measure(name: String, block: () -> T): T {
-        if (!BuildConfig.DEBUG || timings == null) return block()
+        if (!enabled || timings == null) return block()
         val start = android.os.Debug.threadCpuTimeNanos()
         return try { block() } finally { timings?.invoke(name, android.os.Debug.threadCpuTimeNanos() - start) }
     }

@@ -105,7 +105,7 @@ internal fun ChatHistoryView(
     mentionChats: List<MentionChat> = emptyList(),
     onSessionLink: ((String) -> Unit)? = null,
 ) {
-    if (dev.multiprompt.companion.BuildConfig.DEBUG) SideEffect { TypingProbe.composed("ChatHistoryView") }
+    if (TypingProbe.enabled) SideEffect { TypingProbe.composed("ChatHistoryView") }
     val history = remember(connection, agent, workingDirectory) { connection.chatHistory(agent, workingDirectory) }
     val state by history.state.collectAsState()
     val managed = connection.sharedMessages
@@ -277,7 +277,7 @@ internal fun ChatHistoryList(
     mentionChats: List<MentionChat> = emptyList(),
     onSessionLink: ((String) -> Unit)? = null,
 ) {
-    if (dev.multiprompt.companion.BuildConfig.DEBUG) SideEffect { TypingProbe.composed("ChatHistoryList") }
+    if (TypingProbe.enabled) SideEffect { TypingProbe.composed("ChatHistoryList") }
     val presentation = remember(messages, agent, collapsePendingReactions) {
         if (agent == AgentKind.CLAUDE) ChatReactions.present(messages, collapsePendingReactions)
         else ChatReactions.Presentation(messages, emptyMap())
