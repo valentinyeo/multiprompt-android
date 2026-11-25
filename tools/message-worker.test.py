@@ -11,7 +11,7 @@ import tempfile
 import threading
 import unittest
 from contextlib import closing
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSET = 'app/src/main/assets/chat_history_reader.py'
@@ -64,9 +64,42 @@ class MessageWorkerRequestTest(unittest.TestCase):
         message = self.submit()
         self.assertEqual(message['state'], 'queued')
         self.assertEqual(self.spawn.call_count, 1)
-        self.assertEqual(self.spawn.call_args.args[0][-4:], ['--message-worker', 'idle-chat', 'claude', 'idle-chat'])
+        command = self.spawn.call_args.args[0]
+        worker = command.index('--message-worker')
+        self.assertEqual(command[worker + 1:worker + 4], ['idle-chat', 'claude', 'idle-chat'])
         self.spawn.return_value.stdin.write.assert_called_once()
         self.spawn.return_value.stdin.close.assert_called_once()
+
+    def test_starter_hands_its_lock_to_the_child(self):
+        self.submit()
+        command = self.spawn.call_args.args[0]
+        self.assertEqual(self.spawn.call_args.kwargs['pass_fds'], (int(command[-1]),))
+
+    def test_child_takes_the_handed_lock_instead_of_a_second_one(self):
+        handed = {}
+
+        class Store:
+            def close(self):
+                pass
+
+            def execute(self, *args):
+                return self
+
+            def fetchone(self):
+                return None
+
+        def capture(command, **kwargs):
+            handed['fd'] = os.dup(kwargs['pass_fds'][0])
+            return MagicMock()
+
+        self.spawn.side_effect = capture
+        reader.message_store_path().parent.mkdir(parents=True)
+        self.submit()
+        with patch.object(reader, 'message_store_db', lambda tmux: Store()), \
+                patch.object(reader, 'host_log', lambda *args, **kwargs: None), \
+                patch.object(reader.os, 'fdopen', wraps=os.fdopen) as fdopen:
+            reader.message_worker(self.base['tmux'], 'claude', 'idle-chat', str(handed['fd']))
+        self.assertIn(call(handed['fd'], 'a'), fdopen.call_args_list)
 
     def test_retry_spawns_exactly_one_worker_immediately(self):
         message = self.submit()
