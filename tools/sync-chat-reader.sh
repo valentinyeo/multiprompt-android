@@ -36,13 +36,13 @@ for entry in \
     'mp_send.py d3577c05a744fe45c390fb29cbe1c98cb3eb41b3ae178eafd1c885235a026569' \
     'multibot_feedback.py 0007d673e04fe9ad571c0070e39aff82ef3dff61d92ac0820ab361cf84a9bd2a'; do
     read -r path hash <<< "$entry"
-    fetch "src/$path" "$path"
-    place "$path" "app/src/main/assets/$path"
+    fetch "src/$path" "$hash"
+    place "src/$path" "app/src/main/assets/$path"
 done
 for entry in \
     'multibot-feedback-test.py d1881053e8377aed1cbabc5acbf309429ef761f507f41ed0c7646c9cb299af88'; do
     read -r path hash <<< "$entry"
-    fetch "tools/$path" "tools/$path"
+    fetch "tools/$path" "$hash"
     place "tools/$path" "tools/vendor/chat-reader/tools/$path"
 done
 python3 -B tools/chat-reader-bundle.py --revision "$revision" "$mode"
