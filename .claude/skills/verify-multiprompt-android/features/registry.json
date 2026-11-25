@@ -982,6 +982,29 @@
         "reader-menu-end-host.txt": 300
       }
     },
+    "long-drafts.md": {
+      "name": "Long drafts in the chat box",
+      "description": "100, 1000 and 5000 character drafts wrap inside the composer, keep the caret on screen for a middle edit, scroll to the top and bottom, reopen unchanged, and read back exactly.",
+      "runner": {
+        "kind": "debug",
+        "workflow": "verify.yml",
+        "inputs": {},
+        "prerequisites": [],
+        "driver": true,
+        "scripts": [
+          ".claude/skills/verify-multiprompt-android/scripts/long-drafts-drive.sh",
+          "tools/long-drafts/ui.py",
+          "tools/long-drafts/drafts.py"
+        ]
+      },
+      "outcomes": [
+        "composer.long-drafts"
+      ],
+      "evidence": {
+        "long-drafts-result.json": 1500,
+        "long-drafts-proof.txt": 200
+      }
+    },
     "message-reply.md": {
       "name": "Reply to a message",
       "description": "Long-press a Claude bubble, cancel the reply bar, send a quoted reply with a host receipt, then mention another chat by its real name, check its row draws that chat's own bot face, route it by tmux name, and mention the typing chat itself.",
@@ -1777,6 +1800,24 @@
       "paths": [
         "^app/src/main/java/dev/multiprompt/companion/ui/TypingProbe\\.kt$"
       ]
+    },
+    "composer.long-drafts": {
+      "description": "Long chat drafts stay inside the composer field: wrapped lines, no horizontal overflow, the caret stays on screen for a middle edit, the field scrolls to the top and bottom, and the exact text survives reopening.",
+      "journey": "long-drafts.md",
+      "sideEffect": false,
+      "match": [
+        "ReaderComposerMaxLines|scrollsInsideComposer|ComposerLongDraft"
+      ],
+      "citations": {
+        "action": {
+          "file": "driver-transcript.txt",
+          "quote": "key KEYCODE_DPAD_DOWN"
+        },
+        "result": {
+          "file": "long-drafts-result.json",
+          "quote": "\"ok\": true"
+        }
+      }
     },
     "chat-table.expand": {
       "description": "Expand, scroll and close a chat table.",

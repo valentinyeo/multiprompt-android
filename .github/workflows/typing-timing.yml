@@ -8,6 +8,14 @@ on:
         type: string
         required: false
         default: ''
+      mode:
+        description: typing times the owner-scale chat, long-drafts times draft lengths
+        type: choice
+        required: false
+        default: typing
+        options:
+          - typing
+          - long-drafts
 
 permissions:
   contents: read
@@ -17,7 +25,7 @@ defaults:
     shell: bash
 
 concurrency:
-  group: typing-timing-${{ github.ref }}-${{ inputs.app_ref || 'head' }}
+  group: typing-timing-${{ github.ref }}-${{ inputs.mode || 'typing' }}-${{ inputs.app_ref || 'head' }}
   cancel-in-progress: false
 
 jobs:
@@ -27,11 +35,12 @@ jobs:
     timeout-minutes: 90
     env:
       GRADLE_BUILD_ACTION_CACHE_KEY_JOB: build
+      MODE: ${{ inputs.mode || 'typing' }}
       EVIDENCE: ${{ github.workspace }}/typing-evidence
       FIXTURE: ${{ github.workspace }}/verify-ssh
       APP_REF: ${{ inputs.app_ref }}
       EXPECTED_VERSION: 0.1.2-verify.${{ github.run_number }}-debug
-      VERIFY_FEATURE: long-chat.md
+      VERIFY_FEATURE: ${{ inputs.mode == 'long-drafts' && 'long-drafts.md' || 'long-chat.md' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -67,9 +76,11 @@ jobs:
         timeout-minutes: 15
         run: .claude/skills/verify-multiprompt-android/scripts/fixture.sh
       - name: Seed the owner-scale synthetic chats
+        if: inputs.mode != 'long-drafts'
         timeout-minutes: 20
         run: sudo python3 tools/scale-timing/hostseed.py seed --fixture tools/scale-chat/fixture.py --relay tools/scale-timing/relay.py --out "$EVIDENCE/scale-seed.json"
       - name: Pick the timing targets from the seeded host
+        if: inputs.mode != 'long-drafts'
         run: |
           sudo python3 tools/scale-timing/targets.py --seed scale --out "$EVIDENCE/timing-targets.json"
           { uptime; nproc; uname -a; git rev-parse HEAD; } > "$EVIDENCE/benchmark-host.txt"
@@ -80,13 +91,18 @@ jobs:
           script: |
             adb install -r -g "$VERIFY_APK"
             adb install -r "$VERIFY_TEST_APK"
-            timeout 3000 python3 tools/typing-timing/measure-typing.py
+            if [ "$MODE" = long-drafts ]; then
+              timeout 2400 python3 tools/typing-timing/measure-long-drafts.py
+            else
+              timeout 3000 python3 tools/typing-timing/measure-typing.py
+            fi
       - name: Publish the typing table
         if: always()
         run: |
-          if [ -s "$EVIDENCE/typing-table.md" ]; then
-            cat "$EVIDENCE/typing-table.md" >> "$GITHUB_STEP_SUMMARY"
-          else
+          for table in "$EVIDENCE/typing-table.md" "$EVIDENCE/long-draft-table.md"; do
+            if [ -s "$table" ]; then cat "$table" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+          if [ ! -s "$EVIDENCE/typing-table.md" ] && [ ! -s "$EVIDENCE/long-draft-table.md" ]; then
             echo 'No typing measurement was produced. The artifact holds the diagnostics.' >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Retain the measurement and evidence
@@ -94,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           overwrite: true
-          name: typing-${{ inputs.app_ref || 'head' }}
+          name: typing-${{ inputs.mode || 'typing' }}-${{ inputs.app_ref || 'head' }}
           path: typing-evidence/
           if-no-files-found: warn
           retention-days: 14

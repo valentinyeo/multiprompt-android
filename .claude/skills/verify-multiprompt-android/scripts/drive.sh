@@ -1084,6 +1084,11 @@ if [[ "$feature" == ai-usage.md ]]; then
     exit 0
 fi
 
+if [[ "$feature" == long-drafts.md ]]; then
+    source "$scripts/long-drafts-drive.sh"
+    exit 0
+fi
+
 if [[ "$feature" == skill-pills.md ]]; then
     source "$scripts/skill-pills-drive.sh"
     exit 0
