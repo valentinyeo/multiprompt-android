@@ -47,6 +47,9 @@ class StatisticsTest(unittest.TestCase):
 
     def test_stable_scenario_metric_and_statistic_order(self):
         result = results()
+        self.assertEqual(frozen.METRICS, ('app_cpu_ms', 'main_thread_ms', 'frames_over_16_ms_secondary',
+                                          'list_sessions_per_minute', 'bytes_per_minute', 'errors',
+                                          'platform_warnings'))
         self.assertEqual(tuple(result['scenarios']), frozen.SCENARIOS)
         for row in result['scenarios'].values():
             self.assertEqual(tuple(row), frozen.METRICS)
@@ -84,6 +87,7 @@ class StatisticsTest(unittest.TestCase):
             self.assertIn('| ' + scenario + ' |', text)
         self.assertIn('30 [10, 50]', text)
         self.assertIn('frames (secondary)', text)
+        self.assertIn('| Errors | Platform warnings |', text)
 
     def test_report_without_results_cannot_pass_through_tee(self):
         workflow = Path(frozen.__file__).resolve().parents[2] / '.github/workflows/scale-timing.yml'
@@ -137,7 +141,49 @@ class ParsingTest(unittest.TestCase):
 100.6 123 123 I App: okay
 '''
         self.assertEqual(frozen.errors(log, PACKAGE, [], failed=True),
-                         dict(crashes=1, anrs=1, failed_steps=1, app_logcat_e=2))
+                         dict(crashes=1, anrs=1, failed_steps=1, app_logcat_e=2, platform_warnings=0))
+
+    def test_retained_ime_frametracker_timeouts_are_platform_warnings_not_errors(self):
+        log = '''         1795602473.718  2742  2742 E FrameTracker: force finish cuj, time out: J<IME_INSETS_SHOW_ANIMATION::0@1@dev.multiprompt.companion.debug>
+         1795602503.390  2742  2742 E FrameTracker: force finish cuj, time out: J<IME_INSETS_HIDE_ANIMATION::1@1@dev.multiprompt.companion.debug>
+'''
+        self.assertEqual(frozen.errors(log, PACKAGE, ['2742']),
+                         dict(crashes=0, anrs=0, failed_steps=0, app_logcat_e=0, platform_warnings=2))
+
+    def test_non_allowlisted_frametracker_and_real_app_e_lines_still_count(self):
+        log = '''         1795602502.775  2703  2703 E FrameTracker: force finish cuj, time out: J<IME_INSETS_SHOW_ANIMATION::0@1@dev.multiprompt.companion.debug>
+         1795602503.100  2703  2703 E FrameTracker: force finish cuj, time out: J<TASKBAR_EXPAND>
+         1795602503.200  2703  2703 E FrameTracker: force finish cuj, time out: J<IME_INSETS_SHOW_ANIMATION::0@1@com.other.app>
+         1795602503.300  2703  2703 E OtherTag: force finish cuj, time out: J<IME_INSETS_SHOW_ANIMATION::0@1@dev.multiprompt.companion.debug>
+         1795602503.400  2703  2703 E MultipromptApp: java.lang.IllegalStateException: composer detached
+'''
+        self.assertEqual(frozen.errors(log, PACKAGE, ['2703']),
+                         dict(crashes=0, anrs=0, failed_steps=0, app_logcat_e=4, platform_warnings=1))
+
+    def test_sample_reports_platform_warnings_separately_from_errors(self):
+        retained = '''         1795602497.182  2742  2742 E FrameTracker: force finish cuj, time out: J<IME_INSETS_SHOW_ANIMATION::0@1@dev.multiprompt.companion.debug>
+         1795602503.390  2742  2742 E FrameTracker: force finish cuj, time out: J<IME_INSETS_HIDE_ANIMATION::1@1@dev.multiprompt.companion.debug>
+'''
+        mixed = retained + '         1795602504.100  2742  2742 E MultipromptApp: real failure\n'
+        for log, expected_errors, expected_warnings in ((retained, 0, 2), (mixed, 1, 2)):
+            with tempfile.TemporaryDirectory() as directory:
+                out = Path(directory)
+                args = argparse.Namespace(package=PACKAGE, clk_tck=100)
+                responses = [
+                    subprocess.CompletedProcess([], 0, ''),
+                    subprocess.CompletedProcess([], 0, ''),
+                    subprocess.CompletedProcess([], 0, log),
+                    subprocess.CompletedProcess([], 0, 'HISTOGRAM: 16ms=1 20ms=2\n'),
+                ]
+                snaps = [dict(pid='2742', app=10, main=5), dict(pid='2742', app=25, main=9)]
+                with patch.object(frozen, 'adb', side_effect=responses), \
+                        patch.object(frozen, 'snapshot', side_effect=snaps), \
+                        patch.object(frozen.time, 'time', side_effect=[100.0, 105.0]), \
+                        patch.object(frozen.measure, 'relay_text', return_value='{"event":"call","bytes":10,"t":102.0}\n'):
+                    record = frozen.sample('typing_long_chat', 1, lambda: dict(characters=45, verified=True), args, out)
+                self.assertEqual(record['metrics']['errors'], expected_errors)
+                self.assertEqual(record['metrics']['platform_warnings'], expected_warnings)
+                self.assertEqual(record['error_counts']['platform_warnings'], expected_warnings)
 
     def test_crashed_cold_process_is_owned_even_when_only_event_log_has_its_pid(self):
         log = f'''100.1 500 500 I am_proc_start: [0,123,10148,{PACKAGE},next-top-activity,MainActivity]

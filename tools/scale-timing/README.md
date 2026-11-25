@@ -10,7 +10,7 @@ Later rounds dispatch this same frozen harness revision, changing only `app_ref`
 The measured revision is built in its own worktree; the driver and fixtures stay at the dispatch revision.
 Never change the workload, repeat count, durations, seeds, metric definitions or emulator configuration during
 an optimization round. A changed harness fingerprint requires a new baseline, not a comparison with the old one.
-`mubo-555-v1` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
+`mubo-555-v2` identifies this schema. `harness` hashes the timing scripts, fixture generators, shared phone
 driver, emulator/build actions and workflow.
 
 ## Runner entry point
@@ -52,10 +52,13 @@ Every metric has `median`, `min`, `max`; there are no timestamps, PIDs or run ID
 - **listSessions/min** counts relay command opens containing the actual `__MP_TMUX_BEGIN__` envelope,
   not every tmux channel or every response line. **bytes/min** counts all application-protocol reply bytes
   forwarded by the relay, not SSH encryption overhead. Both use the exact measured wall window.
-- **Errors** totals crashes, ANRs, failed steps, app-PID logcat E lines and nonzero relay exits. The
+- **Errors** totals crashes, ANRs, failed steps, non-allowlisted app-PID logcat E lines and nonzero relay exits. The
   relay records an app-closed output pipe separately; its subsequent cleanup exit is not a command failure.
   Unexpected signal exits still count. The components remain in each trial. A crash can also emit E lines,
-  so this is an error-signal count, not unique incidents. Android's app-PID FrameTracker IME warnings count too.
+  so this is an error-signal count, not unique incidents.
+- **Platform warnings** separately counts the narrow allowlist of Android platform E lines logged under the app PID:
+  `FrameTracker` `force finish cuj, time out: J<IME_INSETS_(SHOW|HIDE)_ANIMATION::...@<package>>`. Every other app-PID E
+  line still counts in **Errors**.
 - **Driver time stays separate** in each trial's `driver` and `wall_ms`. CPU never includes the `mpa`, adb,
   UI-automation or fixture processes. Do not subtract driver wall time from app CPU: they overlap, with different units.
   Wall time includes UI dumps and is not published as app latency. Idle/stream windows avoid UI dumps entirely.
