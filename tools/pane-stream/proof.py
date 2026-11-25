@@ -24,7 +24,7 @@ def prove(root):
     assert (root / "pane-stream-receipt.txt").read_text().splitlines() == ["VERIFY_RECEIVED:STREAM_531"], "PANE_STREAM_RECEIPT"
     host = (root / "pane-stream-host.txt").read_text()
     assert "TERMINALALPHA" in host and "TERMINALOMEGA" in host, "PANE_STREAM_HOST"
-    result = dict(outcome="reader.pane-budget", native_scope="visible", native_snapshots=len(snapshots), pane_scrollback_snapshots=len(scrollback), chat=ui, terminal_first="pane-stream-terminal-first.txt", terminal_updated="pane-stream-terminal-updated.txt", receipt="VERIFY_RECEIVED:STREAM_531", still_streaming=True)
+    result = dict(outcome="reader.pane-cost", native_scope="visible", native_snapshots=len(snapshots), pane_scrollback_snapshots=len(scrollback), chat=ui, terminal_first="pane-stream-terminal-first.txt", terminal_updated="pane-stream-terminal-updated.txt", receipt="VERIFY_RECEIVED:STREAM_531", still_streaming=True)
     (root / "pane-stream-result.json").write_text(json.dumps(result) + "\n")
     return result
 
