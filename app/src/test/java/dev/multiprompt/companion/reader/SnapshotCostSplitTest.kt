@@ -32,7 +32,7 @@ class SnapshotCostSplitTest {
         val store = Timed(SNAPSHOTS)
         val project = Timed(SNAPSHOTS)
         val guard = Timed(SNAPSHOTS)
-        val repeat = Timed(SNAPSHOTS)
+        val reuse = Timed(SNAPSHOTS)
         val fingerprint = SnapshotFingerprint()
         val projected = ArrayList<Int>()
         var history = ChatHistory()
@@ -49,7 +49,7 @@ class SnapshotCostSplitTest {
             val repeated = guard.record(snapshot) { fingerprint.same(reply) }
             if (repeated) repeats++
             val next = if (repeated) {
-                repeat.record(snapshot) { ChatHistoryProtocol.repeated(history) }
+                reuse.record(snapshot) { ChatHistoryProtocol.repeated(history) }
                 history
             } else parsed
             val changed = next != history
@@ -66,12 +66,12 @@ class SnapshotCostSplitTest {
         }
         assertTrue("the long chat must project many messages", projected.last() > 100)
         report("size=$size mode=$mode snapshots=$SNAPSHOTS base_bytes=$base last_bytes=$lastSize", listOf(
-            FRAME to frame, PARSE to parse, MERGE to merge, STORE to store, PROJECT to project, GUARD to guard, REPEAT to repeat,
+            FRAME to frame, PARSE to parse, MERGE to merge, STORE to store, PROJECT to project, GUARD to guard, REPEAT to reuse,
         ))
-        val unchanged = if (growing) "" else " unchanged_before=${parse.add(merge)} unchanged_after=${guard.add(repeat)}"
+        val unchanged = if (growing) "" else " unchanged_before=${parse.add(merge)} unchanged_after=${guard.add(reuse)}"
         return "MUBO453_TABLE size=$size mode=$mode messages=${projected.last()} base_bytes=$base last_bytes=$lastSize" +
             " frame=${frame.median()} parse=${parse.median()} merge=${merge.median()} cache=${store.median()}" +
-            " project=${project.median()} guard=${guard.median()} repeat=${repeat.median()} repeats=$repeats" +
+            " project=${project.median()} guard=${guard.median()} repeat=${reuse.median()} repeats=$repeats" +
             " total=${frame.add(parse, merge, store, project)}$unchanged"
     }
 
