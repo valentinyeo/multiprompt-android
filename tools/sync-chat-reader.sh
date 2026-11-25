@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-revision=6572511ca37a48b58bc6cc88d0fa4898d2bf4d71
+revision=f6d470f180f746e83f3e4171de2913f9d7dfc015
 [[ $# -le 1 && ( "${1:-}" == "" || "${1:-}" == --check ) ]]
 mode=write
 if [[ "${1:-}" == --check ]]; then
@@ -10,11 +10,11 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 for entry in \
-    'chat_history_reader.py 9ff8ec0840f74bead4c4428662fe88baceedba58e56456f273301bab8b6f8350' \
+    'chat_history_reader.py 17f0a4b781fa5fc97a652d5845dc9bc2d5b4f78f7c1f3c9109b4a9d50ec1ce68' \
     'chat_connectors/claude.py 7be13a50645bbcdb32f606e152ec75927a135db2f15c7310df50d899d093deca' \
     'chat_connectors/codex.py 07e448dc7d5a849cbbf4b914ce375e147f9343906f213bcda00a7d7663757a31' \
-    'mp_send.py bdee3cdd7ad1b82c2abdc5e549633395841a015ad9cb27520f822d66125a0a42' \
-    'multibot_feedback.py 9561748d6986ff93112be8e0c0b1f05bdbb00e21a5c4a97361fd697041142562'; do
+    'mp_send.py d3577c05a744fe45c390fb29cbe1c98cb3eb41b3ae178eafd1c885235a026569' \
+    'multibot_feedback.py 0007d673e04fe9ad571c0070e39aff82ef3dff61d92ac0820ab361cf84a9bd2a'; do
     read -r path hash <<< "$entry"
     mkdir -p "$tmp/$(dirname "$path")"
     if [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
@@ -26,9 +26,6 @@ for entry in \
         exit 1
     fi
     printf '%s  %s\n' "$hash" "$tmp/$path" | sha256sum --check --status
-    if [[ "$path" == chat_history_reader.py ]]; then
-        patch --silent "$tmp/$path" tools/chat-reader-worker.patch
-    fi
     asset="app/src/main/assets/$path"
     if [[ "$mode" == check ]]; then
         cmp "$tmp/$path" "$asset"
@@ -37,5 +34,5 @@ for entry in \
         cp "$tmp/$path" "$asset"
     fi
 done
-python3 -B tools/chat-reader-bundle.py --revision "$revision+mubo-529" "$mode"
-printf 'Reader and connectors match canonical revision, MUBO-529 patch and SHA256\n'
+python3 -B tools/chat-reader-bundle.py --revision "$revision" "$mode"
+printf 'Reader and connectors match canonical revision and SHA256\n'

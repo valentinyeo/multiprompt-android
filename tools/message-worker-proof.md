@@ -33,7 +33,7 @@ The head tests cover empty polls, submit, retry, all five request operations and
 
 ## Desktop alignment
 
-Android stays pinned to desktop `6572511ca37a48b58bc6cc88d0fa4898d2bf4d71` plus `tools/chat-reader-worker.patch`, applied by the sync script. Desktop MUBO-528 has no pull request yet, so the phone carries the port of `20d55092e` until the desktop change lands and the pin moves. The phone check stays read-only and creates no store or folder, which the desktop helper does not yet do.
+Android is pinned to desktop `f6d470f180f746e83f3e4171de2913f9d7dfc015` with no local patch, so the phone carries the desktop worker gate and its lock handover (passing the locked descriptor to the child through `MULTIPROMPT_MESSAGE_WORKER_LOCK_FD`). The phone check stays read-only and creates no store or folder.
 
 Fix Root Causes shaped the change to check real pending rows and hold the real lock rather than rate-limit spawns. Test Behavior, Not Implementation shaped the tests to count process launches and read the wake pipe through the request interface.
 

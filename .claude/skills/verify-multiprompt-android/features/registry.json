@@ -1503,6 +1503,10 @@
       "sideEffect": true,
       "match": [
         "SessionReaderConnection"
+      ],
+      "paths": [
+        "^app/src/main/assets/mp_send\\.py$",
+        "^app/src/main/assets/multibot_feedback\\.py$"
       ]
     },
     "reader.stop-while-working": {

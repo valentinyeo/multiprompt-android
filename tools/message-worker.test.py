@@ -1,3 +1,4 @@
+import base64
 import fcntl
 import hashlib
 import importlib.util
@@ -23,6 +24,8 @@ SPEC.loader.exec_module(reader)
 
 
 class MessageWorkerRequestTest(unittest.TestCase):
+    connector = base64.b64encode(b'submit=None\ncapabilities=None\npoll=None\n').decode()
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -34,8 +37,9 @@ class MessageWorkerRequestTest(unittest.TestCase):
                             ('resolve_tmux_agent', lambda *args, **kwargs: None),
                             ('host_dispatch_switch', lambda *args: False),
                             ('host_enabled', lambda *args: False),
+                            ('message_connector_source', lambda provider: self.connector),
                             ('serve_print', self.replies.append)]:
-            patcher = patch.object(reader, name, value)
+            patcher = patch.object(reader, name, value, create=True)
             patcher.start()
             self.addCleanup(patcher.stop)
         self.spawn = patch.object(reader.subprocess, 'Popen').start()
@@ -72,8 +76,9 @@ class MessageWorkerRequestTest(unittest.TestCase):
 
     def test_starter_hands_its_lock_to_the_child(self):
         self.submit()
-        command = self.spawn.call_args.args[0]
-        self.assertEqual(self.spawn.call_args.kwargs['pass_fds'], (int(command[-1]),))
+        handed = self.spawn.call_args.kwargs
+        self.assertEqual(len(handed['pass_fds']), 1)
+        self.assertEqual(handed['env'][reader.MESSAGE_WORKER_LOCK_ENV], str(handed['pass_fds'][0]))
 
     def test_child_takes_the_handed_lock_instead_of_a_second_one(self):
         handed = {}
@@ -95,10 +100,11 @@ class MessageWorkerRequestTest(unittest.TestCase):
         self.spawn.side_effect = capture
         reader.message_store_path().parent.mkdir(parents=True)
         self.submit()
-        with patch.object(reader, 'message_store_db', lambda tmux: Store()), \
+        with patch.dict(os.environ, {reader.MESSAGE_WORKER_LOCK_ENV: str(handed['fd'])}), \
+                patch.object(reader, 'message_store_db', lambda tmux: Store()), \
                 patch.object(reader, 'host_log', lambda *args, **kwargs: None), \
                 patch.object(reader.os, 'fdopen', wraps=os.fdopen) as fdopen:
-            reader.message_worker(self.base['tmux'], 'claude', 'idle-chat', str(handed['fd']))
+            reader.message_worker(self.base['tmux'], 'claude', 'idle-chat')
         self.assertIn(call(handed['fd'], 'a'), fdopen.call_args_list)
 
     def test_retry_spawns_exactly_one_worker_immediately(self):
@@ -164,7 +170,7 @@ class MessageWorkerRequestTest(unittest.TestCase):
         self.spawn.reset_mock()
         with patch.object(reader.sqlite3, 'connect', wraps=sqlite3.connect) as connect:
             reader.start_message_worker(self.base, 'worker source')
-        connect.assert_called_once_with(reader.message_store_path().as_uri() + '?mode=ro', uri=True)
+        connect.assert_called_once_with(reader.message_store_path().as_uri() + '?mode=ro', uri=True, timeout=2)
         self.assertEqual(self.spawn.call_count, 1)
 
     def test_live_worker_is_woken_without_another_spawn(self):

@@ -8,6 +8,7 @@ import contextlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import struct
 import zlib
@@ -20,10 +21,16 @@ from pathlib import Path
 EMPTY_WANT = 'multibot-feedback: say what you want from Multibot'
 BOARD_QUEUE_NAME = 'feedback-board-queue.jsonl'
 ATTACHMENT_DIR_NAME = 'feedback-attachments'
-PROJECT = '2060'
+PROJECT = '13734'
+TICKET_NUMBER = r'[A-Z][A-Z0-9]*-\d+'
+CHAT_NAMES = '.local/state/multiprompt/chat-names.json'
+SESSION_TOKENS = '.config/hypertask-agents/credentials/sessions'
 PREFIX = 'Multibot wish: '
 VOTE = 'multibot-feedback-vote:v1'
 LABELS = {'Multiprompt', 'Agent Feedback'}
+QUEUE_CUTOFF = 1795550400
+TITLE_WORDS = 10
+UNWRITTEN_FIX = 'to be written'
 
 
 class BoardError(Exception):
@@ -63,6 +70,49 @@ def session_name():
             return name
     parts = os.environ.get('TMUX', '').split(',')
     return parts[1] if len(parts) > 1 else ''
+
+
+def chat_name():
+    session = session_name().strip()
+    if not session:
+        return ''
+    try:
+        known = json.loads((Path.home() / CHAT_NAMES).read_text(encoding='utf-8'))
+    except (OSError, ValueError, UnicodeError):
+        known = None
+    entry = known.get(session) if isinstance(known, dict) else None
+    shown = entry.get('name') if isinstance(entry, dict) else None
+    if isinstance(shown, str) and shown.strip():
+        return shown.strip()
+    return session
+
+
+def agent_slug():
+    return re.sub(r'[^a-z0-9]+', '-', chat_name().lower()).strip('-')
+
+
+def session_token():
+    slug = agent_slug()
+    if not slug:
+        return ''
+    path = Path.home() / SESSION_TOKENS / (slug + '-agent-token')
+    try:
+        token = path.read_text(encoding='utf-8').strip()
+    except (OSError, UnicodeError):
+        return ''
+    return token if token and not re.search(r'\s', token) else ''
+
+
+def board_token():
+    return os.environ.get('HT_TOKEN', '').strip() or session_token()
+
+
+def hypertask_command():
+    found = shutil.which('hypertask')
+    if found:
+        return found
+    fallback = Path.home() / '.local/bin/hypertask'
+    return str(fallback) if fallback.is_file() else 'hypertask'
 
 
 def feedback_row(want, why):
@@ -152,8 +202,14 @@ def normalized(text):
 def contains_secret(text):
     secrets = [value for name, value in os.environ.items()
                if re.search(r'TOKEN|SECRET|PASSWORD|API_KEY', name, re.I)]
+    secrets.append(session_token())
     return (any(len(value) >= 6 and value in text for value in secrets if value) or
             bool(re.search(r'(?i)(?:\b(?:bearer\s+\S+|(?:token|password|api[_ -]?key)\s*[:=]\s*\S+)|\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+|\b(?:sk-|ghp_|github_pat_|xox[baprs]-)[A-Za-z0-9_-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----)', text)))
+
+
+def queue_row_is_stale(row):
+    at = row.get('at')
+    return not isinstance(at, int) or at < QUEUE_CUTOFF
 
 
 def safe_text(*parts):
@@ -239,10 +295,11 @@ def confirm_attachments(ticket, snapshots):
 
 
 def cli(*args):
-    if not os.environ.get('HT_TOKEN', '').strip():
+    token = board_token()
+    if not token:
         raise BoardError('agent token unavailable')
     try:
-        result = subprocess.run(['hypertask', '--json', *args], env=dict(os.environ),
+        result = subprocess.run([hypertask_command(), '--json', *args], env=dict(os.environ, HT_TOKEN=token),
                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                 text=True, timeout=30, check=False)
         data = json.loads(result.stdout)
@@ -296,7 +353,7 @@ def tasks(status):
             raise BoardError('invalid task response')
         names = {label.get('name') for label in task['labels'] if isinstance(label, dict)}
         if LABELS <= names and task['title'].startswith(PREFIX):
-            if not isinstance(task.get('ticketNumber'), str) or not re.fullmatch(r'IGSH-\d+', task['ticketNumber']):
+            if not isinstance(task.get('ticketNumber'), str) or not re.fullmatch(TICKET_NUMBER, task['ticketNumber']):
                 raise BoardError('invalid task reference')
             yield task
 
@@ -356,22 +413,32 @@ def votes(task):
 
 
 def ticket_url(task):
-    return 'https://app.hypertask.ai/detail/project-2060/' + task['ticketNumber'].split('-', 1)[1]
+    return 'https://app.hypertask.ai/detail/project-13734/' + task['ticketNumber'].split('-', 1)[1]
+
+
+def wish_title(row):
+    return PREFIX + ' '.join(normalized(row['want']).split()[:TITLE_WORDS])
+
+
+def wish_description(row):
+    details = 'App version %s. Session type %s.' % (row['app_version'], row['provider'])
+    return ('Wish from a Multibot chat.\n\nProblem:\n\n> %s\n\nWhy:\n\n> %s\n\nFix:\n\n> %s\n\nDetails:\n\n> %s\n'
+            % (html.escape(row['want']), html.escape(row['why'] or 'No reason given.'), UNWRITTEN_FIX, html.escape(details)))
 
 
 def submit(row, snapshots):
     agent = identity()
     board_labels()
-    title = PREFIX + normalized(row['want'])
+    title = wish_title(row)
     version = row['app_version']
     provider = row['provider']
     if len(title) > 200 or not safe_text(row['want'], row['why']) or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?', version) or provider not in ('claude', 'codex', 'pi'):
         raise BoardError('unsafe or missing feedback metadata')
     with wish_lock(normalized(title)):
-        return submit_locked(row, agent, title, version, provider, snapshots)
+        return submit_locked(row, agent, title, snapshots)
 
 
-def submit_locked(row, agent, title, version, provider, snapshots):
+def submit_locked(row, agent, title, snapshots):
     matching = []
     for status in ('Normal', 'Archive', 'Deleted'):
         matching += [(status, task) for task in tasks(status) if normalized(task['title']) == normalized(title)]
@@ -382,12 +449,7 @@ def submit_locked(row, agent, title, version, provider, snapshots):
         raise BoardError('duplicate wishes require review')
     created = not active
     if created:
-        description = ('<p><strong>Problem</strong></p><p>' + html.escape(row['why'] or 'No reason provided.') + '</p>'
-                       '<p><strong>Fix</strong></p><p>' + html.escape(row['want']) + '</p>'
-                       '<p><strong>Done when</strong></p><p>The requested capability works in Multibot.</p>'
-                       '<p><strong>Risk</strong></p><p>Review the wish before building. Undo changes if needed.</p>'
-                       '<p><strong>Decision</strong></p><p>None.</p>'
-                       '<p>App version: ' + html.escape(version) + '</p><p>Session type: ' + html.escape(provider) + '</p>')
+        description = wish_description(row)
         response = cli('task', 'create', '--project', PROJECT, '--title', title,
                        '--description', description, '--labels', 'Agent Feedback,Multiprompt')
         if response.get('success') is not True:
@@ -407,24 +469,28 @@ def submit_locked(row, agent, title, version, provider, snapshots):
 
 
 def drain_queue():
-    if not os.environ.get('HT_TOKEN', '').strip():
+    if not board_token():
         raise BoardError('agent token unavailable')
     queue_path = board_queue_path()
     log_path = state_path()
+    queue_rows = read_jsonl(queue_path)
+    log_rows = read_jsonl(log_path)
     pending = []
+    stale = set()
     seen = set()
-    for source in (queue_path, log_path):
-        for row in read_jsonl(source):
+    for rows in (queue_rows, log_rows):
+        for row in rows:
             if row['id'] in seen:
                 continue
             if row.get('filed_url') or row.get('board_pending') is False:
                 continue
             seen.add(row['id'])
+            if queue_row_is_stale(row):
+                stale.add(row['id'])
+                continue
             pending.append(row)
-    if not pending:
+    if not pending and not stale:
         return 0, 0, []
-    queue_rows = read_jsonl(queue_path)
-    log_rows = read_jsonl(log_path)
     filed = []
     failures = 0
     confirmed = set()
@@ -441,10 +507,9 @@ def drain_queue():
             continue
         confirmed.add(row['id'])
         filed.append(url)
-    queue_rows = [row for row in queue_rows if row.get('id') not in confirmed]
-    log_rows = [row for row in log_rows if row.get('id') not in confirmed]
-    write_jsonl(queue_path, queue_rows)
-    write_jsonl(log_path, log_rows)
+    dropped = confirmed | stale
+    write_jsonl(queue_path, [row for row in queue_rows if row.get('id') not in dropped])
+    write_jsonl(log_path, [row for row in log_rows if row.get('id') not in confirmed])
     return len(filed), failures, filed
 
 
