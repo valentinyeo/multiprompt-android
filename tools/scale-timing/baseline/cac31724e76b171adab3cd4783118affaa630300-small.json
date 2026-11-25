@@ -1,0 +1,219 @@
+{
+  "schema": "mubo-555-v3",
+  "harness": "2802515ad8a88ed2a8bdc85736fe99345f7a470819f936304c85d452517331ef",
+  "app_sha": "cac31724e76b171adab3cd4783118affaa630300",
+  "seed": "small",
+  "repeats": 5,
+  "scenarios": {
+    "cold_start": {
+      "app_cpu_ms": {
+        "median": 6580.0,
+        "min": 6160.0,
+        "max": 6830.0
+      },
+      "main_thread_ms": {
+        "median": 2280.0,
+        "min": 2180.0,
+        "max": 2390.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 3,
+        "min": 3,
+        "max": 3
+      },
+      "list_sessions_per_minute": {
+        "median": 10.385,
+        "min": 10.044,
+        "max": 10.506
+      },
+      "bytes_per_minute": {
+        "median": 155429.736,
+        "min": 115685.647,
+        "max": 167972.157
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "ssh_logins_per_minute": {
+        "median": 5.217,
+        "min": 5.022,
+        "max": 10.506
+      }
+    },
+    "chat_switch": {
+      "app_cpu_ms": {
+        "median": 2160.0,
+        "min": 1940.0,
+        "max": 26330.0
+      },
+      "main_thread_ms": {
+        "median": 350.0,
+        "min": 310.0,
+        "max": 1690.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 6,
+        "min": 6,
+        "max": 185
+      },
+      "list_sessions_per_minute": {
+        "median": 12.082,
+        "min": 11.915,
+        "max": 19.276
+      },
+      "bytes_per_minute": {
+        "median": 215362.036,
+        "min": 212412.589,
+        "max": 330034.136
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "ssh_logins_per_minute": {
+        "median": 18.123,
+        "min": 2.629,
+        "max": 23.829
+      }
+    },
+    "idle_inbox": {
+      "app_cpu_ms": {
+        "median": 1450.0,
+        "min": 1210.0,
+        "max": 1600.0
+      },
+      "main_thread_ms": {
+        "median": 60.0,
+        "min": 40.0,
+        "max": 70.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "list_sessions_per_minute": {
+        "median": 9.0,
+        "min": 8.999,
+        "max": 9.0
+      },
+      "bytes_per_minute": {
+        "median": 153458.237,
+        "min": 150318.426,
+        "max": 154898.156
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "ssh_logins_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    },
+    "typing_long_chat": {
+      "app_cpu_ms": {
+        "median": 8330.0,
+        "min": 7790.0,
+        "max": 8770.0
+      },
+      "main_thread_ms": {
+        "median": 850.0,
+        "min": 840.0,
+        "max": 870.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 125,
+        "min": 119,
+        "max": 135
+      },
+      "list_sessions_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "bytes_per_minute": {
+        "median": 10467.565,
+        "min": 10293.923,
+        "max": 10702.285
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 1,
+        "min": 1,
+        "max": 1
+      },
+      "ssh_logins_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    },
+    "streaming_reply": {
+      "app_cpu_ms": {
+        "median": 3100.0,
+        "min": 2870.0,
+        "max": 3140.0
+      },
+      "main_thread_ms": {
+        "median": 420.0,
+        "min": 410.0,
+        "max": 460.0
+      },
+      "frames_over_16_ms_secondary": {
+        "median": 72,
+        "min": 70,
+        "max": 75
+      },
+      "list_sessions_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "bytes_per_minute": {
+        "median": 87367.581,
+        "min": 83704.786,
+        "max": 87512.235
+      },
+      "errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "platform_warnings": {
+        "median": 1,
+        "min": 1,
+        "max": 2
+      },
+      "ssh_logins_per_minute": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      }
+    }
+  }
+}

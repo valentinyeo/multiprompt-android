@@ -83,6 +83,10 @@ The same median/range table appears in the job summary. Compare matching-seed re
 python3 tools/scale-timing/frozen.py compare baseline/results.json candidate/results.json --out comparison.json
 ```
 
+The committed baselines under [`baseline/`](baseline) are the `results.json` of a green run, named
+`<app sha>-<seed>.json`. Compare against the newest file for each seed that carries the current harness and
+schema, and keep older files: they are the history of what shipped.
+
 Every metric is lower-is-better. Candidate max below baseline min is `better`; candidate min above baseline
 max is `worse`; overlapping or touching ranges are `within noise`. Different harness hashes, schemas, seeds
 or repeat counts are rejected. Keep error and work receipts beside any claimed improvement; reduced work or
