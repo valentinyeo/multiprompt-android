@@ -307,7 +307,8 @@ class ComposerLongDraftTest {
         assertEquals("typing must stay inside the composer", 0, counts["ReaderScreen"] ?: 0)
         assertEquals("typing must not invalidate chat projection", 0, counts["ChatHistoryView"] ?: 0)
         assertEquals("typing must not recompose messages", 0, counts["ChatHistoryList"] ?: 0)
-        assertTrue("the composer must actually update", (counts["Composer"] ?: 0) >= 13)
+        val composerCount = counts["Composer"] ?: 0
+        assertTrue("each key should compose the composer once without a layout feedback loop: $composerCount", composerCount in 13..15)
     }
 
     @Test fun aDraftThatFitsStillDrawsTheSkillPill() {

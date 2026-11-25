@@ -279,6 +279,7 @@ import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import dev.multiprompt.companion.upload.DeviceFile
@@ -3153,8 +3154,10 @@ internal fun ReaderScreen(
     val sharedDictationState by dictation.state.collectAsState()
     val dictationState = sharedDictationState.takeIf { it.sessionKey == sessionKey }
         ?: DictationState(configured = sharedDictationState.configured)
-    val draftContext = LocalContext.current.applicationContext
+    val draftHostContext = LocalContext.current
+    val draftContext = draftHostContext.applicationContext
     val draftStore = remember(draftContext) { SessionReadStore(draftContext) }
+    val draftLifecycle = remember(draftHostContext) { draftHostContext.findLifecycle() }
     var botLookOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
     var pinnedPage by remember(session.hostId, session.name) { mutableStateOf(draftStore.pinnedPage(session)) }
     var pinPageOpen by remember(session.hostId, session.name) { mutableStateOf(false) }
@@ -3164,13 +3167,23 @@ internal fun ReaderScreen(
     }
     var editingMessageId by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     LaunchedEffect(connection, session.hostId, session.name) {
-        snapshotFlow { promptField.value.text }.collect { text ->
-            TypingProbe.measure("draftSave") { draftStore.setComposerDraft(session, text) }
+        snapshotFlow { promptField.value.text }.collectLatest { text ->
             if (text.isBlank()) editingMessageId = null
+            delay(DRAFT_SAVE_DEBOUNCE_MS)
+            TypingProbe.measure("draftSave") { draftStore.setComposerDraft(session, text) }
         }
     }
-    DisposableEffect(connection, session.hostId, session.name) {
-        onDispose { draftStore.setComposerDraft(session, promptField.value.text) }
+    DisposableEffect(connection, session.hostId, session.name, draftLifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                draftStore.setComposerDraft(session, promptField.value.text)
+            }
+        }
+        draftLifecycle?.lifecycle?.addObserver(observer)
+        onDispose {
+            draftLifecycle?.lifecycle?.removeObserver(observer)
+            draftStore.setComposerDraft(session, promptField.value.text)
+        }
     }
     var replyTo by remember(connection, session.hostId, session.name) { mutableStateOf<String?>(null) }
     val replyGate = remember(connection, session.hostId, session.name) { ReplySwipeGate() }
@@ -4718,8 +4731,9 @@ internal fun ReaderScreen(
                         ) == ComposerSlot.STOP
                         val composerText = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface)
                         val skillSpans = remember(prompt, pillSkills) { TypingProbe.measure("skillSpans") { NativeSkills.spans(prompt, pillSkills) } }
-                        var composerLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
-                        val laidOut = composerLayout
+                        val latestLayout = remember { arrayOfNulls<TextLayoutResult>(1) }
+                        var skillLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
+                        val laidOut = if (skillSpans.isEmpty()) null else skillLayout ?: latestLayout[0]
                         val pillsDrawn = laidOut != null && !laidOut.scrollsInsideComposer()
                         val kitColors = kit()
                         val skillText = remember(skillSpans, pillsDrawn, kitColors.text) {
@@ -4743,7 +4757,14 @@ internal fun ReaderScreen(
                             textStyle = composerText,
                             cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                             visualTransformation = skillText,
-                            onTextLayout = { composerLayout = it },
+                            onTextLayout = {
+                                latestLayout[0] = it
+                                if (skillSpans.isNotEmpty()) {
+                                    skillLayout = it
+                                } else if (skillLayout != null) {
+                                    skillLayout = null
+                                }
+                            },
                             minLines = 1,
                             maxLines = ReaderComposerMaxLines,
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
@@ -5908,6 +5929,7 @@ private fun parentRemotePath(path: String): String {
 }
 private const val DOUBLE_TAP_TIMEOUT_MS = 320L
 private const val UPDATE_POLL_INTERVAL_MS = 5 * 60 * 1000L
+private const val DRAFT_SAVE_DEBOUNCE_MS = 600L
 
 private fun statusLabel(status: TerminalStatus): String = when (status) {
     TerminalStatus.Connecting -> "Connecting…"
