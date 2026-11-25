@@ -109,10 +109,11 @@ def gfx_totals():
     return parsers.parse_gfxinfo(adb('shell', 'dumpsys', 'gfxinfo', PACKAGE, check=False).stdout)
 
 
-def sign_in(fixture, evidence, host_fingerprint):
+def sign_in(fixture, evidence, host_fingerprint, expected_version):
     mpa('launch', '--force-stop', timeout=240)
-    payload = poll(lambda page: on_screen(page, 'Use without account (debug)') or has_robot(page), 240,
-                   'SIGN_IN_SCREEN_MISSING')
+    poll(lambda page: on_screen(page, 'Use without account (debug)') or has_robot(page), 240, 'SIGN_IN_SCREEN_MISSING')
+    mpa('doctor', '--expected-version', expected_version, timeout=300)
+    payload = screen()
     if on_screen(payload, 'Use without account (debug)'):
         mpa('tap', 'text', 'Use without account (debug)', timeout=240)
         wait_text('Inbox', 180, 'debug sign in')
@@ -228,10 +229,9 @@ def main(argv):
     OUT.mkdir(parents=True, exist_ok=True)
     targets = json.loads(Path(arguments.targets).read_text())
     CLK_TCK = clk_tck()
-    mpa('doctor', '--expected-version', arguments.expected_version, timeout=300)
     fingerprint_path = Path(arguments.evidence) / 'host-fingerprint.txt'
     fingerprint = fingerprint_path.read_text().strip() if fingerprint_path.is_file() else ''
-    session = sign_in(arguments.fixture, arguments.evidence, fingerprint)
+    session = sign_in(arguments.fixture, arguments.evidence, fingerprint, arguments.expected_version)
     steps = measure(targets)
     kept = copy_relay(OUT)
     summary = dict(seed=arguments.seed, ref=arguments.ref, package=PACKAGE, session=session, clk_tck=CLK_TCK,
