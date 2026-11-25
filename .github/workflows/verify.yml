@@ -163,6 +163,7 @@ on:
           - bot-look.md
           - reader-version.md
           - reader-controls.md
+          - long-drafts.md
           - message-reply.md
           - settings-controls.md
           - inbox-reminders.md
