@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -78,14 +79,6 @@ def wait_inbox(timeout):
     return poll(has_robot, timeout, 'INBOX_NOT_SHOWN')
 
 
-def tap_if_present(mode, value, wait=60):
-    payload = screen()
-    if not on_screen(payload, value):
-        return False
-    mpa('tap', mode, value, timeout=wait + 120)
-    return True
-
-
 def clk_tck():
     result = adb('shell', 'getconf', 'CLK_TCK', check=False)
     raw = result.stdout.strip()
@@ -109,31 +102,42 @@ def gfx_totals():
     return parsers.parse_gfxinfo(adb('shell', 'dumpsys', 'gfxinfo', PACKAGE, check=False).stdout)
 
 
+def seed_host(fixture, evidence):
+    key = base64.b64encode((Path(fixture) / 'user-key').read_bytes()).decode()
+    instrument = (f'{PACKAGE}.test/androidx.test.runner.AndroidJUnitRunner')
+    result = adb('shell', 'am', 'instrument', '-w',
+                 '-e', 'class', 'dev.multiprompt.companion.account.SeedHostDeviceTest#importsCliHostFixture',
+                 '-e', 'host_label', 'Verify', '-e', 'ssh_host', '10.0.2.2', '-e', 'ssh_port', '2222',
+                 '-e', 'ssh_user', 'verifyssh', '-e', 'ssh_private_key', key, instrument,
+                 timeout=300, check=False)
+    (Path(evidence) / 'host-seed.txt').write_text(result.stdout + result.stderr)
+    if 'OK (1 test)' not in result.stdout:
+        raise MeasurementError('HOST_SEED_FAILED: ' + (result.stdout + result.stderr).strip()[-600:])
+
+
 def sign_in(fixture, evidence, host_fingerprint, expected_version):
     mpa('launch', '--force-stop', timeout=240)
     poll(lambda page: on_screen(page, 'Use without account (debug)') or has_robot(page), 240, 'SIGN_IN_SCREEN_MISSING')
     mpa('doctor', '--expected-version', expected_version, timeout=300)
-    payload = screen()
-    if on_screen(payload, 'Use without account (debug)'):
+    if on_screen(screen(), 'Use without account (debug)'):
         mpa('tap', 'text', 'Use without account (debug)', timeout=240)
         wait_text('Inbox', 180, 'debug sign in')
-    if has_robot(screen()):
-        return 'already signed in'
-    mpa('tap', 'desc', 'Session list actions', timeout=240)
-    mpa('tap', 'text', 'Hosts', timeout=240)
-    mpa('tap', 'desc', 'Add host', timeout=240)
-    mpa('fill', 'Label', 'Verify', timeout=240)
-    mpa('fill', 'Hostname or IP', '10.0.2.2', timeout=240)
-    mpa('fill', 'Username', 'verifyssh', timeout=240)
-    mpa('fill', 'Port', '2222', timeout=240)
-    adb('push', str(Path(fixture) / 'user-key'), '/sdcard/Download/verify-key.pem')
-    mpa('tap', 'text', 'Import private key', timeout=240)
-    tap_if_present('desc', 'Show roots')
-    tap_if_present('text', 'Downloads')
-    mpa('tap', 'text', 'verify-key.pem', timeout=240)
-    wait_text('Key:', 180, 'key import')
-    mpa('tap', 'text', 'Save and connect', timeout=240)
-    wait_text('Trust Verify?', 240, 'host key prompt')
+    seed_host(fixture, evidence)
+    mpa('launch', '--force-stop', timeout=240)
+    deadline = time.monotonic() + 300
+    while time.monotonic() < deadline:
+        payload = screen()
+        if has_robot(payload):
+            (Path(evidence) / 'signed-in.txt').write_text('host was already trusted\n')
+            return 'already trusted'
+        if on_screen(payload, 'Use without account (debug)'):
+            mpa('tap', 'text', 'Use without account (debug)', timeout=240)
+            continue
+        if on_screen(payload, 'Trust Verify?'):
+            break
+        time.sleep(1)
+    else:
+        raise MeasurementError('TRUST_SHEET_MISSING: the host key sheet never appeared')
     payload = screen()
     if host_fingerprint and host_fingerprint not in ' '.join(texts(payload)):
         raise MeasurementError('HOST_FINGERPRINT_MISMATCH: the sheet does not show ' + host_fingerprint)
