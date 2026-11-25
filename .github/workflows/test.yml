@@ -123,12 +123,20 @@ jobs:
         env:
           GRADLE: tools/ci/gradle-retry.sh
         run: tools/check.sh unit
+      - name: Per snapshot cost report
+        if: always()
+        run: |
+          if [ -d app/build/mubo-453 ]; then
+            echo '## MUBO-453 per snapshot cost' >> "$GITHUB_STEP_SUMMARY"
+            cat app/build/mubo-453/*.txt >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           overwrite: true
           name: unit-tests-results
           path: |
+            app/build/mubo-453/*.txt
             app/build/reports/igsh-844/*.png
             app/build/reports/igsh-1045/*.png
             app/build/reports/igsh-1015/*.png
