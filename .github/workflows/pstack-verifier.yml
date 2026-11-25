@@ -39,6 +39,8 @@ jobs:
       change_kind: ${{ steps.pick-retry.outputs.change_kind || steps.pick.outputs.change_kind || steps.pick-request.outputs.change_kind }}
       speed: ${{ steps.pick-retry.outputs.speed || steps.pick.outputs.speed || steps.pick-request.outputs.speed }}
       visible: ${{ steps.pick-retry.outputs.visible || steps.pick.outputs.visible || steps.pick-request.outputs.visible }}
+      unmapped: ${{ steps.pick-retry.outputs.unmapped || steps.pick.outputs.unmapped || steps.pick-request.outputs.unmapped }}
+      coverage_recorded: ${{ steps.pick-retry.outputs.coverage_recorded || steps.pick.outputs.coverage_recorded || steps.pick-request.outputs.coverage_recorded }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -217,6 +219,8 @@ jobs:
           MERGE_BASE: ${{ needs.pick.outputs.merge_base }}
           FEATURES: ${{ needs.pick.outputs.features }}
           CHANGED_OUTCOMES: ${{ needs.pick.outputs.changed_outcomes }}
+          UNMAPPED: ${{ needs.pick.outputs.unmapped }}
+          COVERAGE_RECORDED: ${{ needs.pick.outputs.coverage_recorded }}
           CHANGE_KIND: ${{ needs.pick.outputs.change_kind }}
           COVERAGE_REPORT: ${{ runner.temp }}/feature-coverage.json
           SMOKE: ${{ needs.pick.outputs.smoke }}

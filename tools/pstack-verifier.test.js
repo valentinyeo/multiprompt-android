@@ -10,6 +10,7 @@ const root = path.join(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const sha = 'a'.repeat(40);
 const runUrl = 'https://github.com/example/repo/actions/runs/1';
+const COVERED = { unmapped: [] };
 
 function jobBlock(source, name) {
   const lines = source.split('\n');
@@ -48,7 +49,7 @@ function reply(status, body) {
 const answer = content => ({ choices: [{ message: { content }, finish_reason: 'stop' }] });
 
 test('a journey that failed forces FAIL even when the model says PASS', () => {
-  const ruled = verifier.applyRules({
+  const ruled = verifier.applyRules({ coverage: COVERED,
     modelVerdict: 'PASS',
     features: ['hosts.md', 'terminal.md'],
     conclusions: { 'hosts.md': 'success', 'terminal.md': 'failure' },
@@ -60,24 +61,24 @@ test('a journey that failed forces FAIL even when the model says PASS', () => {
 
 test('a cancelled journey or one with no result forces FAIL', () => {
   for (const conclusions of [{ 'hosts.md': 'cancelled' }, { 'hosts.md': 'skipped' }, {}]) {
-    const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions });
+    const ruled = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md'], conclusions });
     assert.equal(ruled.verdict, 'FAIL', JSON.stringify(conclusions));
   }
-  assert.match(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: {} }).notes.join(' '), /no result/);
+  assert.match(verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md'], conclusions: {} }).notes.join(' '), /no result/);
 });
 
 test('a passing set of journeys stays PASS', () => {
-  const ruled = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
+  const ruled = verifier.applyRules({ coverage: COVERED, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
   assert.equal(ruled.verdict, 'PASS');
 });
 
 test('a journey that failed still fails the job', () => {
-  const ruled = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
+  const ruled = verifier.applyRules({ coverage: COVERED, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
   assert.equal(ruled.verdict, 'FAIL');
 });
 
 test('a journey already red on main becomes a note, not a failed check', () => {
-  const red = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, redOnMain: ['hosts.md'], redOnMainUrl: runUrl });
+  const red = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, redOnMain: ['hosts.md'], redOnMainUrl: runUrl });
   assert.equal(red.verdict, 'PASS+NOTES');
   assert.equal(red.journeys[0].redOnMain, true);
   assert.ok(red.notes.join(' ').includes(`Already red on main (nightly ${runUrl}): hosts.md; tracked as a ticket, not a PR block.`), red.notes.join(' '));
@@ -85,26 +86,26 @@ test('a journey already red on main becomes a note, not a failed check', () => {
 });
 
 test('a journey that failed and is not red on main still fails the check', () => {
-  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'failure', 'terminal.md': 'failure' }, redOnMain: ['terminal.md'], redOnMainUrl: runUrl });
+  const ruled = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'failure', 'terminal.md': 'failure' }, redOnMain: ['terminal.md'], redOnMainUrl: runUrl });
   assert.equal(ruled.verdict, 'FAIL');
   assert.match(ruled.notes.join(' '), /Journey not passed: hosts\.md \(failure\)\./);
   assert.match(ruled.notes.join(' '), /Already red on main .*terminal\.md; tracked as a ticket/);
-  const clean = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMain: ['terminal.md'], redOnMainUrl: runUrl });
+  const clean = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMain: ['terminal.md'], redOnMainUrl: runUrl });
   assert.equal(clean.verdict, 'PASS');
   assert.deepEqual(clean.notes, []);
 });
 
 test('an empty red list and a missing one behave as before', () => {
   for (const redOnMain of [[], undefined]) {
-    assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, redOnMain }).verdict, 'FAIL');
-    assert.equal(verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMain }).verdict, 'PASS');
+    assert.equal(verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, redOnMain }).verdict, 'FAIL');
+    assert.equal(verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMain }).verdict, 'PASS');
   }
-  const noted = verifier.applyRules({ modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMainNote: 'No journey counts as red on main: no completed android-full run on main yet.' });
+  const noted = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, redOnMainNote: 'No journey counts as red on main: no completed android-full run on main yet.' });
   assert.match(noted.notes.join(' '), /No journey counts as red on main/);
 });
 
 test('a journey this PR changes blocks even while it is red on main', () => {
-  const ruled = verifier.applyRules({
+  const ruled = verifier.applyRules({ coverage: COVERED,
     modelVerdict: 'PASS', features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' },
     redOnMain: ['session-pins.md'], redOnMainUrl: runUrl, direct: ['session-pins.md'],
   });
@@ -116,14 +117,14 @@ test('a journey this PR changes blocks even while it is red on main', () => {
 });
 
 test('a red-on-main journey the PR does not change stays a note', () => {
-  const ruled = verifier.applyRules({
+  const ruled = verifier.applyRules({ coverage: COVERED,
     modelVerdict: 'PASS', features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' },
     redOnMain: ['session-pins.md'], redOnMainUrl: runUrl, direct: ['terminal.md'],
   });
   assert.equal(ruled.verdict, 'PASS+NOTES');
   assert.equal(ruled.journeys[0].direct, false);
   assert.match(ruled.notes.join(' '), /Already red on main .*session-pins\.md; tracked as a ticket, not a PR block\./);
-  assert.equal(verifier.applyRules({ features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' }, redOnMain: ['session-pins.md'], direct: [] }).verdict, 'PASS+NOTES');
+  assert.equal(verifier.applyRules({ coverage: COVERED, features: ['session-pins.md'], conclusions: { 'session-pins.md': 'failure' }, redOnMain: ['session-pins.md'], direct: [] }).verdict, 'PASS+NOTES');
 });
 
 test('only journeys that did not pass are written for the verify chat', () => {
@@ -183,12 +184,68 @@ test('the latest completed nightly run on main is read, and a missing artifact c
 });
 
 test('driving nothing caps the verdict at PASS+NOTES and says why', () => {
-  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: [], conclusions: {}, notDrivenReason: 'Only documentation changed.' });
+  const ruled = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: [], conclusions: {}, notDrivenReason: 'Only documentation changed.' });
   assert.equal(ruled.verdict, 'PASS+NOTES');
   assert.match(ruled.notes.join(' '), /Nothing was driven/);
   assert.match(ruled.notes.join(' '), /Only documentation changed\./);
-  assert.equal(verifier.applyRules({ modelVerdict: 'PASS+NOTES', features: [], conclusions: {} }).verdict, 'PASS+NOTES');
-  assert.equal(verifier.applyRules({ modelVerdict: 'FAIL', features: [], conclusions: {} }).verdict, 'PASS+NOTES');
+  assert.equal(verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS+NOTES', features: [], conclusions: {} }).verdict, 'PASS+NOTES');
+  assert.equal(verifier.applyRules({ coverage: COVERED, modelVerdict: 'FAIL', features: [], conclusions: {} }).verdict, 'PASS+NOTES');
+});
+
+test('an unmapped product file fails a pass and names the file', () => {
+  const ruled = verifier.applyRules({
+    features: ['session-reader.md'], conclusions: { 'session-reader.md': 'success' },
+    coverage: { unmapped: ['app/src/main/java/dev/multiprompt/companion/ui/ChatFind.kt'] },
+  });
+  assert.equal(ruled.verdict, 'FAIL');
+  assert.match(ruled.notes.join('\n'), /1 changed product file no planned journey exercises: app\/src\/main\/java\/dev\/multiprompt\/companion\/ui\/ChatFind\.kt\. Add or select a journey that exercises it, then re-run the verifier\./);
+  const notPassing = verifier.applyRules({
+    features: [], conclusions: {}, smoke: true,
+    coverage: { unmapped: ['app/src/main/java/dev/multiprompt/companion/ui/ChatFind.kt'] },
+  });
+  assert.equal(notPassing.verdict, 'FAIL');
+});
+
+test('an unmapped documentation, tooling, CI or test file never fails a pass', () => {
+  const ruled = verifier.applyRules({
+    features: ['hosts.md'], conclusions: { 'hosts.md': 'success' },
+    coverage: { unmapped: ['docs/account-workspaces.md', 'tools/check.sh', '.github/workflows/test.yml', 'app/src/test/java/dev/multiprompt/companion/ui/ChatListRemeasureTest.kt', 'tools/release-notes/titles/MUBO-539.txt'] },
+  });
+  assert.equal(ruled.verdict, 'PASS');
+  assert.deepEqual(ruled.notes, []);
+});
+
+test('a missing coverage record fails closed', () => {
+  for (const coverage of [undefined, null, {}, { unmapped: 'app/src/main/java/dev/multiprompt/companion/ui/ChatFind.kt' }, { unmapped: null }]) {
+    const ruled = verifier.applyRules({ coverage, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' } });
+    assert.equal(ruled.verdict, 'FAIL', JSON.stringify(coverage));
+    assert.match(ruled.notes.join(' '), /No coverage record/);
+  }
+  assert.equal(verifier.applyRules({ coverage: null, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } }).verdict, 'FAIL');
+  assert.doesNotMatch(verifier.applyRules({ coverage: null, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } }).notes.join(' '), /No coverage record/);
+});
+
+test('the pick step records the product files no scheduled journey exercises', () => {
+  const gate = require('../.github/scripts/pstack-verifier/coverage.cjs');
+  const change = (file, text) => `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n@@ -1 +1 @@\n-old\n+${text}\n`;
+  const product = 'app/src/main/java/dev/multiprompt/companion/ui/ChatFind.kt';
+  const diff = [change(product, 'ChatFind'), change('docs/account-workspaces.md', 'notes'), change('tools/check.sh', 'echo changed')].join('');
+  assert.deepEqual(gate.uncoveredProductFiles(diff, []), [product]);
+  assert.deepEqual(gate.uncoveredProductFiles(diff, ['chat-search.md']), []);
+  assert.deepEqual(gate.uncoveredProductFiles(diff, [], [{ filename: product, status: 'removed' }]), []);
+  assert.deepEqual(gate.uncoveredProductFiles(change('gradle/libs.versions.toml', 'agp = "9"'), []), []);
+});
+
+test('the judge reads the pick coverage record, so a pass cannot stand without it', () => {
+  const workflow = read('.github/workflows/pstack-verifier.yml');
+  assert.match(workflow, /unmapped: \$\{\{ steps\.pick-retry\.outputs\.unmapped \|\| steps\.pick\.outputs\.unmapped \|\| steps\.pick-request\.outputs\.unmapped \}\}/);
+  assert.match(workflow, /coverage_recorded: \$\{\{ steps\.pick-retry\.outputs\.coverage_recorded \|\| steps\.pick\.outputs\.coverage_recorded \|\| steps\.pick-request\.outputs\.coverage_recorded \}\}/);
+  assert.match(workflow, /UNMAPPED: \$\{\{ needs\.pick\.outputs\.unmapped \}\}/);
+  assert.match(workflow, /COVERAGE_RECORDED: \$\{\{ needs\.pick\.outputs\.coverage_recorded \}\}/);
+  assert.deepEqual(verifier.coverageSelection({ COVERAGE_RECORDED: 'yes', UNMAPPED: '["app/src/main/java/dev/multiprompt/companion/ui/ChatFind.kt"]' }), { unmapped: ['app/src/main/java/dev/multiprompt/companion/ui/ChatFind.kt'] });
+  assert.equal(verifier.coverageSelection({ UNMAPPED: '[]' }), null);
+  assert.equal(verifier.coverageSelection({ COVERAGE_RECORDED: 'yes', UNMAPPED: 'not json' }), null);
+  assert.equal(verifier.coverageSelection({ COVERAGE_RECORDED: 'yes', UNMAPPED: '{}' }), null);
 });
 
 test('picker and ladder response parsing reject bad JSON', () => {
@@ -402,7 +459,7 @@ test('a shared-driver change runs every journey it touches instead of deferring 
   const required = gate.changedJourneys(diff);
   assert.deepEqual(selected.features, required);
   assert.deepEqual(selected.dropped, ['made-up.md']);
-  const ruled = verifier.applyRules({ modelVerdict: 'PASS', features: selected.features, conclusions: Object.fromEntries(selected.features.map(name => [name, 'success'])) });
+  const ruled = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: selected.features, conclusions: Object.fromEntries(selected.features.map(name => [name, 'success'])) });
   assert.equal(ruled.verdict, 'PASS');
   const body = verifier.buildComment({ sha, ...ruled, summary: 'Full proof.', evidence: [], notCovered: [], runUrl });
   assert.doesNotMatch(body, /Deferred/);
@@ -423,13 +480,13 @@ test('a change to the inbox, chat list or reader path schedules the speed check,
   assert.equal(gate.speedRelevant('', [{ filename: 'app/src/main/java/dev/multiprompt/companion/terminal/ShellView.kt' }]), false);
   const diff = 'diff --git a/app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt b/app/src/main/java/dev/multiprompt/companion/ui/SessionPreview.kt\n+changed\n';
   assert.equal(gate.speedRelevant(diff), true);
-  assert.equal(verifier.applyRules({ features: [], conclusions: {}, speed: { required: true, result: 'failure' } }).verdict, 'FAIL');
-  const slow = verifier.applyRules({ features: [], conclusions: {}, speed: { required: true, result: 'failure' } });
+  assert.equal(verifier.applyRules({ coverage: COVERED, features: [], conclusions: {}, speed: { required: true, result: 'failure' } }).verdict, 'FAIL');
+  const slow = verifier.applyRules({ coverage: COVERED, features: [], conclusions: {}, speed: { required: true, result: 'failure' } });
   assert.match(slow.notes.join(' '), /speed check did not pass \(failure\)/);
-  const fast = verifier.applyRules({ features: [], conclusions: {}, speed: { required: true, result: 'success' } });
+  const fast = verifier.applyRules({ coverage: COVERED, features: [], conclusions: {}, speed: { required: true, result: 'success' } });
   assert.equal(fast.verdict, 'PASS+NOTES');
   assert.match(fast.notes.join(' '), /speed check passed/);
-  const skipped = verifier.applyRules({ features: [], conclusions: {}, speed: { required: false, result: 'skipped' } });
+  const skipped = verifier.applyRules({ coverage: COVERED, features: [], conclusions: {}, speed: { required: false, result: 'skipped' } });
   assert.equal(skipped.verdict, 'PASS+NOTES');
   assert.doesNotMatch(skipped.notes.join(' '), /speed check/);
   const workflow = read('.github/workflows/pstack-verifier.yml');
@@ -895,7 +952,7 @@ test('a change no journey fits schedules no unrelated Android smoke', () => {
   const picked = verifier.parsePick(JSON.stringify({ features: ['not-a-journey.md'], changed_outcomes: [], change_kind: 'tooling', reason: 'Only workflow files changed.' }));
   assert.deepEqual(picked.features, []);
   assert.equal(picked.smoke, false);
-  const result = verifier.applyRules({ modelVerdict: 'PASS', features: [], conclusions: {}, notDrivenReason: picked.reason });
+  const result = verifier.applyRules({ coverage: COVERED, modelVerdict: 'PASS', features: [], conclusions: {}, notDrivenReason: picked.reason });
   assert.equal(result.verdict, 'PASS+NOTES');
   assert.match(result.notes.join(' '), /Nothing was driven/);
 });
@@ -914,10 +971,10 @@ test('verifier.cjs has no direct provider URL or model key env reads', () => {
 
 test('coverage gaps are notes and never change the verdict', () => {
   const gap = 'FEATURE_NOT_EXERCISED: required journey terminal.md was not scheduled.';
-  const passed = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, featureProof: { accepted: [], errors: [gap] } });
+  const passed = verifier.applyRules({ coverage: COVERED, features: ['hosts.md'], conclusions: { 'hosts.md': 'success' }, featureProof: { accepted: [], errors: [gap] } });
   assert.equal(passed.verdict, 'PASS');
   assert.deepEqual(passed.notes, [gap]);
-  const failed = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, featureProof: { accepted: [], errors: [gap] } });
+  const failed = verifier.applyRules({ coverage: COVERED, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' }, featureProof: { accepted: [], errors: [gap] } });
   assert.equal(failed.verdict, 'FAIL');
   assert.match(failed.notes.join(' '), /Journey not passed: hosts\.md/);
   assert.match(failed.notes.join(' '), /FEATURE_NOT_EXERCISED/);
@@ -941,18 +998,18 @@ test('ladder failure in the picker falls back to the feature map', async () => {
 });
 
 test('a bug fix is checked by its head journeys, not by a parent repro or a stressed replay', () => {
-  const ruled = verifier.applyRules({
+  const ruled = verifier.applyRules({ coverage: COVERED,
     stressProof: { errors: ['BREAK_IT_FAILED: retained stress evidence is required for every bug-fix journey.'], evidence: [] },
     features: ['reader-version.md', 'settings-controls.md'],
     conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
   });
   assert.equal(ruled.verdict, 'PASS');
   assert.doesNotMatch(ruled.notes.join(' '), /No recorded repro|setup, build or fixture|BREAK_IT_FAILED/);
-  assert.equal(verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } }).verdict, 'FAIL');
+  assert.equal(verifier.applyRules({ coverage: COVERED, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } }).verdict, 'FAIL');
 });
 
 test('two passing head journeys leave no notes', () => {
-  const ruled = verifier.applyRules({
+  const ruled = verifier.applyRules({ coverage: COVERED,
     features: ['reader-version.md', 'settings-controls.md'],
     conclusions: { 'reader-version.md': 'success', 'settings-controls.md': 'success' },
   });
@@ -962,7 +1019,7 @@ test('two passing head journeys leave no notes', () => {
 
 test('one head journey that did not pass fails the job whatever the other journeys showed', () => {
   for (const conclusion of ['failure', 'cancelled', 'skipped', null]) {
-    const ruled = verifier.applyRules({
+    const ruled = verifier.applyRules({ coverage: COVERED,
       features: ['reader-version.md', 'settings-controls.md'],
       conclusions: { 'reader-version.md': 'success', 'settings-controls.md': conclusion },
     });
@@ -972,7 +1029,7 @@ test('one head journey that did not pass fails the job whatever the other journe
 });
 
 test('the bug-fix label comes from the title or the ticket, never from a feature', () => {
-  const ruled = verifier.applyRules({
+  const ruled = verifier.applyRules({ coverage: COVERED,
     features: ['hosts.md'],
     conclusions: { 'hosts.md': 'success' },
   });
@@ -984,9 +1041,9 @@ test('the bug-fix label comes from the title or the ticket, never from a feature
 });
 
 test('a failed head journey forces FAIL and an all-passed set stays PASS', () => {
-  const ruled = verifier.applyRules({ features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
+  const ruled = verifier.applyRules({ coverage: COVERED, features: ['hosts.md'], conclusions: { 'hosts.md': 'failure' } });
   assert.equal(ruled.verdict, 'FAIL');
-  assert.equal(verifier.applyRules({ features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' } }).verdict, 'PASS');
+  assert.equal(verifier.applyRules({ coverage: COVERED, features: ['hosts.md', 'terminal.md'], conclusions: { 'hosts.md': 'success', 'terminal.md': 'success' } }).verdict, 'PASS');
   assert.match(ruled.notes.join(' '), /Journey not passed: hosts\.md/);
 });
 

@@ -34,6 +34,7 @@ Requires JDK 17 and Android SDK 36. Before every push run the focused source che
 | No code comments (license headers and tool directives allowed) | `tools/strip-comments.mjs --check` in `tools/check.sh` |
 | An old-screen check builds that complete revision in its own worktree, or uses a retained APK. Do not copy old source into the current app | `tools/historical_control.py` in `tools/check.sh`; `tools/check-session-pins.sh` builds commit `93f137d8` |
 | Changed product outcomes need matching head-journey action/result proof at the exact APK SHA; smoke is not coverage. Initial gaps do not exempt future changes | `features/registry.json`, the `coverage.cjs` ratchet in `maintain-verification.yml`, and structured artifact validation in `pstack-verifier` |
+| A changed product file that no scheduled journey exercises blocks a PR, and a missing coverage record blocks it too | `uncovered_gate` in `verifier.cjs` and `tools/pstack-verifier.test.js` |
 | Retrying a check replaces only its own per-run proof artifact | `overwrite: true` on proof uploads; PR #392 `c2f673c6` HTTP 409 replay in `tools/pstack-verifier.test.js` |
 | Table readiness recognises the icon-only Close description without text or exported test tags | retained phone-screen and expand-handshake replays in `tools/chat-table/ui.test.py`, run by `verify.yml` |
 | One registry owns verification recipes, picker eligibility and dispatch options | `coverage.cjs check` in `tools/check.sh` and `test.yml` |
