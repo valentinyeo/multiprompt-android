@@ -26,12 +26,13 @@ For every length the driver:
    `input text` burst, so every character still arrives as a real key event, waits until the field
    stops changing, reads it back, and compares. When a burst loses characters anywhere in the draft,
    the fill deletes back to the first character that no longer matches and retypes from there, capped
-   at one burst, so a repair never retypes the whole draft. A round that makes no progress halves the
-   burst, and the fill stops with `LONG_DRAFTS_FILL_FAILED` after 24 rounds or six times the draft in
-   typed characters instead of eating the job's time limit. The last four characters are typed one key
-   event at a time. `--length 100` also requires the painted skill pill outline inside the composer at
-   the end of the fill, and the two longer drafts require no pill outline because a scrolled draft
-   draws none.
+   at one burst, so a repair never retypes the whole draft. A burst is retyped only when a round ends
+   where it started, so a healthy phone types every character exactly once, and two rounds that make
+   no progress halve the burst. The fill stops with `LONG_DRAFTS_FILL_FAILED` after 40 rounds or six
+   times the draft in typed characters instead of eating the job's time limit. The last four characters
+   are typed one key event at a time. `--length 100` also requires the painted skill pill outline
+   inside the composer at the end of the fill, and the two longer drafts require no pill outline
+   because a scrolled draft draws none.
 3. Requires the exact draft back in the field, the same field width as the shorter drafts, and the
    field inside the window between the attach and send controls. That is the no-horizontal-overflow
    check: the field never widens, only the height grows, then stops at the six-line cap.
@@ -47,7 +48,9 @@ For every length the driver:
    scrolled to the caret before the edit landed. The edit may land inside the `/review-native`
    token and turn it back into plain text, so this capture asserts neither a pill nor no pill.
 6. After the 5,000 character draft, leaves the chat for Inbox, reopens it and requires the edited
-   draft byte for byte.
+   draft byte for byte. The soft keyboard is still up after the middle edit and takes the first Back
+   for itself, so the driver presses Back up to three times, twelve seconds apart, until the Inbox
+   shows.
 
 Every step keeps a numbered PNG and UI XML pair per length and phase. `long-drafts-result.json`
 records the field widths, heights, the middle-edit offset and the scroll comparisons.
@@ -64,7 +67,9 @@ the field back after every burst and rewinds it to the last correct character be
 burst is 500 characters rather than a handful, because the emulator drops about as many characters
 per burst either way: the read-back and retry cost, not the typing, is what made an earlier 50
 character chunk version of this journey need about 14 seconds per 50 characters and run past the
-35 minute job limit on the 5,000 character draft.
+35 minute job limit on the 5,000 character draft. Retyping a burst after every round, rather than
+only after a round that went nowhere, doubled the typing on a healthy phone and cost the fill half
+its time.
 
 The arrow-walk travel distance is deliberately generous: a line holds about 20 characters, so
 overshooting only parks the caret at the start or the end of the draft, which is exactly what the

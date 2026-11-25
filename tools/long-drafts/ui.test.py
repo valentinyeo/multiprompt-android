@@ -183,11 +183,14 @@ def main():
     assert bounded['retype'] == drafts.typed(expected[40:50]) and bounded['want'] == 50, bounded
 
     whole = drafts.draft(5000)
+    body_chars = len(whole) - ui.TAIL_CHARS
+    least_rounds = -(-body_chars // ui.SEGMENT_CHARS)
     plain = Phone()
     filled = ui.filling(whole, plain.read, plain.type_keys, plain.erase, pause=0)
-    assert filled['ok'] is True and filled['fill_rounds'] == 10, filled
+    assert filled['ok'] is True, filled
+    assert filled['fill_rounds'] == least_rounds, filled
     assert plain.buffer == whole, 'a clean fill must reach the exact draft'
-    assert filled['fill_typed_chars'] == len(whole) - 4, filled
+    assert filled['fill_typed_chars'] == len(ui.typed(whole)), filled
 
     lossy = Phone(drop=('release lands', 40))
     repaired = ui.filling(whole, lossy.read, lossy.type_keys, lossy.erase, pause=0)

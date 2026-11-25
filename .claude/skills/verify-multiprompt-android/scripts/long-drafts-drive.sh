@@ -72,6 +72,18 @@ press() {
     done
 }
 
+leave_reader() {
+    local attempt
+    for attempt in 1 2 3; do
+        "$mpa" key back
+        if "$mpa" read --wait-text Inbox --timeout 12; then
+            return 0
+        fi
+        printf 'LONG_DRAFTS_BACK_AGAIN attempt=%s\n' "$attempt"
+    done
+    "$mpa" read --wait-text Inbox
+}
+
 "$mpa" tap text verify-session
 "$mpa" read --wait-text 'Native session skills are ready.'
 "$mpa" read --select desc --value 'Session actions' --timeout 20
@@ -96,8 +108,7 @@ for length in 100 1000 5000; do
 done
 
 sleep 2
-"$mpa" key back
-"$mpa" read --wait-text Inbox
+leave_reader
 "$mpa" tap text verify-session
 "$mpa" read --wait-text 'Native session skills are ready.'
 capture 5000 reopened "$work/draft-5000-edited.txt" --pill no

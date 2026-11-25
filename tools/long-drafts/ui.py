@@ -22,7 +22,7 @@ SEGMENT_CHARS = 500
 SEGMENT_FLOOR = 125
 TAIL_CHARS = 4
 SETTLE_READS = 3
-FILL_ROUNDS = 24
+FILL_ROUNDS = 40
 TYPED_CAP = 6
 DELETE_BATCH = 20
 
@@ -175,6 +175,7 @@ def filling(expected, read, type_keys_fn, erase, segment=SEGMENT_CHARS, tail=TAI
     stalls = 0
     while observed != body and attempts < rounds and typed_chars <= len(expected) * typed_cap:
         attempts += 1
+        before = best
         plan = advance(observed, body, limit)
         if plan['delete'] > 0:
             erase(plan['delete'])
@@ -182,14 +183,16 @@ def filling(expected, read, type_keys_fn, erase, segment=SEGMENT_CHARS, tail=TAI
             type_keys_fn(plan['retype'])
             typed_chars += len(plan['retype'])
         observed = settle(read, observed, pause=pause)
-        if plan['retype'] and plan['keep'] <= best:
-            burst = advance(observed, body, limit)['retype']
-            if burst:
-                type_keys_fn(burst)
-                typed_chars += len(burst)
-            observed = settle(read, observed, pause=pause)
         current = advance(observed, body, limit)
-        if current['keep'] <= best:
+        if plan['retype'] and current['keep'] <= before:
+            if current['delete'] > 0:
+                erase(current['delete'])
+            if current['retype']:
+                type_keys_fn(current['retype'])
+                typed_chars += len(current['retype'])
+            observed = settle(read, observed, pause=pause)
+            current = advance(observed, body, limit)
+        if current['keep'] <= before:
             stalls += 1
         else:
             stalls = 0
@@ -200,7 +203,9 @@ def filling(expected, read, type_keys_fn, erase, segment=SEGMENT_CHARS, tail=TAI
         report({'fill_round': attempts, 'fill_field_chars': len(observed), 'fill_keep': current['keep'],
                 'fill_typed_chars': typed_chars, 'fill_segment': limit, 'fill_ok': observed == body})
     for character in expected[len(body):]:
-        type_keys_fn(typed(character))
+        key = typed(character)
+        type_keys_fn(key)
+        typed_chars += len(key)
     observed = settle(read, observed, pause=pause)
     return {'ok': observed == expected, 'fill_rounds': attempts, 'fill_typed_chars': typed_chars,
             'field_chars': len(observed), 'expected_chars': len(expected)}
