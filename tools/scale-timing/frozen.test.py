@@ -134,6 +134,13 @@ class ParsingTest(unittest.TestCase):
         self.assertEqual(frozen.errors(log, PACKAGE, [], failed=True),
                          dict(crashes=1, anrs=1, failed_steps=1, app_logcat_e=2))
 
+    def test_crashed_cold_process_is_owned_even_when_only_event_log_has_its_pid(self):
+        log = f'''100.1 500 500 I am_proc_start: [0,123,10148,{PACKAGE},next-top-activity,MainActivity]
+100.2 123 123 E AndroidRuntime: FATAL EXCEPTION: main
+'''
+        self.assertEqual(frozen.errors(log, PACKAGE, [])['app_logcat_e'], 1)
+        self.assertEqual(frozen.errors(log, PACKAGE, [])['crashes'], 1)
+
     def test_fingerprint_covers_real_harness_inputs(self):
         self.assertRegex(frozen.fingerprint(), r'^[0-9a-f]{64}$')
 

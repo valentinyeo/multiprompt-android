@@ -51,6 +51,9 @@ def errors(log, package, pids, failed=False):
         match = re.search(r'Start proc (\d+):' + re.escape(package) + r'(?:/|\s|$)', line)
         if match:
             owned.add(match[1])
+        event = re.search(r'am_proc_start\s*:\s*\[[^,]+,(\d+),[^,]+,' + re.escape(package) + r',', line)
+        if event:
+            owned.add(event[1])
     app_e = crashes = anrs = 0
     for line in log.splitlines():
         match = re.match(r'\s*\d+(?:\.\d+)?\s+(\d+)\s+\d+\s+([VDIWEF])\s+([^:]+):\s*(.*)', line)
@@ -198,6 +201,7 @@ def sample(scenario, repetition, work, args, out):
                    bytes_per_minute=relay['bytes_per_minute'], errors=sum(counts.values()))
     record = dict(scenario=scenario, repetition=repetition, valid=not failed,
                   metrics=metrics, error_counts=counts, failure=failed,
+                  started_unix=started, ended_unix=ended, cpu_before=before, cpu_after=after,
                   wall_ms=round((ended - started) * 1000, 3), driver=driver,
                   work=detail, traffic=relay)
     (out / f'{repetition}-{scenario}.json').write_text(json.dumps(record, indent=2) + '\n')
