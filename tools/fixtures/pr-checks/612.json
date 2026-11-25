@@ -1,0 +1,173 @@
+{
+  "source": "https://github.com/valentinyeo/multiprompt-android/pull/612 checks at dd5c2f71ca7eca3306493af7cf967cdefaeacf3b",
+  "number": 612,
+  "state": "OPEN",
+  "headRefOid": "dd5c2f71ca7eca3306493af7cf967cdefaeacf3b",
+  "baseRefOid": "e923a854ad989ca26d8fcc8796b9f3b597c7d12a",
+  "mergeable": "MERGEABLE",
+  "mergeableState": "clean",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "name": "build",
+      "workflowName": "test.yml",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:31:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "test",
+      "workflowName": "test.yml",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:24:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "unit-tests",
+      "workflowName": "test.yml",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:29:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "m3-unit-tests",
+      "workflowName": "test.yml",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:30:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "lint",
+      "workflowName": "test.yml",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:28:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "secret-scan",
+      "workflowName": "gitleaks.yml",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:13:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "no-paid-ai",
+      "workflowName": "gitleaks.yml",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:13:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "pick journeys",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:12:00Z",
+      "completedAt": "2026-11-24T09:14:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "journey chat-codex.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:41:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "journey native-skills.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:37:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "journey session-reader.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:35:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "journey live-chat-freshness.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:39:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "parent journey chat-codex.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:43:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "parent journey native-skills.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "FAILURE",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:34:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "parent journey session-reader.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:36:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "parent journey live-chat-freshness.md / verify",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:40:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "chat list and inbox work / chat list and inbox work",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:14:00Z",
+      "completedAt": "2026-11-24T09:32:00Z"
+    },
+    {
+      "__typename": "CheckRun",
+      "name": "pstack-verifier",
+      "workflowName": "pstack-verifier",
+      "status": "COMPLETED",
+      "conclusion": "SUCCESS",
+      "startedAt": "2026-11-24T09:43:00Z",
+      "completedAt": "2026-11-24T09:44:00Z"
+    }
+  ]
+}

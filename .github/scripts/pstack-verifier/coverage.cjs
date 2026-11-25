@@ -251,6 +251,7 @@ function validateRegistry(value = registry, oldGaps = baseline) {
     if (!/^[\w-]+\.md$/.test(name) || !['debug', 'signed', 'dedicated', 'manual'].includes(journey.runner.kind)) errors.push(`Invalid journey ${name}`);
     if (!journey.outcomes.length || journey.outcomes.some(id => value.outcomes[id]?.journey !== name)) errors.push(`Journey ${name} must own registered outcomes`);
     if (journey.runner.scripts && (!Array.isArray(journey.runner.scripts) || journey.runner.scripts.some(script => typeof script !== 'string' || !/^[\w./-]+\.(?:sh|py)$/.test(script) || script.split('/').includes('..')))) errors.push(`Journey ${name} scripts must list repository-relative driver paths`);
+    if (journey.runner.driveMinutes !== undefined && (!Number.isInteger(journey.runner.driveMinutes) || journey.runner.driveMinutes < 5 || journey.runner.driveMinutes > 60)) errors.push(`Journey ${name} driveMinutes must be a whole number of minutes from 5 to 60`);
     const evidence = journey.evidence ?? {};
     if (typeof evidence !== 'object' || Array.isArray(evidence) || Object.keys(evidence).length > 8 ||
         Object.entries(evidence).some(([file, limit]) => !/^[\w-]+\.(?:txt|json|xml)$/.test(file) || !Number.isInteger(limit) || limit < 1 || limit > 6_000) ||

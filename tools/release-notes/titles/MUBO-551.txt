@@ -1,0 +1,1 @@
+Android checks: a slow old-version test no longer blocks every change

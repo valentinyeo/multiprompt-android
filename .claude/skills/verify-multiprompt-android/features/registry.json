@@ -323,6 +323,7 @@
         "inputs": {},
         "prerequisites": [],
         "driver": true,
+        "driveMinutes": 35,
         "scripts": [
           ".claude/skills/verify-multiprompt-android/scripts/native-menu-drive.sh"
         ]
@@ -954,6 +955,7 @@
         "inputs": {},
         "prerequisites": [],
         "driver": true,
+        "driveMinutes": 40,
         "scripts": [
           ".claude/skills/verify-multiprompt-android/scripts/control-journeys-drive.sh",
           ".claude/skills/verify-multiprompt-android/scripts/reader-menu-drive.sh"
