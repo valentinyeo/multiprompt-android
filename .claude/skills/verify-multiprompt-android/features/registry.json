@@ -2051,12 +2051,15 @@
       ]
     },
     "reader.lifecycle": {
-      "description": "Hax and Claude stop history requests while hidden, wake on return, and publish after another reader closes. A native chat takes no pane lease, so its positive control is the history query and no snapshot is expected while it is on screen. Action evidence: driver-transcript.txt records adb shell input keyevent KEYCODE_HOME. Result evidence: reader-ui.json retains CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax and CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE. Independent side-effect evidence: hax-hidden-before.json and hax-hidden-after.json retain equal host request counts; hax-resumed.json retains increased counts. reader-second-close-receipt.txt records VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE. The *-result.txt files are assertion summaries, not independent side-effect citations.",
+      "description": "Hax and Claude stop history requests while hidden, wake on return, and publish after another reader closes. A native chat takes no pane lease, so its positive control is the history query and no snapshot is expected while it is on screen. Action evidence: driver-transcript.txt records adb shell input keyevent KEYCODE_HOME. Result evidence: reader-ui.json retains CODEX_REPLY_hax_HOST_WHILE_HIDDEN_hax and CODEX_REPLY_hax_AFTER_SECOND_READER_CLOSE. Independent side-effect evidence: hax-hidden-before.json and hax-hidden-after.json retain equal host request counts; hax-resumed.json retains increased counts. reader-second-close-receipt.txt records VERIFY_RECEIVED:AFTER_SECOND_READER_CLOSE. The *-result.txt files are assertion summaries, not independent side-effect citations. Successful structured history replies acknowledge the same shared SSH client on resume; an absent pane stream must not make a live conversation look disconnected.",
       "journey": "chat-codex.md",
       "sideEffect": true,
       "match": [
         "ChatPollGate",
         "ReaderStreamPump"
+      ],
+      "paths": [
+        "^app/src/main/java/dev/multiprompt/companion/reader/ChatHistoryConnection\\.kt$"
       ]
     },
     "bot.look": {

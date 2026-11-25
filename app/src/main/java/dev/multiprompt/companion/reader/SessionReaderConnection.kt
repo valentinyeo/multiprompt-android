@@ -167,6 +167,7 @@ class SessionReaderConnection(
     val state: StateFlow<ReaderState> = _state.asStateFlow()
 
     private var streamClient: SshClient? = null
+    @Volatile private var streamProgress: ((SshClient) -> Unit)? = null
     private var streamJob: Job? = null
     private var actionJob: Job? = null
     private val skillsRunning = AtomicBoolean(false)
@@ -224,7 +225,8 @@ class SessionReaderConnection(
         val identity = ChatHistoryProtocol.Identity(agent, tmuxSessionName, cwd, hostSessionId)
         if (historyIdentity == identity) return requireNotNull(historyConnection)
         historyConnection?.close()
-        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate, sharedClient = { streamClient }, pollGate = pollGate)
+        return ChatHistoryConnection(repository, host, identity, historyScript, historyCache, messageJournal, messageGate,
+            sharedClient = { streamClient }, onReply = { client -> client?.let { streamProgress?.invoke(it) } }, pollGate = pollGate)
             .also {
                 historyIdentity = identity
                 historyConnection = it
@@ -644,9 +646,14 @@ class SessionReaderConnection(
                 wanted = pollGate.active,
                 connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
                 stream = { client, heard ->
-                    paneFrames(paneGate.active) {
-                        streamFrames(client, heard)
-                        error("The tmux reader ended")
+                    streamProgress = { source -> if (source === client) heard() }
+                    try {
+                        paneFrames(paneGate.active) {
+                            streamFrames(client, heard)
+                            error("The tmux reader ended")
+                        }
+                    } finally {
+                        streamProgress = null
                     }
                 },
                 release = { client -> runCatching { client.disconnect() } },

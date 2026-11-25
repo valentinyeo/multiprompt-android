@@ -282,6 +282,29 @@ class ChatHistoryConnectionTest {
         JSONObject().put("v", 1).put("sid", "sid1").put("turn", "t1").put("kind", kind).put("at", 1).put("payload", payload)
 
     @Test
+    fun onlyHostRepliesAdvanceLivenessAndTheyResumeWithTheChat(): Unit = runBlocking {
+        val fake = FakeHost()
+        val replies = MutableStateFlow(0)
+        ChatHistoryConnection(repository(), host, ChatHistoryProtocol.Identity(AgentKind.CLAUDE, "tmux", "/cwd"),
+            byteArrayOf(), ChatHistoryCache(temporary.newFolder()), gate = MessageGate(),
+            connectedExchange = { fake.connect(it) }, onReply = { replies.value++ }, pollGate = ChatPollGate()).use { chat ->
+            chat.start()
+            delay(100L)
+            assertEquals(0, replies.value)
+            val lease = chat.pollGate.acquire()
+            withTimeout(5_000L) { chat.state.first { it.ready } }
+            assertTrue(replies.value > 0)
+            lease.close()
+            delay(100L)
+            val hidden = replies.value
+            delay(100L)
+            assertEquals(hidden, replies.value)
+            chat.pollGate.acquire()
+            withTimeout(5_000L) { replies.first { it > hidden } }
+        }
+    }
+
+    @Test
     fun openingPiReplaysPendingLoginAndItsResult(): Unit = runBlocking {
         val link = "https://auth.example/device"
         val pending = hostEvent("text.done", JSONObject().put("text", "Open this link\n$link"))

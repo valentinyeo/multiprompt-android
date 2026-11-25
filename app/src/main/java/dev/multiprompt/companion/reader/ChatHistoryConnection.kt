@@ -58,6 +58,7 @@ class ChatHistoryConnection(
     private val gate: MessageGate? = null,
     private val connectedExchange: (suspend (suspend (suspend (String) -> String) -> Unit) -> Unit)? = null,
     private val sharedClient: (() -> SshClient?)? = null,
+    private val onReply: (SshClient?) -> Unit = {},
     private val beforeAdmission: (suspend () -> Unit)? = null,
     private val stallMillis: Long = ConversationLoad.TIMEOUT_MS,
     internal val pollGate: ChatPollGate,
@@ -315,8 +316,12 @@ class ChatHistoryConnection(
                 }
             }
         }
+        var readerClient: SshClient? = null
         val tracked: suspend (suspend (String) -> String) -> Unit = { exchange ->
-            block { query -> exchange(query).also { lastReply = System.nanoTime() } }
+            block { query -> exchange(query).also {
+                lastReply = System.nanoTime()
+                onReply(readerClient)
+            } }
         }
         try {
             val transport = connectedExchange
@@ -325,6 +330,7 @@ class ChatHistoryConnection(
             } else {
                 val shared = sharedClient?.invoke()
                 val client = shared ?: withTimeout(20_000L) { repository.connect(host) }.also { own.set(it) }
+                readerClient = client
                 try {
                     repository.streamChatHistory(client, script, tracked)
                 } finally {

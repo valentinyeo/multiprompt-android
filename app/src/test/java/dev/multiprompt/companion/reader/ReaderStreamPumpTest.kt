@@ -199,6 +199,40 @@ class ReaderStreamPumpTest {
     }
 
     @Test
+    fun historyRepliesKeepAResumedChatWarmWithoutPaneFrames() = runTest {
+        val host = FakeHost()
+        val gate = ChatPollGate()
+        var historyReply: (() -> Unit)? = null
+        val pump = ReaderStreamPump<Int>(
+            wanted = gate.active,
+            connect = { ++host.connects },
+            stream = { _, heard -> historyReply = heard; delay(Long.MAX_VALUE) },
+            release = { host.releases++ },
+            onClient = {},
+            onConnecting = {},
+            onFailure = { throw it },
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        val lease = gate.acquire()
+        runCurrent()
+        requireNotNull(historyReply).invoke()
+        lease.close()
+        runCurrent()
+        gate.acquire()
+        runCurrent()
+        advanceTimeBy(500L)
+        requireNotNull(historyReply).invoke()
+        advanceTimeBy(5_000L)
+        runCurrent()
+        assertEquals(1, host.connects)
+        assertEquals(0, host.releases)
+        assertEquals(0, host.snapshots)
+        assertEquals(2, pump.streamStarts)
+    }
+
+    @Test
     fun silentWarmConnectionIsReplacedWithinTwoSecondsOfOpening() = runTest {
         val host = FakeHost()
         val failures = mutableListOf<Throwable>()
