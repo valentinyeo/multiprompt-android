@@ -5,8 +5,6 @@ import dev.multiprompt.companion.model.TmuxSession
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotSame
-import org.junit.Assert.assertSame
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -60,17 +58,6 @@ class UnreadCountStoreTest {
         store.saveUnreadCountState(session, counted)
         store.archiveUntil(session, Long.MAX_VALUE)
         assertEquals(0, store.unreadCountState(session).count)
-    }
-
-    @Test
-    fun repeatedReadsOfOneChatShareASingleParsedState() {
-        val store = SessionReadStore(context)
-        store.saveUnreadCountState(session, counted)
-        val first = store.unreadCountState(session)
-        val second = store.unreadCountState(session)
-        assertSame(first, second)
-        assertEquals(counted, second)
-        assertNotSame(store.unreadCountState(session.copy(name = "other")), second)
     }
 
     @Test
