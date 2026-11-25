@@ -20,6 +20,7 @@ sudo -u verifyssh touch /home/verifyssh/pane-stream-release-0
 wait_for_text STREAMCHATUPDATE
 shot pane-stream-chat-updated
 python3 tools/reader-ownership/receipts.py ui "$EVIDENCE/$(printf %02d "$step")-pane-stream-chat-updated.xml" STREAMCHATUPDATE --append "$EVIDENCE/pane-stream-ui.json"
+sleep 3
 sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pane-native-after.jsonl"
 tap_desc 'Session actions'
 tap_text 'Open live terminal'

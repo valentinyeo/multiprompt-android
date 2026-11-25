@@ -388,10 +388,10 @@ object TmuxCommands {
         "        a=0\n" +
         "    print(sep.join([n, \"1\", \"0\", str(a), \"0\", \"0\", p, \"\", \"sleep\", \"\", s, str(a), \"\"]))"
 
-    fun stream(sessionName: String, hosted: Boolean = false, visibleOnly: Boolean = false): String {
+    fun stream(sessionName: String, hosted: Boolean = false): String {
         val target = target(sessionName)
         val session = sessionTarget(sessionName)
-        val capture = if (visibleOnly) "tmux capture-pane -p -J -t $target" else captureCommand(target)
+        val capture = captureCommand(target)
         val missing = if (hosted) {
             "printf '${ALT_PREFIX}0\\n'; printf '$ETA_PREFIX\\n'; printf '$SNAPSHOT_PREFIX\\n'; " +
                 "while true; do sleep 30; printf '\\n'; done; "

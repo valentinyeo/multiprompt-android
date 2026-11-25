@@ -42,6 +42,10 @@ internal class ModelSwitchConfirmation(
     }
 }
 
+internal suspend fun paneFrames(pane: Flow<Boolean>, frames: suspend () -> Unit) {
+    pane.collectLatest { visible -> if (visible) frames() }
+}
+
 internal class ReaderStreamPump<C : Any>(
     private val wanted: Flow<Boolean>,
     private val connect: suspend () -> C,

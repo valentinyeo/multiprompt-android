@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
@@ -445,6 +444,19 @@ class SessionReaderConnection(
         if (confirmation.shouldPress(visible)) requests.trySend(Request.Action(TmuxAction.ENTER))
     }
 
+    private suspend fun confirmModelSwitchWhilePaneHidden(client: SshClient) {
+        if (paneGate.active.value) return
+        val deadline = System.currentTimeMillis() + MODEL_CONFIRM_STEP_MS * MODEL_CONFIRM_READS
+        while (confirmation.pending.value && System.currentTimeMillis() < deadline) {
+            delay(MODEL_CONFIRM_STEP_MS)
+            val screen = runCatching { repository.captureSession(client, tmuxSessionName) }.getOrNull() ?: return
+            if (confirmation.shouldPress(TmuxText.isModelSwitchConfirmation(screen))) {
+                repository.performAction(client, tmuxSessionName, TmuxAction.ENTER)
+                return
+            }
+        }
+    }
+
     fun scrollLive() {
         if (_state.value.alternateOn) {
             requests.trySend(Request.Action(TmuxAction.SCROLL_BOTTOM))
@@ -564,7 +576,7 @@ class SessionReaderConnection(
     }
 
     fun answerQuestion(question: PendingQuestion, choices: Set<Int>, other: String): Boolean {
-        if (_state.value.sending || !question.isVisible(_state.value.screenOutput) ||
+        if (_state.value.sending ||
             historyConnection?.state?.value?.history?.pendingQuestions?.contains(question) != true) return false
         return requests.trySend(Request.QuestionAnswer(question, choices, other)).isSuccess
     }
@@ -576,13 +588,16 @@ class SessionReaderConnection(
                 wanted = pollGate.active,
                 connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
                 stream = { client, heard ->
-                    paneGate.active.collectLatest { pane ->
-                        streamFrames(client, heard, visibleOnly = !pane)
+                    paneFrames(paneGate.active) {
+                        streamFrames(client, heard)
                         error("The tmux reader ended")
                     }
                 },
                 release = { client -> runCatching { client.disconnect() } },
-                onClient = { streamClient = it },
+                onClient = { client ->
+                    streamClient = client
+                    if (client != null) _state.update { it.copy(status = ReaderStatus.Live, lastFailure = null) }
+                },
                 onConnecting = { _state.update { it.copy(status = ReaderStatus.Connecting) } },
                 onFailure = { throwable ->
                     val message = throwable.message ?: throwable::class.java.simpleName
@@ -595,14 +610,13 @@ class SessionReaderConnection(
         }
     }
 
-    private suspend fun streamFrames(client: SshClient, heard: () -> Unit, visibleOnly: Boolean) {
+    private suspend fun streamFrames(client: SshClient, heard: () -> Unit) {
         repository.streamSession(
             client,
             tmuxSessionName,
             agent,
             onBytes = heard,
             hosted = hostSessionId.isNotBlank(),
-            visibleOnly = visibleOnly,
         ) { frame ->
             confirmModelSwitchIfAsked(frame.confirmationVisible)
             if (historyMode) {
@@ -655,7 +669,10 @@ class SessionReaderConnection(
                 } else null
                 withFreshClient { client ->
                     when (request) {
-                        is Request.RuntimeCommand -> repository.sendPrompt(client, tmuxSessionName, request.text)
+                        is Request.RuntimeCommand -> {
+                            repository.sendPrompt(client, tmuxSessionName, request.text)
+                            confirmModelSwitchWhilePaneHidden(client)
+                        }
                         is Request.Prompt -> repository.sendPrompt(
                             client,
                             tmuxSessionName,
@@ -768,6 +785,8 @@ class SessionReaderConnection(
         const val REUSE_FIRST_BYTES_MS = 2_000L
         const val SENT_PROMPT_MEMORY = 3
         const val MODEL_CONFIRM_TIMEOUT_MS = 25_000L
+        const val MODEL_CONFIRM_STEP_MS = 700L
+        const val MODEL_CONFIRM_READS = 8
         const val HISTORY_FIRST_PAGE_MS = 6_000L
         const val HISTORY_PAGE_POLL_MS = 150L
         const val HISTORY_PAGE_STEP_MS = 350L

@@ -177,7 +177,6 @@ internal fun ChatHistoryView(
             } else if (!reader.sending && reader.status == ReaderStatus.Live) { question, choices, other ->
                 connection.answerQuestion(question, choices, other).also { if (it) onSessionUsed() }
             } else null,
-            questionScreen = reader.screenOutput,
             sessionName = sessionName,
             unreadMessageKey = unreadMessageKey,
             onMarkUnread = onMarkUnread,
@@ -214,7 +213,7 @@ internal fun ChatHistoryView(
                 }
             } else null,
             collapsePendingReactions = reader.actionError == null,
-            working = reader.isWorking(agent) || state.replica?.host?.running == true,
+            working = reader.sending || state.replica?.host?.running == true,
             onNearTop = history::nearTop,
             listState = listState,
             followRequest = followRequest,
@@ -246,7 +245,6 @@ internal fun ChatHistoryList(
     replyGate: ReplySwipeGate = remember { ReplySwipeGate() },
     onReply: (String, Boolean) -> Unit = { _, _ -> },
     questions: List<PendingQuestion> = emptyList(),
-    questionScreen: String = "",
     questionError: String? = null,
     onQuestionChoice: ((PendingQuestion, Set<Int>, String) -> Boolean)? = null,
     onNearTop: (Boolean) -> Unit = {},
@@ -399,7 +397,7 @@ internal fun ChatHistoryList(
         if (showDots) item(key = "working") { WorkingDots() }
         questions.asReversed().forEach { question ->
             item(key = "question:${question.callId}:${question.index}") {
-                QuestionChoices(question, enabled = onQuestionChoice != null && (question.host != null || question.isVisible(questionScreen)), error = questionError) { choices, other ->
+                QuestionChoices(question, enabled = onQuestionChoice != null, error = questionError) { choices, other ->
                     onQuestionChoice?.invoke(question, choices, other) == true
                 }
             }
