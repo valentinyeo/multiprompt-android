@@ -8,13 +8,13 @@ sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-be
 "$mpa" read --select visible --value pi-fast --extra enabled
 "$mpa" read --select visible --value pi-deep --extra enabled
 sudo cat /home/verifyssh/reader-requests.jsonl > "$EVIDENCE/pi-model-requests-after.jsonl"
-sudo -u verifyssh env HOME=/home/verifyssh python3 - "$EVIDENCE" > "$EVIDENCE/pi-model-host.json" <<'PYMODEL'
+sudo cat /home/verifyssh/ai-switch-models.json > "$EVIDENCE/pi-models-served.json"
+python3 - "$EVIDENCE" > "$EVIDENCE/pi-model-host.json" <<'PYMODEL'
 import json
 from pathlib import Path
 import sys
-home = Path.home()
 root = Path(sys.argv[1])
-models = json.loads((home / 'ai-switch-models.json').read_text())
+models = json.loads((root / 'pi-models-served.json').read_text())
 assert [model['name'] for model in models] == ['pi-fast', 'pi-deep'], models
 before = [json.loads(line) for line in (root / 'pi-model-requests-before.jsonl').read_text().splitlines()]
 after = [json.loads(line) for line in (root / 'pi-model-requests-after.jsonl').read_text().splitlines()]

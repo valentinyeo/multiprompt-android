@@ -277,14 +277,14 @@ class FixtureJourneyTest(unittest.TestCase):
         program = (SCRIPTS / 'pi-login-drive.sh').read_text().split("<<'PYMODEL'\n", 1)[1].split('\nPYMODEL', 1)[0]
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
-            (home / 'ai-switch-models.json').write_text(json.dumps([dict(name='pi-fast', provider='anthropic'), dict(name='pi-deep', provider='anthropic')]))
+            (home / 'pi-models-served.json').write_text(json.dumps([dict(name='pi-fast', provider='anthropic'), dict(name='pi-deep', provider='anthropic')]))
             before = dict(session='live-verify-session', kind='history', at=1)
             (home / 'pi-model-requests-before.jsonl').write_text(json.dumps(before) + '\n')
             for kinds, valid in ((['history'], True), (['history', 'snapshot'], False), ([], False)):
                 with self.subTest(kinds=kinds):
                     rows = [before] + [dict(session='live-verify-session', kind=kind, at=index + 2) for index, kind in enumerate(kinds)]
                     (home / 'pi-model-requests-after.jsonl').write_text(''.join(json.dumps(row) + '\n' for row in rows))
-                    result = subprocess.run([sys.executable, '-B', '-c', program.replace('home = Path.home()', f'home = Path({str(home)!r})'), str(home)], capture_output=True, text=True)
+                    result = subprocess.run([sys.executable, '-B', '-c', program, str(home)], capture_output=True, text=True)
                     self.assertEqual(valid, result.returncode == 0, result.stdout + result.stderr)
                     if valid:
                         self.assertEqual(0, json.loads(result.stdout)['pane_captures'])
