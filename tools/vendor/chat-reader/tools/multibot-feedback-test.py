@@ -6,6 +6,7 @@ import hashlib
 import struct
 import zlib
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,8 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'src'))
+import multibot_feedback as feedback
 
 FAKE_CLI = r'''#!/usr/bin/env python3
 import datetime, json, os, sys
@@ -49,7 +52,7 @@ elif args[:2] == ['task', 'list']:
     page('tasks', [task for task in state['tasks'] if task['status'] == option('--status')])
 elif args[:2] == ['task', 'create']:
     number = 1000 + len(state['tasks'])
-    task = dict(title=option('--title'), ticketNumber='IGSH-' + str(number), status='Normal', labels=[dict(name=name) for name in option('--labels').split(',')], description=option('--description'))
+    task = dict(title=option('--title'), ticketNumber='MUBO-' + str(number), status='Normal', labels=[dict(name=name) for name in option('--labels').split(',')], description=option('--description'))
     state['tasks'].append(task)
     state_path.write_text(json.dumps(state))
     print(json.dumps(dict(success=True, task=task)))
@@ -116,7 +119,7 @@ class BoardFeedbackTest(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / 'src/multibot_feedback.py'), *args], cwd=self.work, env=env, capture_output=True, text=True, timeout=60)
 
     def task(self, number, title, labels=('Multiprompt', 'Agent Feedback'), status='Normal'):
-        return dict(ticketNumber='IGSH-' + str(number), title=title, status=status, labels=[dict(name=name) for name in labels])
+        return dict(ticketNumber='MUBO-' + str(number), title=title, status=status, labels=[dict(name=name) for name in labels])
 
     def vote(self, agent, date):
         return dict(id='activity-id', runId='run-id', type='thought', text='multibot-feedback-vote:v1', agentId=agent, agentName='Agent', createdAt=date.isoformat())
@@ -239,14 +242,13 @@ class BoardFeedbackTest(unittest.TestCase):
         self.assertEqual(len(board['tasks']), 1)
         task = board['tasks'][0]
         self.assertEqual(task['title'], 'Multibot wish: browser screenshots')
+        self.assertTrue(task['ticketNumber'].startswith('MUBO-'))
+        self.assertIn('filed https://app.hypertask.ai/detail/project-13734/', second.stdout)
         self.assertEqual({label['name'] for label in task['labels']}, {'Multiprompt', 'Agent Feedback'})
         self.assertIn(task['ticketNumber'], board['comments'])
         self.assertEqual(len(board['comments'][task['ticketNumber']]), 2)
-        for heading in ('Problem', 'Fix', 'Done when', 'Risk', 'Decision'):
-            self.assertIn('<strong>' + heading + '</strong>', task['description'])
         self.assertIn('Capture is slow', task['description'])
         self.assertIn('Browser  screenshots', task['description'])
-        self.assertIn('The requested capability works in Multibot.', task['description'])
         self.assertIn('1.2.3', task['description'])
         self.assertIn('codex', task['description'])
         for private in ('private-workspace', 'private-chat', 'credential-one', str(self.home)):
@@ -259,7 +261,7 @@ class BoardFeedbackTest(unittest.TestCase):
         state = dict(tasks=[self.task(1, 'Multibot wish: capture', ('Other', 'Agent Feedback')), self.task(2, 'Multibot wish: capture more'), self.task(3, 'Multibot wish: capture', status='Archive')], comments={})
         self.write_board(state)
         result = self.run_cli('capture')
-        self.assertEqual(result.stdout.strip(), 'filed https://app.hypertask.ai/detail/project-2060/3')
+        self.assertEqual(result.stdout.strip(), 'filed https://app.hypertask.ai/detail/project-13734/3')
         self.assertEqual(len(self.read_board()['tasks']), 3)
         state['tasks'].append(self.task(4, 'Multibot wish: deleted', status='Deleted'))
         self.write_board(state)
@@ -270,7 +272,7 @@ class BoardFeedbackTest(unittest.TestCase):
     def test_weekly_rank_counts_distinct_agents_and_sorts_ties(self):
         now = datetime.datetime.now(datetime.timezone.utc)
         start = (now - datetime.timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
-        state = dict(tasks=[self.task(1, 'Multibot wish: beta'), self.task(2, 'Multibot wish: alpha'), self.task(3, 'Multibot wish: old'), self.task(4, 'Multibot wish: leading')], comments={'IGSH-1': [self.vote('a', start), self.vote('a', start)], 'IGSH-2': [self.vote('b', start)], 'IGSH-3': [self.vote('c', start - datetime.timedelta(seconds=1))], 'IGSH-4': [self.vote('d', start), self.vote('e', start)]})
+        state = dict(tasks=[self.task(1, 'Multibot wish: beta'), self.task(2, 'Multibot wish: alpha'), self.task(3, 'Multibot wish: old'), self.task(4, 'Multibot wish: leading')], comments={'MUBO-1': [self.vote('a', start), self.vote('a', start)], 'MUBO-2': [self.vote('b', start)], 'MUBO-3': [self.vote('c', start - datetime.timedelta(seconds=1))], 'MUBO-4': [self.vote('d', start), self.vote('e', start)]})
         self.write_board(state)
         result = self.run_cli('--weekly')
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -305,10 +307,10 @@ class BoardFeedbackTest(unittest.TestCase):
 
     def test_full_activity_window_refuses_unverifiable_vote(self):
         task = self.task(1, 'Multibot wish: crowded')
-        self.write_board(dict(tasks=[task], comments={'IGSH-1': [self.vote('a', datetime.datetime.now(datetime.timezone.utc))] * 100}))
+        self.write_board(dict(tasks=[task], comments={'MUBO-1': [self.vote('a', datetime.datetime.now(datetime.timezone.utc))] * 100}))
         result = self.run_cli('crowded')
         self.assertIn('activity limit reached', result.stdout)
-        self.assertEqual(len(self.read_board()['comments']['IGSH-1']), 100)
+        self.assertEqual(len(self.read_board()['comments']['MUBO-1']), 100)
 
     def test_malformed_activity_fails_closed(self):
         task = self.task(1, 'Multibot wish: bad activity')
@@ -327,16 +329,22 @@ class BoardFeedbackTest(unittest.TestCase):
     def test_missing_token_does_not_invoke_default_login(self):
         result = self.run_cli('a capability', token=None)
         self.assertIn('queued, will be filed', result.stdout)
+        self.assertIn('agent token unavailable', result.stdout)
         self.assertFalse(self.calls.exists())
         self.assertTrue(self.log.exists())
         queue = self.home / 'state/multibot/feedback-board-queue.jsonl'
         self.assertTrue(queue.exists())
+
+    def saved_after_cutoff(self, path):
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+        self.write_rows(path, [dict(row, at=feedback.QUEUE_CUTOFF + 60) for row in rows])
 
     def test_no_token_queue_and_drain_files(self):
         result = self.run_cli('drainable capability', token=None)
         self.assertIn('queued, will be filed', result.stdout)
         queue = self.home / 'state/multibot/feedback-board-queue.jsonl'
         self.assertEqual(len(queue.read_text().splitlines()), 1)
+        self.saved_after_cutoff(queue)
         drain = self.run_cli('--drain')
         self.assertIn('filed ', drain.stdout)
         self.assertEqual(len(self.read_board()['tasks']), 1)
@@ -347,6 +355,7 @@ class BoardFeedbackTest(unittest.TestCase):
         self.assertIn('queued, will be filed', result.stdout)
         queue = self.home / 'state/multibot/feedback-board-queue.jsonl'
         self.assertEqual(len(queue.read_text().splitlines()), 1)
+        self.saved_after_cutoff(queue)
         drain = self.run_cli('--drain', FAKE_FAIL='1')
         self.assertNotIn('filed https://', drain.stdout)
         self.assertEqual(len(queue.read_text().splitlines()), 1)
@@ -378,6 +387,111 @@ class BoardFeedbackTest(unittest.TestCase):
         self.assertNotIn('Session type: browser', json.dumps(board))
         self.assertNotIn('Session type: k', json.dumps(board))
 
+    def test_existing_wish_with_any_ticket_prefix_is_reused(self):
+        self.write_board(dict(tasks=[dict(ticketNumber='IGSH-9', title='Multibot wish: capture', status='Normal', labels=[dict(name='Multiprompt'), dict(name='Agent Feedback')])], comments={}))
+        result = self.run_cli('capture')
+        self.assertEqual(result.stdout.strip(), 'filed https://app.hypertask.ai/detail/project-13734/9')
+        self.assertEqual(len(self.read_board()['tasks']), 1)
+
+    def test_session_token_file_is_used_when_ht_token_is_unset(self):
+        names = self.home / '.local/state/multiprompt/chat-names.json'
+        names.parent.mkdir(parents=True)
+        names.write_text(json.dumps({'mbf-mubo-57': dict(name='Multi Bot Features', at=1)}))
+        tokens = self.home / '.config/hypertask-agents/credentials/sessions'
+        tokens.mkdir(parents=True)
+        (tokens / 'multi-bot-features-agent-token').write_text('credential-from-file\n')
+        result = self.run_cli('token fallback wish', token=None, MULTIBOT_SESSION='mbf-mubo-57')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('filed https://app.hypertask.ai/detail/project-13734/', result.stdout)
+        self.assertNotIn('credential-from-file', result.stdout + result.stderr)
+        self.assertNotIn('credential-from-file', self.log.read_text())
+        self.assertNotIn('credential-from-file', self.board.read_text())
+        self.assertEqual(len(self.read_board()['tasks']), 1)
+
+    def test_local_bin_cli_is_found_when_path_has_none(self):
+        local = self.home / '.local/bin'
+        local.mkdir(parents=True)
+        shim = self.home / 'shim'
+        shim.mkdir()
+        (shim / 'python3').symlink_to(sys.executable)
+        (local / 'hypertask').write_bytes((self.bin / 'hypertask').read_bytes())
+        (local / 'hypertask').chmod(0o700)
+        (self.bin / 'hypertask').unlink()
+        result = self.run_cli('local bin wish', PATH=str(shim))
+        self.assertIn('filed https://app.hypertask.ai/detail/project-13734/', result.stdout)
+
+    def queue_row(self, want, row_id, at=None, why=''):
+        return dict(id=row_id, at=int(datetime.datetime.now(datetime.timezone.utc).timestamp()) if at is None else at, want=want, why=why, session='', provider='codex', app_version='1.2.3', cwd='work')
+
+    def write_rows(self, path, rows):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+
+    def test_drain_drops_queue_rows_saved_before_the_cutoff_without_a_board_call(self):
+        self.assertEqual(feedback.QUEUE_CUTOFF, 1795550400)
+        queue = self.home / 'state/multibot/feedback-board-queue.jsonl'
+        self.write_rows(queue, [self.queue_row('filed by hand earlier', 'row-old', at=feedback.QUEUE_CUTOFF - 1),
+                                self.queue_row('saved after the cutoff', 'row-new', at=feedback.QUEUE_CUTOFF)])
+        drain = self.run_cli('--drain')
+        self.assertEqual(drain.returncode, 0, drain.stderr)
+        self.assertEqual(drain.stdout.count('filed '), 1)
+        board = self.read_board()
+        self.assertEqual([task['title'] for task in board['tasks']], ['Multibot wish: saved after the cutoff'])
+        self.assertNotIn('filed by hand earlier', self.calls.read_text())
+        self.assertFalse(queue.read_text().strip())
+        again = self.run_cli('--drain')
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertNotIn('filed ', again.stdout)
+        self.assertEqual(len(self.read_board()['tasks']), 1)
+
+    def test_description_shape_keeps_long_text_inside_quote_blocks(self):
+        want = 'browser screenshots arrive attached to the wish every time one is captured'
+        why = 'Capturing a screenshot then describing it costs more time than it saves here'
+        result = self.run_cli(want, '--why', why)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        task = self.read_board()['tasks'][0]
+        self.assertEqual(task['title'], 'Multibot wish: ' + ' '.join(want.split()[:10]))
+        description = task['description']
+        quoted = [line[2:] for line in description.splitlines() if line.startswith('> ')]
+        self.assertTrue(any(want in line for line in quoted))
+        self.assertTrue(any(why in line for line in quoted))
+        self.assertTrue(any('1.2.3' in line and 'codex' in line for line in quoted))
+        for line in description.splitlines():
+            if line and not line.startswith('> '):
+                self.assertLessEqual(len(line.split()), 12, line)
+                self.assertIsNone(re.search(r'[A-Z][A-Z0-9]*-\d+', line), line)
+        self.assertIsNone(re.search(r'[A-Z][A-Z0-9]*-\d+', description.split('Why:')[0]))
+
+    def test_description_leaves_fix_to_be_written(self):
+        want = 'tab drag between workspaces keeps the picked order'
+        why = 'Every drag reorders the sidebar and I lose the tab I was reading'
+
+        def sections(description):
+            blocks = {}
+            current = None
+            for line in description.splitlines():
+                if line.endswith(':') and not line.startswith('> '):
+                    current = line[:-1]
+                    blocks[current] = []
+                elif line.startswith('> ') and current:
+                    blocks[current].append(line[2:])
+            return blocks
+
+        cases = [
+            ('with a reason', (want, '--why', why), want, why),
+            ('without a reason', ('screenshot button sits beside the composer',), 'screenshot button sits beside the composer', 'No reason given.'),
+        ]
+        for index, (name, args, expected_problem, expected_why) in enumerate(cases):
+            with self.subTest(name):
+                result = self.run_cli(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('filed ', result.stdout)
+                blocks = sections(self.read_board()['tasks'][index]['description'])
+                self.assertEqual(blocks['Problem'], [expected_problem])
+                self.assertEqual(blocks['Why'], [expected_why])
+                self.assertEqual(blocks['Fix'], ['to be written'])
+                self.assertNotIn(expected_problem, ' '.join(blocks['Fix']))
+
     def test_description_escapes_deliberate_input(self):
         result = self.run_cli('capture <screen>', '--why', 'Less <work> & time')
         self.assertIn('filed ', result.stdout)
@@ -385,6 +499,7 @@ class BoardFeedbackTest(unittest.TestCase):
         self.assertEqual(len(tasks), 1)
         self.assertIn('capture &lt;screen&gt;', tasks[0]['description'])
         self.assertIn('Less &lt;work&gt; &amp; time', tasks[0]['description'])
+        self.assertIn('Fix:\n\n> to be written', tasks[0]['description'])
 
 
 if __name__ == '__main__':

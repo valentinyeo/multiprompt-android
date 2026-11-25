@@ -9,6 +9,26 @@ if [[ "${1:-}" == --check ]]; then
 fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+fetch() {
+    mkdir -p "$tmp/$(dirname "$1")"
+    if [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
+        git -C "$MULTIPROMPT_DESKTOP_REPO" show "$revision:$1" > "$tmp/$1"
+    elif [[ "${GITHUB_ACTIONS:-}" == true ]]; then
+        curl --fail --silent --show-error --location "https://raw.githubusercontent.com/valentinyeo/multiprompt/$revision/$1" > "$tmp/$1"
+    else
+        printf 'Set MULTIPROMPT_DESKTOP_REPO to the canonical desktop repository\n' >&2
+        exit 1
+    fi
+    printf '%s  %s\n' "$2" "$tmp/$1" | sha256sum --check --status
+}
+place() {
+    if [[ "$mode" == check ]]; then
+        cmp "$tmp/$1" "$2"
+    else
+        mkdir -p "$(dirname "$2")"
+        cp "$tmp/$1" "$2"
+    fi
+}
 for entry in \
     'chat_history_reader.py 17f0a4b781fa5fc97a652d5845dc9bc2d5b4f78f7c1f3c9109b4a9d50ec1ce68' \
     'chat_connectors/claude.py 7be13a50645bbcdb32f606e152ec75927a135db2f15c7310df50d899d093deca' \
@@ -16,23 +36,14 @@ for entry in \
     'mp_send.py d3577c05a744fe45c390fb29cbe1c98cb3eb41b3ae178eafd1c885235a026569' \
     'multibot_feedback.py 0007d673e04fe9ad571c0070e39aff82ef3dff61d92ac0820ab361cf84a9bd2a'; do
     read -r path hash <<< "$entry"
-    mkdir -p "$tmp/$(dirname "$path")"
-    if [[ -n "${MULTIPROMPT_DESKTOP_REPO:-}" ]]; then
-        git -C "$MULTIPROMPT_DESKTOP_REPO" show "$revision:src/$path" > "$tmp/$path"
-    elif [[ "${GITHUB_ACTIONS:-}" == true ]]; then
-        curl --fail --silent --show-error --location "https://raw.githubusercontent.com/valentinyeo/multiprompt/$revision/src/$path" > "$tmp/$path"
-    else
-        printf 'Set MULTIPROMPT_DESKTOP_REPO to the canonical desktop repository\n' >&2
-        exit 1
-    fi
-    printf '%s  %s\n' "$hash" "$tmp/$path" | sha256sum --check --status
-    asset="app/src/main/assets/$path"
-    if [[ "$mode" == check ]]; then
-        cmp "$tmp/$path" "$asset"
-    else
-        mkdir -p "$(dirname "$asset")"
-        cp "$tmp/$path" "$asset"
-    fi
+    fetch "src/$path" "$path"
+    place "$path" "app/src/main/assets/$path"
+done
+for entry in \
+    'multibot-feedback-test.py d1881053e8377aed1cbabc5acbf309429ef761f507f41ed0c7646c9cb299af88'; do
+    read -r path hash <<< "$entry"
+    fetch "tools/$path" "tools/$path"
+    place "tools/$path" "tools/vendor/chat-reader/tools/$path"
 done
 python3 -B tools/chat-reader-bundle.py --revision "$revision" "$mode"
-printf 'Reader and connectors match canonical revision and SHA256\n'
+printf 'Reader, connectors and vendored tests match canonical revision and SHA256\n'
