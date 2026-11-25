@@ -26,6 +26,8 @@ const VERDICT_SUMMARY = 'Head journey results decide this check.';
 const ALLOWLIST = coverageGate.prJourneys;
 const BUG_WORD = /\b(?:fix|fixed|fixes|fixing|bug|bugs|bugfix)\b/i;
 const PRODUCT_ASSERTION = 'PRODUCT_ASSERTION_FAILED';
+const VISIBLE_APP_PATH = /^app\/src\/(?:main|debug|release|m3)\/(?:(?:.+\/)?ui\/|res\/)/;
+const PRODUCT_APP_PATH = /^app\/(?:src\/(?:main|debug|release|m3)\/|build\.gradle\.kts$)/;
 
 const PRIORITY_FILES = [
   RESULT_FILE,
@@ -253,6 +255,16 @@ function isBugFix({ title = '', body = '', changeKind = '', tickets = {} } = {})
   return ids.some(id => saysBug(tickets[id]));
 }
 
+function isVisibleChange({ diff = '', files = [], changeKind = '', changedOutcomes = [] } = {}) {
+  const paths = [...coverageGate.changedPaths(diff, files)];
+  if (paths.some(file => VISIBLE_APP_PATH.test(file))) return true;
+  if (changeKind === 'tooling') return false;
+  const outcomes = Array.isArray(changedOutcomes) ? changedOutcomes.filter(Boolean) : [];
+  if (!outcomes.length || !['product', 'bug'].includes(changeKind)) return false;
+  if (paths.length && !paths.some(file => PRODUCT_APP_PATH.test(file))) return false;
+  return true;
+}
+
 function applyRules({ features, conclusions, notDrivenReason, smoke = false, featureProof, redOnMain = [], redOnMainUrl = '', redOnMainNote = '', direct = [], speed = null }) {
   const notes = [];
   let verdict = 'PASS';
@@ -314,7 +326,42 @@ function parentResult({ conclusion, result, sourceSha, mergeBase }) {
   return 'no result';
 }
 
-function buildComment({ sha, verdict, summary, journeys, notes, runUrl }) {
+function videoArtifactName(feature, runId, label) {
+  return `video-${feature}-${runId}-${label}`;
+}
+
+function runArtifacts(repo, runId, run = gh) {
+  try {
+    const pages = JSON.parse(run(['api', '--paginate', '--slurp', `repos/${repo}/actions/runs/${runId}/artifacts?per_page=100`]));
+    return pages.flatMap(page => page.artifacts ?? []);
+  } catch {
+    return [];
+  }
+}
+
+function artifactUrl(runUrl, artifact) {
+  const id = artifact?.id;
+  if (!Number.isInteger(id) || id <= 0 || artifact?.expired) return '';
+  const base = String(runUrl ?? '').replace(/\/+$/, '');
+  if (!/^https:\/\/[^\s<>"]+$/.test(base)) return '';
+  return `${base}/artifacts/${id}`;
+}
+
+function videoLinks({ features = [], runId, runUrl, artifacts = [] }) {
+  const list = Array.isArray(artifacts) ? artifacts : [];
+  const find = (feature, label) => {
+    const name = videoArtifactName(feature, runId, label);
+    const match = list.find(item => item?.name === name && !item.expired && Number.isInteger(item.id) && item.id > 0);
+    return artifactUrl(runUrl, match);
+  };
+  return features.map(feature => ({
+    feature,
+    before: find(feature, 'before'),
+    after: find(feature, 'after'),
+  }));
+}
+
+function buildComment({ sha, verdict, summary, journeys, notes, runUrl, videos = [] }) {
   const lines = [`pstack-verifier: ${verdict} @ ${sha}`, '', escapeText(summary), ''];
   lines.push('Journeys driven:');
   if (journeys.length) {
@@ -323,6 +370,15 @@ function buildComment({ sha, verdict, summary, journeys, notes, runUrl }) {
     lines.push('- none');
   }
   lines.push('');
+  if (Array.isArray(videos) && videos.length) {
+    lines.push('Before and after videos:');
+    for (const video of videos) {
+      const before = /^https:\/\/[^\s<>")]+$/.test(video.before ?? '') ? `[before](${video.before})` : 'before unavailable';
+      const after = /^https:\/\/[^\s<>")]+$/.test(video.after ?? '') ? `[after](${video.after})` : 'after unavailable';
+      lines.push(`- \`${video.feature}\`: ${before} | ${after}`);
+    }
+    lines.push('');
+  }
   if (notes.length) {
     lines.push('Pipeline notes:', ...notes.map(note => `- ${escapeText(note)}`), '');
   }
@@ -559,7 +615,7 @@ async function preparePick(env) {
     const reason = 'No product change. Only documentation or verification tooling changed. No Android journey is scheduled.';
     const mergeBase = fetchMergeBase(repo, pr.base.ref, head);
     console.log(reason);
-    setOutputs({ no_product_change: 'true', features: '[]', smoke: 'no', reason, number, head_sha: head, merge_base: mergeBase, change_kind: 'tooling', changed_outcomes: '[]', need_ladder: 'false', speed: coverageGate.speedRelevant('', files) ? 'yes' : 'no' });
+    setOutputs({ no_product_change: 'true', features: '[]', smoke: 'no', reason, number, head_sha: head, merge_base: mergeBase, change_kind: 'tooling', changed_outcomes: '[]', need_ladder: 'false', speed: coverageGate.speedRelevant('', files) ? 'yes' : 'no', visible: 'no' });
     return null;
   }
   if (pr.head.repo?.full_name !== repo) throw new Error('Product changes from forks cannot be verified with repository secrets');
@@ -594,8 +650,9 @@ async function finishPick(state, env, picked) {
   const selected = includeRequiredJourneys(picked, plan, state.diff, state.changed, state.files);
   const reason = picked.reason || 'Journeys chosen for this change.';
   const harness = selected.harnessSmoke?.length ? ` harness_smoke=${JSON.stringify(selected.harnessSmoke)}` : '';
-  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} cap=${selected.features.length}/${coverageGate.MAX_PR_JOURNEYS}${harness} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
-  setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, speed: state.speed ? 'yes' : 'no' });
+  const visible = selected.features.length > 0 && isVisibleChange({ diff: state.diff, files: state.files, changeKind: selected.changeKind, changedOutcomes: plan.outcomes });
+  console.log(`pstack-verifier pick: PR #${state.number} features=${JSON.stringify(selected.features)} smoke=${selected.smoke} visible=${visible ? 'yes' : 'no'} cap=${selected.features.length}/${coverageGate.MAX_PR_JOURNEYS}${harness} dropped=${JSON.stringify(selected.dropped)} reason=${reason}`);
+  setOutputs({ runners: JSON.stringify(journeyRunners(selected.features)), features: JSON.stringify(selected.features), smoke: selected.smoke ? 'yes' : 'no', reason, number: state.number, head_sha: state.head, merge_base: state.mergeBase, changed_outcomes: JSON.stringify(plan.outcomes), change_kind: selected.changeKind, speed: state.speed ? 'yes' : 'no', visible: visible ? 'yes' : 'no' });
 }
 
 async function pick(env) {
@@ -728,7 +785,9 @@ async function judge(env) {
     console.log(`pstack-verifier: head moved to ${current} while judging, dropping this verdict`);
     return;
   }
-  const body = buildComment({ sha, verdict: ruled.verdict, summary: VERDICT_SUMMARY, journeys: ruled.journeys, notes: ruled.notes, runUrl });
+  const visible = String(env.VISIBLE ?? '') === 'yes' && features.length > 0;
+  const videos = visible ? videoLinks({ features, runId, runUrl, artifacts: runArtifacts(repo, runId) }) : [];
+  const body = buildComment({ sha, verdict: ruled.verdict, summary: VERDICT_SUMMARY, journeys: ruled.journeys, notes: ruled.notes, runUrl, videos });
   if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, `${body}\n`);
   if (env.VERIFIER_DRY) {
     process.stdout.write(`${body}\n`);
@@ -745,8 +804,8 @@ async function judge(env) {
 module.exports = {
   ALLOWLIST, MARKER_PREFIX, VERDICTS, SMOKE_JOURNEY, PRODUCT_ASSERTION, VERDICT_SUMMARY,
   RESULT_FILE, escapeText, validateFeatures, parseJson, askParsed, parsePick, pickWithFallback, applyRules, parentResult, buildComment,
-  saysBug, loadTicketTitles, isBugFix, noProductChange,
-  artifactName, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, doneWhen, journeyEvidence, journeyCatalog, includeRequiredJourneys, journeyRunners, prContext,
+  saysBug, loadTicketTitles, isBugFix, isVisibleChange, noProductChange,
+  artifactName, videoArtifactName, runArtifacts, videoLinks, readSideFiles, fetchMergeBase, findOwnComment, jobConclusions, doneWhen, journeyEvidence, journeyCatalog, includeRequiredJourneys, journeyRunners, prContext,
   buildPickRequest, parseLadderResponse, ladderAnswerContent, ladderFailed,
   redJourneys, writeRedJourneys, latestNightlyRun, downloadRedOnMain,
 };

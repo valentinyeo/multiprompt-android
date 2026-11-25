@@ -38,6 +38,7 @@ jobs:
       changed_outcomes: ${{ steps.pick-retry.outputs.changed_outcomes || steps.pick.outputs.changed_outcomes || steps.pick-request.outputs.changed_outcomes }}
       change_kind: ${{ steps.pick-retry.outputs.change_kind || steps.pick.outputs.change_kind || steps.pick-request.outputs.change_kind }}
       speed: ${{ steps.pick-retry.outputs.speed || steps.pick.outputs.speed || steps.pick-request.outputs.speed }}
+      visible: ${{ steps.pick-retry.outputs.visible || steps.pick.outputs.visible || steps.pick-request.outputs.visible }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -133,6 +134,36 @@ jobs:
       release_choices: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].release_choices }}
       pins_scroll: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].pins_scroll }}
       app_ref: ${{ needs.pick.outputs.head_sha }}
+      record_video: ${{ needs.pick.outputs.visible == 'yes' }}
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+  parents:
+    name: parent journey ${{ matrix.feature }}
+    needs: pick
+    if: needs.pick.outputs.visible == 'yes' && needs.pick.outputs.features != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        feature: ${{ fromJSON(needs.pick.outputs.features) }}
+    uses: ./.github/workflows/verify.yml
+    permissions:
+      contents: read
+      actions: read
+    with:
+      feature: ${{ matrix.feature }}
+      side: parent
+      driver_feature: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].feature }}
+      candidate: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].candidate }}
+      released_chat: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_chat }}
+      released_robots: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].released_robots }}
+      release_choices: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].release_choices }}
+      pins_scroll: ${{ fromJSON(needs.pick.outputs.runners)[matrix.feature].pins_scroll }}
+      app_ref: ${{ needs.pick.outputs.merge_base }}
+      record_video: true
     secrets:
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -152,7 +183,7 @@ jobs:
 
   pstack-verifier:
     name: pstack-verifier
-    needs: [pick, journeys, speed]
+    needs: [pick, journeys, parents, speed]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -191,6 +222,7 @@ jobs:
           SMOKE: ${{ needs.pick.outputs.smoke }}
           SPEED_REQUIRED: ${{ needs.pick.outputs.speed }}
           SPEED_RESULT: ${{ needs.speed.result }}
+          VISIBLE: ${{ needs.pick.outputs.visible }}
           PICK_REASON: ${{ needs.pick.outputs.reason }}
           PICK_RESULT: ${{ needs.pick.result }}
           RUN_ID: ${{ github.run_id }}
