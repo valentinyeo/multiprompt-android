@@ -30,6 +30,7 @@ for attempt in {1..3}; do
     adb shell input keyevent KEYCODE_MOVE_END
     adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
     adb shell input text /%s
+    adb shell input keyevent KEYCODE_BACK
     adb shell input keyevent KEYCODE_DPAD_LEFT
     dump_ui || return
     if python3 "$scripts/ui.py" "$EVIDENCE/current.xml" field-value composer 'Please / this' &&
@@ -62,6 +63,7 @@ tap_node editor ''
 select_node focused-field '' >/dev/null
 adb shell input keyevent KEYCODE_MOVE_END
 adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
+adb shell input keyevent KEYCODE_BACK
 adb shell input keyevent KEYCODE_DPAD_LEFT
 wait_for_text '/review-native'
 tap_text '/review-native'
@@ -85,6 +87,7 @@ tap_node editor ''
 select_node focused-field '' >/dev/null
 adb shell input keyevent KEYCODE_MOVE_END
 adb shell input keycombination -t 100 KEYCODE_CTRL_LEFT KEYCODE_DPAD_LEFT
+adb shell input keyevent KEYCODE_BACK
 adb shell input keyevent KEYCODE_DPAD_LEFT
 wait_for_text '/clear'
 tap_text '/clear'

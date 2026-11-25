@@ -59,6 +59,10 @@ on:
         default: false
   workflow_dispatch:
     inputs:
+      trial:
+        description: Independent repeat ID for concurrent flake-rate measurements
+        type: string
+        required: false
       break_it:
         description: Replay after normal proof with rotation, background, chat switch, slow network and streaming send
         type: boolean
@@ -203,7 +207,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: verify-${{ github.ref }}${{ inputs.feature && inputs.feature != github.event.inputs.feature && format('-{0}', inputs.feature) || '' }}${{ inputs.side && format('-{0}', inputs.side) || '' }}-${{ inputs.break_it_control || 'none' }}
+  group: verify-${{ github.ref }}${{ inputs.feature && inputs.feature != github.event.inputs.feature && format('-{0}', inputs.feature) || '' }}${{ inputs.side && format('-{0}', inputs.side) || '' }}-${{ inputs.break_it_control || 'none' }}${{ inputs.trial && format('-trial-{0}', inputs.trial) || '' }}
   cancel-in-progress: true
 
 jobs:
