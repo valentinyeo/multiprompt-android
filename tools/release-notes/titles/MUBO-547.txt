@@ -1,1 +1,1 @@
-Android: the app opens and switches chats faster.
+Android: the app opens and switches chats faster

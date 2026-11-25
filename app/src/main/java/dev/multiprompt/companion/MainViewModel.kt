@@ -247,6 +247,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private val foreground = MutableStateFlow(false)
+    internal var sessionLister: suspend (HostProfile) -> SshRepository.HostSessions = { ssh.listSessions(it) }
     internal var notificationHistoryReader: suspend (HostProfile, TmuxSession) -> dev.multiprompt.companion.reader.ChatHistory? = { host, session ->
         ssh.readChatHistory(host, session, app.chatHistoryScript)
     }
@@ -870,7 +871,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             openPendingNotificationSession()
             snapshot.map { host ->
                 async {
-                    val result = runCatching { ssh.listSessions(host) }
+                    val result = runCatching { sessionLister(host) }
                         .fold(
                             onSuccess = { HostRefresh(host.id, it.sessions, it.etaStates) },
                             onFailure = { throwable ->
