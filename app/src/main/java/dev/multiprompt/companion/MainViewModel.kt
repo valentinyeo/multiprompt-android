@@ -70,6 +70,7 @@ import dev.multiprompt.companion.ui.roomSendError
 import org.json.JSONObject
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
+import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.update.UpdateManager
@@ -247,6 +248,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingLayout = accountStore.load(syncAuth.accountId())
     private var usedStampThrottle = UsedStampThrottle(pendingLayout?.base)
     private val foreground = MutableStateFlow(false)
+    private val inboxVisible = MutableStateFlow(false)
+    private val inboxInteraction = MutableStateFlow(0L)
+    private var sessionRefreshIntervalMs = SESSION_REFRESH_INTERVAL_MS
+    private var sessionRefreshJob: kotlinx.coroutines.Job? = null
+    private var lastSessionResults: Map<String, HostRefresh> = emptyMap()
+    internal var sessionLister: suspend (HostProfile) -> SshRepository.HostSessions = { ssh.listSessions(it) }
     internal var notificationHistoryReader: suspend (HostProfile, TmuxSession) -> dev.multiprompt.companion.reader.ChatHistory? = { host, session ->
         ssh.readChatHistory(host, session, app.chatHistoryScript)
     }
@@ -262,6 +269,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val prefetchedActivity = mutableMapOf<String, Long>()
     private val prefetchedHostAt = mutableMapOf<String, Long>()
     private var prefetchRunning = false
+    private var inboxReadyMarked = false
     private var replyNotificationsBaselined = false
     private var pendingNotificationKey: String? = null
     private var trustRefreshQueued = false
@@ -312,7 +320,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             ssh.dropServerLinks()
             nudgeWarmReaders()
-            refresh()
+            if (inboxVisible.value) refresh()
         }
     }
 
@@ -346,14 +354,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         uploadCrashReport()
         updates.check()
         if (_state.value.hosts.isNotEmpty()) refresh()
+        if (BuildConfig.DEBUG) Log.i(MultipromptApplication.STARTUP_TAG, "view-model-ready")
         viewModelScope.launch {
-            var backgroundTicks = 0
-            while (true) {
-                delay(SESSION_REFRESH_INTERVAL_MS)
-                sweepWarmReaders()
-                backgroundTicks = if (foreground.value) 0 else backgroundTicks + 1
-                val due = foreground.value || backgroundTicks % BACKGROUND_REFRESH_EVERY == 0
-                if (due && _state.value.hosts.isNotEmpty()) refresh()
+            combine(_state, foreground, inboxVisible, inboxInteraction) { state, active, visible, interaction ->
+                (active && visible && state.hosts.isNotEmpty() && state.section == AppSection.SESSIONS &&
+                    state.readerSession == null && state.terminalSession == null && state.roomId == null &&
+                    !state.editorVisible && state.newSession == null) to interaction
+            }.distinctUntilChanged().collectLatest { (visible, _) ->
+                sessionRefreshIntervalMs = SESSION_REFRESH_INTERVAL_MS
+                if (!visible) return@collectLatest
+                var waitMs = SESSION_REFRESH_INTERVAL_MS
+                while (true) {
+                    delay(waitMs)
+                    val started = SystemClock.elapsedRealtime()
+                    sweepWarmReaders()
+                    refreshSessions(silent = true)?.join()
+                    waitMs = (sessionRefreshIntervalMs - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(0L)
+                }
             }
         }
         viewModelScope.launch {
@@ -364,12 +381,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setInboxVisible(visible: Boolean) {
+        inboxVisible.value = visible
+    }
+
+    fun onUserInteraction() {
+        sessionRefreshIntervalMs = SESSION_REFRESH_INTERVAL_MS
+        inboxInteraction.update { it + 1 }
+    }
+
     fun onResume() {
         foreground.value = true
+        onUserInteraction()
         networkReturn.start()
         if (networkReturn.resumed()) nudgeWarmReaders()
         updates.check()
-        refresh()
+        if (inboxVisible.value) refresh()
         refreshRooms(RoomLoadTrigger.APP_RESUMED)
         syncAccount()
     }
@@ -857,45 +884,79 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun refresh() {
-        if (_state.value.refreshing) return
+        onUserInteraction()
+        refreshSessions(silent = false)
+    }
+
+    private fun refreshSessions(silent: Boolean): kotlinx.coroutines.Job? {
+        if (sessionRefreshJob?.isActive == true || _state.value.refreshing) return null
         val snapshot = _state.value.hosts
-        if (snapshot.isEmpty()) return
-        viewModelScope.launch {
-            _state.update { it.copy(refreshing = true) }
-            val cachedByHost = withContext(Dispatchers.IO) { snapshot.associate { host -> host.id to sessionCache.load(host.id) } }
-            val results = mutableMapOf<String, HostRefresh>()
-            _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
-            openPendingNotificationSession()
-            snapshot.map { host ->
-                async {
-                    val result = runCatching { ssh.listSessions(host) }
-                        .fold(
-                            onSuccess = { HostRefresh(host.id, it.sessions, it.etaStates) },
-                            onFailure = { throwable ->
-                                HostRefresh(
-                                    hostId = host.id,
-                                    error = throwable.message ?: "SSH failed",
-                                    hostKey = (throwable as? SshProblem.HostKeyRequired)?.presented,
-                                )
-                            },
-                        )
-                    results[host.id] = result
-                    _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+        if (snapshot.isEmpty()) return null
+        val interaction = inboxInteraction.value
+        return viewModelScope.launch {
+            try {
+                val cachedByHost = if (silent) emptyMap() else {
+                    _state.update { it.copy(refreshing = true) }
+                    withContext(Dispatchers.IO) { snapshot.associate { host -> host.id to sessionCache.load(host.id) } }
                 }
-            }.awaitAll()
-            results.values.filter { it.error == null }.forEach { result ->
-                sessionCache.save(result.hostId, result.sessions)
+                val results = mutableMapOf<String, HostRefresh>()
+                if (!silent) {
+                    _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+                    openPendingNotificationSession()
+                }
+                snapshot.map { host ->
+                    async {
+                        val result = runCatching { sessionLister(host) }
+                            .fold(
+                                onSuccess = { HostRefresh(host.id, it.sessions, it.etaStates) },
+                                onFailure = { throwable ->
+                                    if (throwable is CancellationException) throw throwable
+                                    HostRefresh(
+                                        hostId = host.id,
+                                        error = throwable.message ?: "SSH failed",
+                                        hostKey = (throwable as? SshProblem.HostKeyRequired)?.presented,
+                                    )
+                                },
+                            )
+                        results[host.id] = result
+                        if (!silent && RefreshMerge.publishesWhileWaiting(snapshot.size, results.size)) {
+                            _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = false) }
+                        }
+                    }
+                }.awaitAll()
+                val changed = results != lastSessionResults
+                results.values.filter { it.error == null && it != lastSessionResults[it.hostId] }.forEach { result ->
+                    sessionCache.save(result.hostId, result.sessions)
+                }
+                if (!silent || changed || _state.value.archivedSessionKeys.isNotEmpty()) {
+                    _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
+                }
+                lastSessionResults = results.toMap()
+                sessionRefreshIntervalMs = if (!silent || changed || interaction != inboxInteraction.value) {
+                    SESSION_REFRESH_INTERVAL_MS
+                } else {
+                    (sessionRefreshIntervalMs * 2).coerceAtMost(MAX_SESSION_REFRESH_INTERVAL_MS)
+                }
+                markInboxReady()
+                openPendingNotificationSession()
+                pendingNotificationKey = null
+                syncReplyNotifications()
+                prefetchRecentHistories()
+            } finally {
+                if (!silent) _state.update { it.copy(refreshing = false) }
+                sessionRefreshJob = null
             }
-            _state.update { applyRefresh(it, snapshot, cachedByHost, results, final = true) }
-            openPendingNotificationSession()
-            pendingNotificationKey = null
-            syncReplyNotifications()
-            prefetchRecentHistories()
             if (trustRefreshQueued) {
                 trustRefreshQueued = false
                 refresh()
             }
-        }
+        }.also { sessionRefreshJob = it }
+    }
+
+    private fun markInboxReady() {
+        if (inboxReadyMarked || _state.value.sessions.isEmpty()) return
+        inboxReadyMarked = true
+        if (BuildConfig.DEBUG) Log.i(MultipromptApplication.STARTUP_TAG, "inbox-ready")
     }
 
     private fun prefetchRecentHistories() {
@@ -1022,7 +1083,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val idleObservations = if (!final) current.waitingIdleObservations else sessions.mapNotNull { session ->
             val key = SessionReadStore.key(session.hostId, session.name)
             val observations = if (TmuxText.isWaitingForInput(session.preview, session.agent)) {
-                (current.waitingIdleObservations[key] ?: 0) + 1
+                ((current.waitingIdleObservations[key] ?: 0) + 1).coerceAtMost(IDLE_OBSERVATIONS_TO_RELEASE)
             } else {
                 0
             }
@@ -2351,7 +2412,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 saveAccountLayout(pendingLayout?.pull(remote) ?: PendingLayout(remote))
                 val layoutChanged = lastRemoteRevision?.let { it != remote.revision } == true
                 lastRemoteRevision = remote.revision
-                if (layoutChanged) refresh()
+                if (layoutChanged && foreground.value && inboxVisible.value) refresh()
                 var retries = 0
                 var retryConflict = false
                 while (pendingLayout?.let { it.dirty && (retryConflict || usedStampThrottle.shouldPush(it)) } == true && retries++ < 4) {
@@ -2432,8 +2493,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         const val MAX_DISPLAY_NAME_LENGTH = 63
         const val IDLE_OBSERVATIONS_TO_RELEASE = 2
         const val SESSION_REFRESH_INTERVAL_MS = 2_000L
+        const val MAX_SESSION_REFRESH_INTERVAL_MS = 8_000L
         const val PREFETCH_SESSIONS = 8
         const val PREFETCH_HOST_GAP_MS = 45_000L
-        const val BACKGROUND_REFRESH_EVERY = 30
     }
 }

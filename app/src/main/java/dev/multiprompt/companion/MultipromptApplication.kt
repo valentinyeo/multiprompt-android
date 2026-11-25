@@ -35,6 +35,7 @@ class MultipromptApplication : Application() {
         crashReportStore.scheduleExitCollection()
         UpdateNotifier.initialize(this)
         ReplyNotifier.initialize(this)
+        if (BuildConfig.DEBUG) android.util.Log.i(STARTUP_TAG, "application-ready")
     }
 
     val hostStore by lazy { HostStore(this) }
@@ -68,4 +69,8 @@ class MultipromptApplication : Application() {
     val deviceKeyStore by lazy { DeviceKeyStore(secretStore) }
     val deviceKeyClient by lazy { DeviceKeyClient(accountHttp, syncAuth::accessToken) }
     val deviceApproval by lazy { DeviceApproval(deviceKeyClient, sshRepository::runDeviceKeyCommand) }
+
+    companion object {
+        const val STARTUP_TAG = "MpaStartup"
+    }
 }

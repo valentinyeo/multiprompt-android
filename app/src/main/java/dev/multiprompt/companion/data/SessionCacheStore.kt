@@ -92,6 +92,7 @@ internal object SessionCacheCodec {
 class SessionCacheStore internal constructor(
     private val backing: SessionCacheBacking,
     private val decode: (String, String) -> List<TmuxSession> = SessionCacheCodec::decode,
+    private val encode: (List<TmuxSession>) -> String = SessionCacheCodec::encode,
 ) {
     constructor(context: Context) : this(
         PreferencesBacking(context.getSharedPreferences("session_cache", Context.MODE_PRIVATE)),
@@ -110,12 +111,16 @@ class SessionCacheStore internal constructor(
     }
 
     fun save(hostId: String, sessions: List<TmuxSession>) {
-        val encoded = SessionCacheCodec.encode(sessions)
+        val persisted = sessions.map { SessionCacheCodec.persisted(hostId, it) }
         synchronized(lock) {
-            val known = entries[hostId]?.raw ?: backing.read(key(hostId))
-            if (known == encoded) return
+            entries[hostId]?.takeIf { it.sessions == persisted }?.let { return }
+            val encoded = encode(sessions)
+            if (backing.read(key(hostId)) == encoded) {
+                entries[hostId] = Entry(encoded, persisted)
+                return
+            }
             backing.write(key(hostId), encoded)
-            entries[hostId] = Entry(encoded, sessions.map { SessionCacheCodec.persisted(hostId, it) })
+            entries[hostId] = Entry(encoded, persisted)
         }
     }
 
