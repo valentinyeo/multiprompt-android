@@ -644,7 +644,7 @@ class SessionReaderConnection(
         streamJob = scope.launch {
             ReaderStreamPump<SshClient>(
                 wanted = pollGate.active,
-                connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host) } },
+                connect = { withTimeout(CONNECT_TIMEOUT_MS) { repository.connect(host, keepAlive = true) } },
                 stream = { client, heard ->
                     streamProgress = { source -> if (source === client) heard() }
                     try {

@@ -148,7 +148,7 @@ class SshRepository(private val secrets: SecretStorage) {
 
     internal fun deviceLoginKey(): ByteArray? = runCatching { DeviceKeyStore(secrets).privateKey() }.getOrNull()
 
-    suspend fun connect(host: HostProfile): SshClient = openClient(host, pooled = false)
+    suspend fun connect(host: HostProfile, keepAlive: Boolean = false): SshClient = openClient(host, pooled = keepAlive)
 
     private suspend fun openClient(host: HostProfile, pooled: Boolean): SshClient = withContext(Dispatchers.IO) {
         val probe = PinningHostKeyVerifier(host.hostKeyType, host.hostKeyFingerprint, host.hostKeys)
