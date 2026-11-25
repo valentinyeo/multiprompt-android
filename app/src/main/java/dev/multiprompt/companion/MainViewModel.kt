@@ -70,6 +70,7 @@ import dev.multiprompt.companion.ui.roomSendError
 import org.json.JSONObject
 import dev.multiprompt.companion.ssh.PresentedHostKey
 import dev.multiprompt.companion.ssh.SshProblem
+import dev.multiprompt.companion.ssh.SshRepository
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.update.UpdateManager
