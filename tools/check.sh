@@ -19,6 +19,7 @@ source_checks() {
   python3 -B tools/control-journeys/ui.test.py
   python3 -B tools/inbox-controls/ui.test.py
   python3 -B tools/skill-pills/ui.test.py
+  python3 -B tools/long-drafts/ui.test.py
   node --test tools/inbox-controls.test.js
   python3 -B tools/message-projection/check.py
   python3 -B tools/message-projection/check.test.py

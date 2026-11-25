@@ -1,0 +1,1 @@
+Long drafts type, edit and scroll correctly
