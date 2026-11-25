@@ -111,6 +111,8 @@ class ReaderStreamPumpTest {
         assertEquals(1, host.connects)
         selected.value = false
         runCurrent()
+        advanceTimeBy(ReaderStreamPump.HIDDEN_SETTLE_MS + 1)
+        runCurrent()
         val settled = host.snapshots
         advanceTimeBy(10_000L)
         runCurrent()
@@ -131,6 +133,8 @@ class ReaderStreamPumpTest {
         pump(selected, host, failures)
         runCurrent()
         selected.value = false
+        runCurrent()
+        advanceTimeBy(ReaderStreamPump.HIDDEN_SETTLE_MS + 1)
         runCurrent()
         host.failNextStream = IllegalStateException("channel refused")
         val reopenedAt = currentTime
@@ -206,6 +210,8 @@ class ReaderStreamPumpTest {
         runCurrent()
         selected.value = false
         runCurrent()
+        advanceTimeBy(ReaderStreamPump.HIDDEN_SETTLE_MS + 1)
+        runCurrent()
         host.silentNextReuse = true
         val reopenedAt = currentTime
         selected.value = true
@@ -231,6 +237,8 @@ class ReaderStreamPumpTest {
         runCurrent()
         selected.value = false
         runCurrent()
+        advanceTimeBy(ReaderStreamPump.HIDDEN_SETTLE_MS + 1)
+        runCurrent()
         host.bytesThenQuietMillis = 6_000L
         val before = host.snapshots
         selected.value = true
@@ -255,6 +263,8 @@ class ReaderStreamPumpTest {
         runCurrent()
         selected.value = false
         runCurrent()
+        advanceTimeBy(ReaderStreamPump.HIDDEN_SETTLE_MS + 1)
+        runCurrent()
         host.bytesThenQuietMillis = Long.MAX_VALUE / 4
         selected.value = true
         advanceTimeBy(60_000L)
@@ -272,6 +282,8 @@ class ReaderStreamPumpTest {
         pump(selected, host, failures)
         runCurrent()
         selected.value = false
+        runCurrent()
+        advanceTimeBy(ReaderStreamPump.HIDDEN_SETTLE_MS + 1)
         runCurrent()
         host.dropAfterBytes = IllegalStateException("tmux session ended")
         selected.value = true
@@ -311,6 +323,7 @@ class ReaderStreamPumpTest {
             onFailure = { failures += it },
             reconnectDelayMillis = 3_000L,
             reuseFirstBytesMillis = 2_000L,
+            hiddenSettleMillis = 0L,
         )
         backgroundScope.launch { pump.pump() }
         advanceTimeBy(100L)
@@ -403,5 +416,88 @@ class ReaderStreamPumpTest {
         runCurrent()
         assertEquals(settled + 1, host.snapshots)
         assertEquals(1, host.connects)
+    }
+
+    @Test
+    fun oneOpenChatKeepsOneReaderAndOneLoginForAMinuteOfLeaseFlaps() = runTest {
+        val host = FakeHost()
+        val gate = ChatPollGate()
+        val pump = ReaderStreamPump<Int>(
+            wanted = gate.active,
+            connect = {
+                host.connects++
+                host.connects
+            },
+            stream = { client, heard ->
+                host.streamedBy += client
+                while (true) {
+                    heard()
+                    host.snapshots++
+                    delay(1_000L)
+                }
+            },
+            release = { host.releases++ },
+            onClient = { client -> if (client != null) host.clients += client },
+            onConnecting = {},
+            onFailure = {},
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        var lease = gate.acquire()
+        runCurrent()
+        repeat(60) {
+            lease.close()
+            advanceTimeBy(500L)
+            lease = gate.acquire()
+            advanceTimeBy(500L)
+        }
+        runCurrent()
+        assertEquals("reader starts per minute", 1, host.streamedBy.size)
+        assertEquals("logins per minute", 1, host.connects)
+        assertEquals(1, pump.streamStarts)
+        assertEquals(1, pump.connects)
+        lease.close()
+    }
+
+    @Test
+    fun oneOpenChatKeepsOneReaderAndOneLoginForAMinuteAfterARealDrop() = runTest {
+        val host = FakeHost()
+        val failures = mutableListOf<Throwable>()
+        host.dropAfterBytes = IllegalStateException("tmux session ended")
+        val pump = ReaderStreamPump<Int>(
+            wanted = MutableStateFlow(true),
+            connect = {
+                host.connects++
+                host.connects
+            },
+            stream = { client, heard ->
+                host.streamedBy += client
+                host.dropAfterBytes?.let {
+                    host.dropAfterBytes = null
+                    heard()
+                    host.snapshots++
+                    throw it
+                }
+                while (true) {
+                    heard()
+                    host.snapshots++
+                    delay(1_000L)
+                }
+            },
+            release = { host.releases++ },
+            onClient = { client -> if (client != null) host.clients += client },
+            onConnecting = {},
+            onFailure = { failures += it },
+            reconnectDelayMillis = 3_000L,
+            reuseFirstBytesMillis = 2_000L,
+        )
+        backgroundScope.launch { pump.pump() }
+        advanceTimeBy(60_000L)
+        runCurrent()
+        assertEquals("reader starts per minute", 2, host.streamedBy.size)
+        assertEquals("logins per minute", 2, host.connects)
+        assertEquals(1, failures.size)
+        assertTrue("reader stopped after the drop", host.snapshots >= 55)
     }
 }
