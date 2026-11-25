@@ -123,6 +123,11 @@ class ParsingTest(unittest.TestCase):
         self.assertEqual(found, dict(list_sessions=1, bytes=400, relay_failures=1,
                                      list_sessions_per_minute=3, bytes_per_minute=1200))
 
+    def test_closed_consumer_is_not_an_error_but_a_crashed_reader_is(self):
+        events = [dict(event='close', code=-9, consumer_closed=True, t=12),
+                  dict(event='close', code=-11, consumer_closed=False, t=13)]
+        self.assertEqual(frozen.traffic(events, 10, 30)['relay_failures'], 1)
+
     def test_errors_include_app_pids_from_cold_start_and_ignore_other_apps(self):
         log = f'''100.1 500 500 I ActivityManager: Start proc 123:{PACKAGE}/u0a123 for activity
 100.2 123 123 E AndroidRuntime: FATAL EXCEPTION: main

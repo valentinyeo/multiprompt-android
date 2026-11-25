@@ -35,6 +35,7 @@ class Recorder:
         self.request_at = time.monotonic()
         self.calls = 0
         self.total = 0
+        self.consumer_closed = False
 
     def request(self, size):
         with self.lock:
@@ -100,6 +101,7 @@ def forward_output(child, recorder):
             try:
                 os.write(sys.stdout.fileno(), chunk)
             except OSError:
+                recorder.consumer_closed = True
                 break
             offset = 0
             while True:
@@ -140,7 +142,8 @@ def main():
         child.kill()
         code = child.wait()
     recorder.write(dict(event='close', stream=label, calls=recorder.calls, bytes=recorder.total,
-                        ms=round((time.monotonic() - started) * 1000, 1), code=code, t=round(time.time(), 3)))
+                        ms=round((time.monotonic() - started) * 1000, 1), code=code,
+                        consumer_closed=recorder.consumer_closed, t=round(time.time(), 3)))
     return code
 
 

@@ -53,7 +53,9 @@ Every metric has `median`, `min`, `max`; there are no timestamps, PIDs or run ID
   not every tmux channel or every response line. **bytes/min** counts all application-protocol reply bytes
   forwarded by the relay, not SSH encryption overhead. Both use the exact measured wall window.
 - **Errors** totals crashes, ANRs, failed steps, app-PID logcat E lines and nonzero relay exits. The
-  components remain in each trial. A crash can also emit E lines, so this is an error-signal count, not unique incidents.
+  relay records an app-closed output pipe separately; its subsequent cleanup exit is not a command failure.
+  Unexpected signal exits still count. The components remain in each trial. A crash can also emit E lines,
+  so this is an error-signal count, not unique incidents. Android's app-PID FrameTracker IME warnings count too.
 - **Driver time stays separate** in each trial's `driver` and `wall_ms`. CPU never includes the `mpa`, adb,
   UI-automation or fixture processes. Do not subtract driver wall time from app CPU: they overlap, with different units.
   Wall time includes UI dumps and is not published as app latency. Idle/stream windows avoid UI dumps entirely.

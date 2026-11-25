@@ -1,3 +1,4 @@
+import io
 import json
 import os
 from pathlib import Path
@@ -5,6 +6,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import relay
 
 RELAY = Path(__file__).resolve().parent / 'relay.py'
 RESPONDER = '''import sys
@@ -71,6 +77,17 @@ class RelayTest(unittest.TestCase):
             self.assertEqual(entries[-1]['calls'], 1)
         finally:
             process.kill()
+
+    def test_a_closed_app_channel_is_recorded_separately_from_command_failure(self):
+        recorder = relay.Recorder(io.StringIO(), 'tmux')
+        self.assertFalse(recorder.consumer_closed)
+        with tempfile.TemporaryFile() as output:
+            output.write(b'next snapshot\n')
+            output.seek(0)
+            with patch.object(relay.os, 'write', side_effect=BrokenPipeError):
+                relay.forward_output(SimpleNamespace(stdout=output), recorder)
+        self.assertTrue(recorder.consumer_closed)
+        self.assertEqual(recorder.total, 0)
 
     def test_relay_passes_the_exit_code_through(self):
         result, entries, _direct = self.run_relay('{python} -c "import sys; sys.exit(3)"', b'')

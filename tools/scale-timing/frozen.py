@@ -73,7 +73,8 @@ def traffic(events, started, ended):
     chosen = [event for event in events if started <= event.get('t', 0) <= ended]
     listings = sum(event.get('event') == 'open' and event.get('list_sessions') is True for event in chosen)
     size = sum(event.get('bytes', 0) for event in chosen if event.get('event') == 'call')
-    failed = sum(event.get('event') == 'close' and event.get('code', 0) != 0 for event in chosen)
+    failed = sum(event.get('event') == 'close' and event.get('code', 0) != 0
+                 and not event.get('consumer_closed', False) for event in chosen)
     minutes = (ended - started) / 60
     if minutes <= 0:
         raise ValueError('BENCHMARK_EMPTY_WINDOW')
