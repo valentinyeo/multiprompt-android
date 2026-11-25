@@ -253,9 +253,9 @@ def measure(targets):
 
 def copy_relay(out):
     destination = Path(out) / 'relay.jsonl'
-    result = subprocess.run(['sudo', 'cp', HOST_LOG, str(destination)], capture_output=True, text=True)
-    if result.returncode != 0:
-        (Path(out) / 'relay-copy-error.txt').write_text(result.stderr)
+    copies = subprocess.run(['sudo', 'install', '-m', '644', HOST_LOG, str(destination)], capture_output=True, text=True)
+    if copies.returncode != 0:
+        (Path(out) / 'relay-copy-error.txt').write_text(copies.stderr)
         return False
     return True
 

@@ -63,9 +63,16 @@ class RenderTest(unittest.TestCase):
         self.assertIn('54000000 bytes, 30000 rows', text)
         self.assertIn('| main | scale | launch-inbox | 10000 | 5500 | 50 | 40 | 2 | 900 | 40 | 1 | 4500 |', text)
 
+    def test_render_names_measurements_that_lost_their_reader_log(self):
+        kept = report.enrich(timing(seed='small', ref='head'), relay_lines())
+        lost = report.enrich(timing(seed='scale', ref='head'), '')
+        text = report.render([kept, lost])
+        self.assertIn('No reader log was retained for head scale', text)
+        self.assertNotIn('No reader log was retained for head small', text)
+
     def test_render_orders_columns_by_ref_then_seed(self):
-        text = report.render([report.enrich(timing(seed='scale', ref='9374e19f'), ''),
-                              report.enrich(timing(seed='small', ref='head'), '')])
+        text = report.render([report.enrich(timing(seed='scale', ref='9374e19f'), relay_lines()),
+                              report.enrich(timing(seed='small', ref='head'), relay_lines())])
         header = next(line for line in text.splitlines() if 'wall / cpu ms' in line)
         self.assertLess(header.index('9374e19f scale'), header.index('head small'))
 

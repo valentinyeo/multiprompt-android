@@ -25,17 +25,22 @@ def enrich(timing, relay_text=''):
                           history=parsers.call_totals([call for call in calls if call.get('stream') == 'history']),
                           sync=parsers.call_totals([call for call in calls if call.get('stream') == 'tmux']),
                           all_calls=parsers.call_totals(calls)))
-    enriched = dict(timing, steps=steps)
+    enriched = dict(timing, steps=steps, relay_events=len(events))
     return enriched
+
+
+def relay_text(path):
+    try:
+        return path.read_text(errors='replace')
+    except OSError:
+        return ''
 
 
 def load_measured(directory):
     directory = Path(directory)
     found = []
     for path in sorted(directory.rglob('timing.json')):
-        timing = load(path)
-        relay = path.parent / 'relay.jsonl'
-        found.append(enrich(timing, relay.read_text(errors='replace') if relay.is_file() else ''))
+        found.append(enrich(load(path), relay_text(path.parent / 'relay.jsonl')))
     return found
 
 
@@ -101,7 +106,12 @@ def render(timings):
     lines.extend(detail_table(timings))
     lines.extend(['', 'History calls are the reader channel (`--serve`) requests the phone made inside the step window,'
                        ' counted by the fixture host relay from its own protocol log. Sync calls are the tmux listing'
-                       ' commands made inside the same window.', ''])
+                       ' commands made inside the same window.'])
+    missing = ['%s %s' % label(timing) for timing in timings if not timing.get('relay_events')]
+    if missing:
+        lines.extend(['', 'No reader log was retained for %s, so its byte and call columns are blank, not zero.'
+                           % ', '.join(missing)])
+    lines.append('')
     return '\n'.join(lines)
 
 
