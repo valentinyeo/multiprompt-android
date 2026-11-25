@@ -147,7 +147,7 @@ class TmuxPaneFrameCostTest {
         val changed = Timing(STAGES)
         var changedEmits = 0
         repeat(FRAMES) { index ->
-            val pane = paneText(changedRow = (index * 97) % PANE_LINES)
+            val pane = paneText(changedRow = PANE_LINES - 1 - (index * 37) % CHANGED_ROWS)
             val line = serverFrame(pane)
             if (runFrame(changed, line, pane, state, CLOCK + (FRAMES + index) * 1_000L)) changedEmits++
         }
@@ -171,7 +171,8 @@ class TmuxPaneFrameCostTest {
         appendLine(
             "Synthetic pane: ${pane.lineSequence().count()} lines, ${pane.toByteArray(Charsets.UTF_8).size / 1024} KiB " +
                 "of text with ANSI colour, encoded exactly like `TmuxCommands.stream` (gzip, base64, `gz:` marker, " +
-                "$payloadChars chars on the wire). $FRAMES frames per run; the second run changes one line per frame. " +
+                "$payloadChars chars on the wire). $FRAMES frames per run; the second run changes one of the last " +
+                "$CHANGED_ROWS lines per frame. " +
                 "Measured on `${Thread.currentThread().name}`.",
         )
         appendLine()
@@ -250,6 +251,7 @@ class TmuxPaneFrameCostTest {
         const val HISTORY_LINES = 3000
         const val WIDTH = 104
         const val FRAMES = 60
+        const val CHANGED_ROWS = 150
         const val CLOCK = 1_700_000_000_000L
         val AGENT = AgentKind.CLAUDE
 
