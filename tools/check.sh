@@ -80,6 +80,7 @@ source_checks() {
   python3 -B tools/scale-timing/report.test.py
   python3 -B tools/scale-timing/frozen.test.py
   python3 -B tools/app-name/drive.test.py
+  python3 -B tools/update-card/notes.test.py
   python3 -B tools/app-name/select_run.test.py
   node .github/scripts/pstack-verifier/coverage.cjs check
   node tools/root-files.mjs

@@ -446,7 +446,7 @@ if [[ "$feature" == launcher-icon.md ]]; then
 fi
 if [[ "$package" == dev.multiprompt.companion || "$package" == dev.multiprompt.companion.m3 ]]; then
     if [[ "$package" == dev.multiprompt.companion.m3 ]]; then [[ "$feature" == settings-navigation.md || "$feature" == chat-shared.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == chat-queued.md || "$feature" == session-routing.md ]]; fi
-    [[ "$feature" == settings-navigation.md || "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-shared.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md ]]
+    [[ "$feature" == settings-navigation.md || "$feature" == chat-queued.md || "$feature" == chat-choices.md || "$feature" == chat-reactions.md || "$feature" == chat-working.md || "$feature" == terminal.md || "$feature" == robot-faces.md || "$feature" == chat-cancel.md || "$feature" == session-gestures.md || "$feature" == session-summaries.md || "$feature" == chat-shared.md || "$feature" == chat-resync.md || "$feature" == session-favorites.md || "$feature" == session-routing.md || "$feature" == update-card.md ]]
     wait_for_text Inbox
     doctor
 else
@@ -1061,6 +1061,11 @@ PYINFO
     cmp "$EVIDENCE/information-neighbor-receipts-before.txt" "$EVIDENCE/information-neighbor-receipts-after.txt"
     shot information-favorites-final
     printf 'SIGNED_OFFLINE_FAVORITES_OK\n' | tee "$EVIDENCE/favorites-result.txt"
+    exit 0
+fi
+
+if [[ "$feature" == update-card.md ]]; then
+    source "$scripts/update-card-drive.sh"
     exit 0
 fi
 

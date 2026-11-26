@@ -274,6 +274,7 @@ import dev.multiprompt.companion.ssh.SshProblem
 import dev.multiprompt.companion.ssh.TmuxText
 import dev.multiprompt.companion.terminal.TerminalConnection
 import dev.multiprompt.companion.terminal.TerminalStatus
+import dev.multiprompt.companion.update.ReleaseNoteLines
 import dev.multiprompt.companion.update.UpdateBannerPolicy
 import dev.multiprompt.companion.update.UpdateRelease
 import dev.multiprompt.companion.update.UpdateState
@@ -5546,11 +5547,20 @@ private fun ChangelogNotes(notes: String) {
 }
 
 @Composable
-private fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
+internal fun UpdateAvailableCard(release: UpdateRelease, onInstall: () -> Unit) {
+    val changes = remember(release.notes) { ReleaseNoteLines.changes(release.notes) }
+    val preview = remember(release.notes) { ReleaseNoteLines.preview(release.notes) }
+    var expanded by remember(release.versionName) { mutableStateOf(false) }
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("v${release.versionName} available", fontWeight = FontWeight.Bold)
-            ChangelogNotes(release.notes)
+            if (changes.isNotEmpty()) {
+                Text("What's new", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                (if (expanded) changes else preview).forEach { line ->
+                    Text(line, style = MaterialTheme.typography.bodySmall)
+                }
+                KitSecondaryButton(if (expanded) "Show less" else "See all", onClick = { expanded = !expanded })
+            }
             Text("${release.sizeBytes / 1024 / 1024} MB", style = MaterialTheme.typography.labelMedium)
             KitPrimaryButton("Download and update", onClick = onInstall)
         }

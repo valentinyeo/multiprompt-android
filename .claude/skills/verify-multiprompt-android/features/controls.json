@@ -4796,6 +4796,19 @@
       "missing": "No automated journey exercises this control and checks its result."
     },
     {
+      "id": "available-update.see-all",
+      "screen": "Available update",
+      "label": "See all",
+      "site": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:UpdateAvailableCard:KitSecondaryButton:0173af8a6a5ea607:1",
+      "source": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt:5562",
+      "journey": "update-card.md",
+      "proof": {
+        "recipe": ".claude/skills/verify-multiprompt-android/features/update-card.md",
+        "action": "Tap See all on the offered update card",
+        "result": "update-card-notes.json shows Show less and the complete offered release notes"
+      }
+    },
+    {
       "id": "terminal-header.double-tap-terminal-header-to-return-to-chat",
       "screen": "Terminal header",
       "label": "Double-tap terminal header to return to chat",
@@ -6724,7 +6737,7 @@
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/MultipromptApp.kt",
       "label": "Audited screen composition, labels and finite choice domains",
-      "sha256": "4ab588194c144d86dacfe08ce10cb9f202b71140f3d0e0e20d1e647f7330a986"
+      "sha256": "958b4816003a58dc1c0cf7c8bfe004aed36f332cc2880e8e9d84ae3263cf6b45"
     },
     {
       "path": "app/src/main/java/dev/multiprompt/companion/ui/NewBelow.kt",
